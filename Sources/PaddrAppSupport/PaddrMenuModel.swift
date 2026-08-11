@@ -22,10 +22,15 @@ public final class PaddrMenuModel {
     public private(set) var reportCount = 0
     public private(set) var actionCount = 0
     public private(set) var needsInitialSave = false
+    private(set) var isInitialized = false
 
     @ObservationIgnored private let dependencies: MenuDependencies
     @ObservationIgnored private var sessionID: UUID?
     @ObservationIgnored private var lifecycleEpoch: UInt64 = 0
+    @ObservationIgnored private var initializationTask: Task<Void, Never>?
+    @ObservationIgnored private var configurationTask: Task<Void, Never>?
+    @ObservationIgnored private var configurationEpoch: UInt64 = 0
+    @ObservationIgnored private var statusRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var lifecycleTask: Task<Void, Never>?
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
     @ObservationIgnored private var permissionRefreshTask: Task<Void, Never>?
@@ -40,30 +45,22 @@ public final class PaddrMenuModel {
 
     public init(dependencies: MenuDependencies = .live) {
         self.dependencies = dependencies
-        let loaded: TrackIsBackConfiguration
-        let loadFailure: String?
-        do {
-            loaded = try dependencies.loadConfiguration()
-            loadFailure = nil
-        } catch {
-            loaded = .default
-            loadFailure = String(describing: error)
+        configuration = .default
+        savedConfiguration = .default
+        initializationTask = Task { [weak self] in
+            await self?.initialize()
         }
-        configuration = loaded
-        savedConfiguration = loaded
-        if let loadFailure {
-            needsInitialSave = true
-            status = .failure(.configurationLoad(diagnostic: loadFailure))
-        }
-        refreshStatus()
     }
 
     public func refreshStatus() {
-        controllerDescription = dependencies.probeController()
-        inputMonitoringStatus = dependencies.inputMonitoringStatus()
-        accessibilityTrusted = dependencies.accessibilityTrusted(false)
-        reconcileCompletedPermissionRequest()
-        statusDidChange?()
+        statusRefreshTask?.cancel()
+        statusRefreshTask = Task { [weak self] in
+            guard let self else { return }
+            await initializationTask?.value
+            guard !Task.isCancelled, terminationState == .idle else { return }
+            await refreshStatusNow()
+            statusRefreshTask = nil
+        }
     }
 
     public func saveAndApply() {
@@ -77,16 +74,60 @@ public final class PaddrMenuModel {
             return
         }
 
+        configurationEpoch &+= 1
+        let operation = configurationEpoch
+        let priorTask = configurationTask
+        configurationTask = Task { [weak self] in
+            await priorTask?.value
+            guard let self else { return }
+            await initializationTask?.value
+            await saveAndApply(validated, operation: operation)
+        }
+    }
+
+    private func initialize() async {
         do {
-            try dependencies.saveConfiguration(validated)
+            let loaded = try await dependencies.loadConfiguration()
+            configuration = loaded
+            savedConfiguration = loaded
+        } catch {
+            configuration = .default
+            savedConfiguration = .default
+            needsInitialSave = true
+            status = .failure(.configurationLoad(diagnostic: String(describing: error)))
+        }
+        isInitialized = true
+        await refreshStatusNow()
+        initializationTask = nil
+    }
+
+    private func refreshStatusNow() async {
+        let controllerDescription = await dependencies.probeController()
+        guard !Task.isCancelled, terminationState == .idle else { return }
+        self.controllerDescription = controllerDescription
+        inputMonitoringStatus = dependencies.inputMonitoringStatus()
+        accessibilityTrusted = dependencies.accessibilityTrusted(false)
+        reconcileCompletedPermissionRequest()
+        statusDidChange?()
+    }
+
+    private func saveAndApply(
+        _ validated: TrackIsBackConfiguration,
+        operation: UInt64
+    ) async {
+        do {
+            try await dependencies.saveConfiguration(validated)
+            guard terminationState == .idle else { return }
             configuration = validated
             savedConfiguration = validated
             needsInitialSave = false
             status = .configurationSaved
             if isEnabled { startLifecycle(commitDraft: false) }
         } catch {
+            guard terminationState == .idle else { return }
             status = .failure(.configurationSave(diagnostic: String(describing: error)))
         }
+        clearConfigurationTask(operation: operation)
         statusDidChange?()
     }
 
@@ -145,14 +186,18 @@ public final class PaddrMenuModel {
         status = .releasingOutputs
         lifecycleEpoch &+= 1
 
+        let priorConfigurationTask = configurationTask
+        let priorStatusRefreshTask = statusRefreshTask
         let priorLifecycleTask = lifecycleTask
         let priorReconnectTask = reconnectTask
         let priorPermissionTask = permissionRefreshTask
+        priorStatusRefreshTask?.cancel()
         priorLifecycleTask?.cancel()
         priorReconnectTask?.cancel()
         priorPermissionTask?.cancel()
 
         isEnabled = false
+        statusRefreshTask = nil
         reconnectTask = nil
         permissionRefreshTask = nil
         sessionID = nil
@@ -160,6 +205,8 @@ public final class PaddrMenuModel {
 
         terminationTask = Task { [self] in
             await dependencies.session.stop()
+            await priorConfigurationTask?.value
+            await priorStatusRefreshTask?.value
             await priorLifecycleTask?.value
             await priorReconnectTask?.value
             await priorPermissionTask?.value
@@ -203,6 +250,9 @@ public final class PaddrMenuModel {
     }
 
     private func start(operation: UInt64, commitDraft: Bool) async {
+        await initializationTask?.value
+        await configurationTask?.value
+        guard isCurrent(operation), isEnabled else { return }
         reconnectTask?.cancel()
         reconnectTask = nil
         sessionID = nil
@@ -210,11 +260,11 @@ public final class PaddrMenuModel {
         await dependencies.session.stop()
         guard isCurrent(operation), isEnabled else { return }
 
-        if commitDraft, !commitConfigurationForActivation(operation: operation) {
+        if commitDraft, !(await commitConfigurationForActivation(operation: operation)) {
             return
         }
 
-        refreshStatus()
+        await refreshStatusNow()
         guard isCurrent(operation), isEnabled else { return }
 
         guard inputMonitoringStatus == .granted else {
@@ -245,7 +295,7 @@ public final class PaddrMenuModel {
         }
     }
 
-    private func commitConfigurationForActivation(operation: UInt64) -> Bool {
+    private func commitConfigurationForActivation(operation: UInt64) async -> Bool {
         let validated: TrackIsBackConfiguration
         do {
             validated = try configuration.validated()
@@ -263,7 +313,7 @@ public final class PaddrMenuModel {
         }
 
         do {
-            try dependencies.saveConfiguration(validated)
+            try await dependencies.saveConfiguration(validated)
             guard isCurrent(operation), isEnabled else { return false }
             configuration = validated
             savedConfiguration = validated
@@ -294,7 +344,9 @@ public final class PaddrMenuModel {
                 do { try await self.dependencies.sleep(.seconds(1)) }
                 catch { return }
                 guard self.isCurrent(operation), self.isEnabled, !self.isRunning else { return }
-                self.controllerDescription = self.dependencies.probeController()
+                let controllerDescription = await self.dependencies.probeController()
+                guard self.isCurrent(operation), self.isEnabled, !self.isRunning else { return }
+                self.controllerDescription = controllerDescription
                 if self.controllerConnected {
                     self.reconnectTask = nil
                     self.startLifecycle(commitDraft: false)
@@ -384,7 +436,13 @@ public final class PaddrMenuModel {
     }
 
     var hasPendingLifecycleWork: Bool {
-        isEnabled || sessionID != nil || isRunning || lifecycleTask != nil || reconnectTask != nil
+        isEnabled || sessionID != nil || isRunning || configurationTask != nil
+            || lifecycleTask != nil || reconnectTask != nil
+    }
+
+    private func clearConfigurationTask(operation: UInt64) {
+        guard configurationEpoch == operation else { return }
+        configurationTask = nil
     }
 
     private func clearLifecycleTask(operation: UInt64) {
@@ -396,6 +454,9 @@ public final class PaddrMenuModel {
     private func completeTermination() {
         guard terminationState == .stopping else { return }
         terminationState = .finished
+        initializationTask = nil
+        configurationTask = nil
+        statusRefreshTask = nil
         lifecycleTask = nil
         reconnectTask = nil
         permissionRefreshTask = nil

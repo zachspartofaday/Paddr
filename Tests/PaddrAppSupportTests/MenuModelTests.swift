@@ -1,3 +1,4 @@
+import Foundation
 import Synchronization
 import XCTest
 @testable import PaddrAppSupport
@@ -5,6 +6,25 @@ import TrackIsBackCore
 
 @MainActor
 final class MenuModelTests: XCTestCase {
+    func testInitializationLoadsConfigurationOffMainActorBeforePublishingSnapshot() async {
+        let state = readyState(controller: nil)
+        var stored = TrackIsBackConfiguration.default
+        stored.left.sensitivity = 4
+        state.loadedConfiguration = stored
+        let loadGate = DispatchSemaphore(value: 0)
+        state.loadGate = loadGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+
+        XCTAssertFalse(model.isInitialized)
+        XCTAssertEqual(model.configuration, .default)
+        loadGate.signal()
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertEqual(model.configuration.left.sensitivity, 4)
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 4)
+        XCTAssertEqual(state.loadRanOnMainThread, false)
+    }
+
     func testMissingPermissionTurnsOutputBackOffWithFailure() async {
         let state = ModelDependencyState()
         state.inputGranted = false
@@ -415,12 +435,9 @@ final class MenuModelTests: XCTestCase {
 
     func testConfigurationLoadFailureUsesDefaultsAndSurfacesError() {
         let state = readyState(controller: nil)
-        var environment = dependencies(state: state)
-        environment.loadConfiguration = {
-            throw TrackIsBackError.configuration("Saved sensitivity is outside the supported range.")
-        }
+        state.loadFailure = "Saved sensitivity is outside the supported range."
 
-        let model = PaddrMenuModel(dependencies: environment)
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
 
         XCTAssertEqual(model.configuration, .default)
         XCTAssertTrue(model.hasUnsavedChanges)
@@ -433,11 +450,8 @@ final class MenuModelTests: XCTestCase {
 
     func testConfigurationLoadFailureCanSaveRecoveryDefaults() {
         let state = readyState(controller: nil)
-        var environment = dependencies(state: state)
-        environment.loadConfiguration = {
-            throw TrackIsBackError.configuration("Saved sensitivity is outside the supported range.")
-        }
-        let model = PaddrMenuModel(dependencies: environment)
+        state.loadFailure = "Saved sensitivity is outside the supported range."
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
 
         model.saveAndApply()
 
@@ -462,7 +476,14 @@ final class MenuModelTests: XCTestCase {
     ) -> MenuDependencies {
         MenuDependencies(
             session: session,
-            loadConfiguration: { state.loadedConfiguration },
+            loadConfiguration: {
+                state.loadGate?.wait()
+                state.loadRanOnMainThread = Thread.isMainThread
+                if let failure = state.loadFailure {
+                    throw TrackIsBackError.configuration(failure)
+                }
+                return state.loadedConfiguration
+            },
             saveConfiguration: {
                 if let failure = state.saveFailure {
                     throw TrackIsBackError.configuration(failure)
@@ -612,6 +633,9 @@ private final class ModelDependencyState: Sendable {
         var controller: String?
         var inputGranted = false
         var accessibilityGranted = false
+        var loadFailure: String?
+        var loadGate: DispatchSemaphore?
+        var loadRanOnMainThread: Bool?
         var saveFailure: String?
     }
     private let state = Mutex(State())
@@ -635,6 +659,18 @@ private final class ModelDependencyState: Sendable {
     var accessibilityGranted: Bool {
         get { state.withLock { $0.accessibilityGranted } }
         set { state.withLock { $0.accessibilityGranted = newValue } }
+    }
+    var loadFailure: String? {
+        get { state.withLock { $0.loadFailure } }
+        set { state.withLock { $0.loadFailure = newValue } }
+    }
+    var loadGate: DispatchSemaphore? {
+        get { state.withLock { $0.loadGate } }
+        set { state.withLock { $0.loadGate = newValue } }
+    }
+    var loadRanOnMainThread: Bool? {
+        get { state.withLock { $0.loadRanOnMainThread } }
+        set { state.withLock { $0.loadRanOnMainThread = newValue } }
     }
     var saveFailure: String? {
         get { state.withLock { $0.saveFailure } }
