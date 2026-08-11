@@ -49,26 +49,31 @@ final class ConfigurationBoundaryTests: XCTestCase {
     func testConfigurationCandidateUsesFullCurrentToOldestPrecedence() throws {
         let fileManager = FileManager.default
         let home = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let relativePaths = [
-            ".config/Paddr/config.json",
-            ".config/PuckPads/config.json",
-            ".config/TracksBack/config.json",
-            ".config/TrackIsBack/config.json"
+        let candidates: [(relativePath: String, configuration: TrackIsBackConfiguration)] = [
+            (".config/Paddr/config.json", configuration(PadConfiguration(mode: .mouse, sensitivity: 1))),
+            (".config/PuckPads/config.json", configuration(PadConfiguration(mode: .mouse, sensitivity: 2))),
+            (".config/TracksBack/config.json", configuration(PadConfiguration(mode: .mouse, sensitivity: 3))),
+            (".config/TrackIsBack/config.json", configuration(PadConfiguration(mode: .mouse, sensitivity: 4)))
         ]
         defer { try? fileManager.removeItem(at: home) }
-        for relativePath in relativePaths {
-            let candidate = home.appendingPathComponent(relativePath)
+        for candidate in candidates {
+            let file = home.appendingPathComponent(candidate.relativePath)
             try fileManager.createDirectory(
-                at: candidate.deletingLastPathComponent(),
+                at: file.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            try Data().write(to: candidate)
+            try ConfigurationStore.encoded(candidate.configuration).write(to: file)
         }
 
-        XCTAssertEqual(
-            ConfigurationStore.defaultCandidateURL(fileManager: fileManager, homeDirectory: home),
-            home.appendingPathComponent(relativePaths[0])
-        )
+        for candidate in candidates {
+            let loaded = try ConfigurationStore.load(
+                from: nil,
+                fileManager: fileManager,
+                homeDirectory: home
+            )
+            XCTAssertEqual(loaded, candidate.configuration)
+            try fileManager.removeItem(at: home.appendingPathComponent(candidate.relativePath))
+        }
     }
 
     func testOldSchemaDocumentSuppliesEveryAddedPadDefault() throws {
