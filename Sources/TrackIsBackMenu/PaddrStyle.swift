@@ -3,6 +3,7 @@ import SwiftUI
 
 enum PaddrTextRole {
     case title
+    case padTitle
     case headline
     case callout
     case caption
@@ -10,6 +11,7 @@ enum PaddrTextRole {
     var font: Font {
         switch self {
         case .title: .title2.bold()
+        case .padTitle: .title3.weight(.semibold)
         case .headline: .headline
         case .callout: .callout
         case .caption: .caption
@@ -19,11 +21,28 @@ enum PaddrTextRole {
 
 enum PaddrStyle {
     static let accent = Color(red: 26.0 / 255.0, green: 159.0 / 255.0, blue: 1)
+
+    /// Accent for text: the bright product accent reads at only ~2.8:1 against light
+    /// backgrounds, so light appearance gets a darker variant that clears 4.5:1.
+    static let accentText = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(srgbRed: 26.0 / 255.0, green: 159.0 / 255.0, blue: 1, alpha: 1)
+            : NSColor(srgbRed: 0, green: 0.42, blue: 0.75, alpha: 1)
+    })
+
+    /// Warning text partner to `accentText`: system orange also fails contrast on
+    /// light backgrounds, so light appearance darkens it.
+    static let warningText = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? .systemOrange
+            : NSColor(srgbRed: 0.65, green: 0.32, blue: 0, alpha: 1)
+    })
     static let defaultWindowSize = NSSize(width: 1_120, height: 600)
     static let minimumWindowSize = NSSize(width: 640, height: 360)
     static let padColumnWidth: CGFloat = 530
     static let zoneMapWidth: CGFloat = 190
     static let zoneMapHeight: CGFloat = 182
+    static let padPreviewCornerRadius: CGFloat = 30
     static let zoneInspectorWidth: CGFloat = 266
     static let panelPadding: CGFloat = 16
     static let sectionSpacing: CGFloat = 12

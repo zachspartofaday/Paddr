@@ -58,12 +58,12 @@ struct PadConfigurationView: View {
             .padding(.top, PaddrStyle.settingsRowSpacing)
         } label: {
             HStack(spacing: 10) {
-                Text(title).paddrTypography(.headline)
+                Text(title).paddrTypography(.padTitle)
                 Spacer()
                 Text(summary)
                     .paddrTypography(.caption)
                     .foregroundStyle(
-                        configuration.mode == .disabled ? Color.secondary : PaddrStyle.accent
+                        configuration.mode == .disabled ? Color.secondary : PaddrStyle.accentText
                     )
                     .padding(.horizontal, 9)
                     .padding(.vertical, 4)
@@ -88,34 +88,81 @@ struct PadConfigurationView: View {
     @ViewBuilder private var modeSettings: some View {
         switch configuration.mode {
         case .disabled:
-            Text("This trackpad will not emit pointer, scroll, or button input.")
-                .paddrTypography(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            previewSplit(previewTitle: LocalizedStringResource("Preview")) {
+                Text("This trackpad will not emit pointer, scroll, or button input.")
+                    .paddrTypography(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
         case .mouse:
-            VStack(spacing: PaddrStyle.settingsRowSpacing) {
-                sensitivityRow
-                ValueSliderRow(
-                    title: "Center tap radius",
-                    systemImage: "scope",
-                    value: $configuration.mouseDeadzone,
-                    range: ConfigurationLimits.mouseDeadzone,
-                    step: 0.01,
-                    valueText: configuration.mouseDeadzone.formatted(.percent.precision(.fractionLength(0)))
-                )
-                .help("The radius starts at the pad center. Movement pauses inside it, and leaving it cancels the tap.")
-                TapActionPicker(selection: $configuration.tapKey)
+            previewSplit(previewTitle: LocalizedStringResource("Tap area")) {
+                VStack(spacing: PaddrStyle.settingsRowSpacing) {
+                    sensitivityRow
+                    ValueSliderRow(
+                        title: "Center tap radius",
+                        systemImage: "scope",
+                        value: $configuration.mouseDeadzone,
+                        range: ConfigurationLimits.mouseDeadzone,
+                        step: 0.01,
+                        valueText: configuration.mouseDeadzone.formatted(.percent.precision(.fractionLength(0)))
+                    )
+                    .help("The radius starts at the pad center. Movement pauses inside it, and leaving it cancels the tap.")
+                    TapActionPicker(selection: $configuration.tapKey)
+                }
             }
 
         case .scroll:
-            VStack(spacing: PaddrStyle.settingsRowSpacing) {
-                sensitivityRow
-                TapActionPicker(selection: $configuration.tapKey)
+            previewSplit(previewTitle: LocalizedStringResource("Preview")) {
+                VStack(spacing: PaddrStyle.settingsRowSpacing) {
+                    sensitivityRow
+                    TapActionPicker(selection: $configuration.tapKey)
+                }
             }
 
         case .dpad:
             ButtonZoneConfigurationView(configuration: $configuration)
+        }
+    }
+
+    /// Mirrors the Zones map-plus-inspector split so every mode keeps the pad
+    /// itself as the card's anchor.
+    private func previewSplit(
+        previewTitle: LocalizedStringResource,
+        @ViewBuilder settings: @escaping () -> some View
+    ) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 0) {
+                previewSection(title: previewTitle)
+                    .frame(width: PaddrStyle.zoneMapWidth)
+                PaddrInsetDivider(axis: .vertical)
+                    .padding(.horizontal, 8)
+                settings()
+                    .frame(width: PaddrStyle.zoneInspectorWidth, alignment: .topLeading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: PaddrStyle.zoneSubdivisionSpacing) {
+                previewSection(title: previewTitle)
+                settings()
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func previewSection(title: LocalizedStringResource) -> some View {
+        VStack(alignment: .leading, spacing: PaddrStyle.settingsRowSpacing) {
+            Text(title)
+                .paddrTypography(.callout)
+                .bold()
+                .frame(minHeight: PaddrStyle.insetHeaderHeight)
+            PadModePreview(mode: configuration.mode, deadzone: configuration.mouseDeadzone)
+                .frame(maxWidth: PaddrStyle.zoneMapWidth * 1.4)
+                .frame(
+                    minHeight: PaddrStyle.zoneMapHeight,
+                    maxHeight: PaddrStyle.zoneMapHeight
+                )
+                .help("Mirrors how the trackpad will respond in this mode.")
         }
     }
 

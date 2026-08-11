@@ -85,9 +85,11 @@ struct ButtonZoneConfigurationView: View {
                 PaddrSettingsRow(title: "Neutral zone", systemImage: "circle.dotted") {
                     HStack(spacing: 8) {
                         Slider(
-                            value: $configuration.dpadDeadzone,
-                            in: 0...Double(1).nextDown,
-                            step: 0.01
+                            value: $configuration.dpadDeadzone.quantized(
+                                step: 0.01,
+                                in: 0...Double(1).nextDown
+                            ),
+                            in: 0...Double(1).nextDown
                         )
                         .accessibilityLabel("Neutral zone size")
                         .accessibilityValue(

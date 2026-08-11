@@ -13,7 +13,7 @@ struct ZonePadMap: View {
         GeometryReader { proxy in
             Canvas { context, size in
                 let bounds = CGRect(origin: .zero, size: size)
-                let padShape = Path(roundedRect: bounds, cornerRadius: 30)
+                let padShape = Path(roundedRect: bounds, cornerRadius: PaddrStyle.padPreviewCornerRadius)
                 context.fill(
                     padShape,
                     with: .linearGradient(
@@ -65,21 +65,21 @@ struct ZonePadMap: View {
                     )
                 }
             }
-            .clipShape(.rect(cornerRadius: 30))
+            .clipShape(.rect(cornerRadius: PaddrStyle.padPreviewCornerRadius))
             .overlay {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 30)
+                    RoundedRectangle(cornerRadius: PaddrStyle.padPreviewCornerRadius)
                         .strokeBorder(.white.opacity(0.10), lineWidth: 1)
                         .padding(1)
-                    RoundedRectangle(cornerRadius: 30)
+                    RoundedRectangle(cornerRadius: PaddrStyle.padPreviewCornerRadius)
                         .strokeBorder(
                             .primary.opacity(0.30),
                             lineWidth: 1
                         )
                 }
             }
-            .contentShape(.interaction, .rect(cornerRadius: 30))
-            .contentShape(.focusEffect, .rect(cornerRadius: 30))
+            .contentShape(.interaction, .rect(cornerRadius: PaddrStyle.padPreviewCornerRadius))
+            .contentShape(.focusEffect, .rect(cornerRadius: PaddrStyle.padPreviewCornerRadius))
             .gesture(
                 SpatialTapGesture().onEnded { value in
                     if let zone = hitZone(at: value.location, size: proxy.size) {
@@ -223,15 +223,13 @@ struct ZonePadMap: View {
             height: plateSize.height
         )
         let plate = Path(roundedRect: plateRect, cornerRadius: plateSize.height / 2)
-        context.fill(
-            plate,
-            with: .color(selected ? .black.opacity(0.24) : .primary.opacity(0.10))
-        )
-        context.stroke(
-            plate,
-            with: .color(selected ? .white.opacity(0.30) : .primary.opacity(0.14)),
-            lineWidth: 0.75
-        )
+        if selected {
+            context.fill(plate, with: .color(PaddrStyle.accentText.opacity(0.92)))
+            context.stroke(plate, with: .color(.white.opacity(0.42)), lineWidth: 0.75)
+        } else {
+            context.fill(plate, with: .color(.primary.opacity(0.10)))
+            context.stroke(plate, with: .color(.primary.opacity(0.14)), lineWidth: 0.75)
+        }
         context.draw(
             OutputBindingText.text(for: configuration[bindingFor: zone])
                 .font(.caption2.weight(.semibold))

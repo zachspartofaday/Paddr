@@ -45,7 +45,7 @@ struct PaddrSectionContainer<Accessory: View, Content: View>: View {
             RoundedRectangle(cornerRadius: PaddrStyle.insetCornerRadius)
                 .strokeBorder(
                     Color(nsColor: .separatorColor).opacity(
-                        colorSchemeContrast == .increased ? 0.95 : 0.30
+                        colorSchemeContrast == .increased ? 0.95 : 0.18
                     ),
                     lineWidth: colorSchemeContrast == .increased ? 1.5 : 1
                 )

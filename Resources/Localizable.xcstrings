@@ -1,131 +1,1314 @@
 {
-  "sourceLanguage" : "en",
-  "strings" : {
-    "Accessibility is required before Paddr can emit mapped input." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Accessibility is required before Paddr can emit mapped input." } } } },
-    "Action" : { "comment" : "Label for the output assigned to the selected trackpad area.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Action" } } } },
-    "Active" : { "comment" : "Short status value indicating that mapped output is active.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Active" } } } },
-    "Access" : { "comment" : "Short heading for the combined system-permission status.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Access" } } } },
-    "An unexpected error occurred." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "An unexpected error occurred." } } } },
-    "Assign a keyboard key, left click, or right click to this touch area." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Assign a keyboard key, left click, or right click to this touch area." } } } },
-    "Area map" : { "comment" : "Heading above the visual map of trackpad button zones.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Area map" } } } },
-    "Click a mouse button or emit a keyboard key after a short touch and release." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Click a mouse button or emit a keyboard key after a short touch and release." } } } },
-    "Choose the trackpad area to configure." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose the trackpad area to configure." } } } },
-    "Connected" : { "comment" : "Short controller status value.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Connected" } } } },
-    "Controller" : { "comment" : "Heading for controller connection status.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Controller" } } } },
-    "Choose how the trackpad is divided into button areas." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose how the trackpad is divided into button areas." } } } },
-    "Input Monitoring is required before Paddr can read the trackpads." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Input Monitoring is required before Paddr can read the trackpads." } } } },
-    "Idle" : { "comment" : "Short status value indicating that mapped output is idle.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Idle" } } } },
-    "Needed" : { "comment" : "Short status value indicating that system access is needed.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Needed" } } } },
-    "Neutral" : { "comment" : "Label for the center region of a trackpad that emits no output.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Neutral" } } } },
-    "Not found" : { "comment" : "Short controller status value when no compatible controller is connected.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Not found" } } } },
-    "Neutral zone" : { "comment" : "Label for the center region of a trackpad that emits no output.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Neutral zone" } } } },
-    "Neutral zone size" : { "comment" : "Accessibility label for the size of the center region that emits no output.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Neutral zone size" } } } },
-    "On" : { "comment" : "Accessibility value indicating that trackpad output is enabled.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "On" } } } },
-    "Open Settings" : { "comment" : "Button that opens the relevant macOS privacy settings page.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open Settings" } } } },
-    "Output" : { "comment" : "Heading for mapped-output status.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Output" } } } },
-    "Permissions" : { "comment" : "Heading for macOS permission controls.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Permissions" } } } },
-    "Pointer settings" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Pointer settings" } } } },
-    "Reads controller trackpad reports." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Reads controller trackpad reports." } } } },
-    "Refresh controller and permission status" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Refresh controller and permission status" } } } },
-    "Request" : { "comment" : "Button that requests a macOS privacy permission.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Request" } } } },
-    "Saved settings could not be loaded. Defaults are shown." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Saved settings could not be loaded. Defaults are shown." } } } },
-    "Select a highlighted pad area, then choose its keyboard or mouse action." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Select a highlighted pad area, then choose its keyboard or mouse action." } } } },
-    "Scroll settings" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Scroll settings" } } } },
-    "Sends mapped mouse and keyboard input." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sends mapped mouse and keyboard input." } } } },
-    "Settings could not be saved. Your edits are still available." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings could not be saved. Your edits are still available." } } } },
-    "Some settings are invalid. Review the values and try again." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Some settings are invalid. Review the values and try again." } } } },
-    "Status" : { "comment" : "Heading for the app status summary.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Status" } } } },
-    "The radius starts at the pad center. Movement pauses inside it, and leaving it cancels the tap." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The radius starts at the pad center. Movement pauses inside it, and leaving it cancels the tap." } } } },
-    "This trackpad will not emit pointer, scroll, or button input." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This trackpad will not emit pointer, scroll, or button input." } } } },
-    "Touches inside the neutral zone do not emit an action." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Touches inside the neutral zone do not emit an action." } } } },
-    "Touch tap action" : { "comment" : "Accessibility label for the action emitted by tapping a trackpad.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Touch tap action" } } } },
-    "Trackpad output" : { "comment" : "Label for the master trackpad-output toggle.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Trackpad output" } } } },
-    "Trackpad off" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Trackpad off" } } } },
-    "Waiting" : { "comment" : "Short status value indicating that output is waiting for a controller.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Waiting" } } } },
-    "Zone settings" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Zone settings" } } } },
-    "Trackpad output stopped because of an error." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Trackpad output stopped because of an error." } } } },
-    "Zone action" : { "comment" : "Accessibility label for the action assigned to a button zone.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Zone action" } } } },
-    "Access needed" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Access needed" } } } },
-    "Access ready" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Access ready" } } } },
-    "Accessibility" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Accessibility" } } } },
-    "Area layout" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Area layout" } } } },
-    "Behavior" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Behavior" } } } },
-    "Bottom" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Bottom" } } } },
-    "Bottom left" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Bottom left" } } } },
-    "Bottom right" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Bottom right" } } } },
-    "Center" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Center" } } } },
-    "Center tap radius" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Center tap radius" } } } },
-    "Center deadzone" : { "comment" : "Width of the center region in a button-zone layout that emits no action.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Center deadzone" } } } },
-    "Configuration saved." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Configuration saved." } } } },
-    "Complete the Accessibility prompt, then return to Paddr." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Complete the Accessibility prompt, then return to Paddr." } } } },
-    "Complete the Input Monitoring prompt, then return to Paddr." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Complete the Input Monitoring prompt, then return to Paddr." } } } },
-    "Connecting…" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting…" } } } },
-    "Controller connected" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Controller connected" } } } },
-    "Controller not found" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Controller not found" } } } },
-    "Defaults" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Defaults" } } } },
-    "Defaults restored. Save to apply them." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Defaults restored. Save to apply them." } } } },
-    "Four corners" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Four corners" } } } },
-    "Four-way radial" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Four-way radial" } } } },
-    "Input Monitoring" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Input Monitoring" } } } },
-    "Enable Paddr in Accessibility, then return to the app." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Enable Paddr in Accessibility, then return to the app." } } } },
-    "Enable Paddr in Input Monitoring, then return to the app." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Enable Paddr in Input Monitoring, then return to the app." } } } },
-    "Left" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Left" } } } },
-    "Left / right" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Left / right" } } } },
-    "Left click" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Left click" } } } },
-    "Left trackpad" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Left trackpad" } } } },
-    "More" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "More" } } } },
-    "None" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "None" } } } },
-    "Off" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Off" } } } },
-    "Open Configuration" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open Configuration" } } } },
-    "Open Configuration…" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open Configuration…" } } } },
-    "Output active" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Output active" } } } },
-    "Output idle" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Output idle" } } } },
-    "Output waiting" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Output waiting" } } } },
-    "Pointer" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Pointer" } } } },
-    "Paddr" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Paddr" } } } },
-    "Quit Paddr" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Quit Paddr" } } } },
-    "Ready" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Ready" } } } },
-    "Releasing mapped keys and mouse buttons…" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Releasing mapped keys and mouse buttons…" } } } },
-    "Refresh" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Refresh" } } } },
-    "Required" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Required" } } } },
-    "Right" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Right" } } } },
-    "Right click" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Right click" } } } },
-    "Right trackpad" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Right trackpad" } } } },
-    "Save & Apply" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Save & Apply" } } } },
-    "Saved" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Saved" } } } },
-    "Scroll" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Scroll" } } } },
-    "Selected area" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Selected area" } } } },
-    "Sensitivity" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sensitivity" } } } },
-    "System access" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "System access" } } } },
-    "System access needed" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "System access needed" } } } },
-    "Top" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Top" } } } },
-    "Top / bottom" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Top / bottom" } } } },
-    "Top left" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Top left" } } } },
-    "Top right" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Top right" } } } },
-    "Touch tap" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Touch tap" } } } },
-    "Touches inside the center deadzone do not emit a zone action." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Touches inside the center deadzone do not emit a zone action." } } } },
-    "Trackpad Configuration" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Trackpad Configuration" } } } },
-    "Trackpad Output" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Trackpad Output" } } } },
-    "Trackpad output is active." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Trackpad output is active." } } } },
-    "Trackpad output is off." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Trackpad output is off." } } } },
-    "Trackpad output stopped." : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Trackpad output stopped." } } } },
-    "Unsaved changes" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Unsaved changes" } } } },
-    "Waiting for Steam Controller 2 through the puck…" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Waiting for Steam Controller 2 through the puck…" } } } },
-    "Zones" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Zones" } } } },
-    "Command" : { "comment" : "Name of the Command keyboard modifier when used as a mapped output.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Command" } } } },
-    "Control" : { "comment" : "Name of the Control keyboard modifier when used as a mapped output.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Control" } } } },
-    "Delete" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete" } } } },
-    "Down arrow" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Down arrow" } } } },
-    "Escape" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Escape" } } } },
-    "Left arrow" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Left arrow" } } } },
-    "Option" : { "comment" : "Name of the Option keyboard modifier when used as a mapped output.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Option" } } } },
-    "Return" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Return" } } } },
-    "Right arrow" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Right arrow" } } } },
-    "Shift" : { "comment" : "Name of the Shift keyboard modifier when used as a mapped output.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Shift" } } } },
-    "Space" : { "comment" : "Name of the Space keyboard key when used as a mapped output.", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Space" } } } },
-    "Tab" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Tab" } } } },
-    "Up arrow" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Up arrow" } } } },
-    "3 × 3 grid" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "3 × 3 grid" } } } }
+  "sourceLanguage": "en",
+  "strings": {
+    "3 × 3 grid": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 × 3 grid"
+          }
+        }
+      }
+    },
+    "Access": {
+      "comment": "Short heading for the combined system-permission status.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access"
+          }
+        }
+      }
+    },
+    "Access needed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access needed"
+          }
+        }
+      }
+    },
+    "Access ready": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access ready"
+          }
+        }
+      }
+    },
+    "Accessibility": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accessibility"
+          }
+        }
+      }
+    },
+    "Accessibility is required before Paddr can emit mapped input.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accessibility is required before Paddr can emit mapped input."
+          }
+        }
+      }
+    },
+    "Action": {
+      "comment": "Label for the output assigned to the selected trackpad area.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Action"
+          }
+        }
+      }
+    },
+    "Active": {
+      "comment": "Short status value indicating that mapped output is active.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active"
+          }
+        }
+      }
+    },
+    "An unexpected error occurred.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An unexpected error occurred."
+          }
+        }
+      }
+    },
+    "Area layout": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Area layout"
+          }
+        }
+      }
+    },
+    "Area map": {
+      "comment": "Heading above the visual map of trackpad button zones.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Area map"
+          }
+        }
+      }
+    },
+    "Assign a keyboard key, left click, or right click to this touch area.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Assign a keyboard key, left click, or right click to this touch area."
+          }
+        }
+      }
+    },
+    "Behavior": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Behavior"
+          }
+        }
+      }
+    },
+    "Bottom": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottom"
+          }
+        }
+      }
+    },
+    "Bottom left": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottom left"
+          }
+        }
+      }
+    },
+    "Bottom right": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bottom right"
+          }
+        }
+      }
+    },
+    "Center": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Center"
+          }
+        }
+      }
+    },
+    "Center deadzone": {
+      "comment": "Width of the center region in a button-zone layout that emits no action.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Center deadzone"
+          }
+        }
+      }
+    },
+    "Center tap radius": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Center tap radius"
+          }
+        }
+      }
+    },
+    "Choose how the trackpad is divided into button areas.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose how the trackpad is divided into button areas."
+          }
+        }
+      }
+    },
+    "Choose the trackpad area to configure.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose the trackpad area to configure."
+          }
+        }
+      }
+    },
+    "Click a mouse button or emit a keyboard key after a short touch and release.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Click a mouse button or emit a keyboard key after a short touch and release."
+          }
+        }
+      }
+    },
+    "Command": {
+      "comment": "Name of the Command keyboard modifier when used as a mapped output.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command"
+          }
+        }
+      }
+    },
+    "Complete the Accessibility prompt, then return to Paddr.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Complete the Accessibility prompt, then return to Paddr."
+          }
+        }
+      }
+    },
+    "Complete the Input Monitoring prompt, then return to Paddr.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Complete the Input Monitoring prompt, then return to Paddr."
+          }
+        }
+      }
+    },
+    "Configuration saved.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configuration saved."
+          }
+        }
+      }
+    },
+    "Connected": {
+      "comment": "Short controller status value.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected"
+          }
+        }
+      }
+    },
+    "Connecting…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting…"
+          }
+        }
+      }
+    },
+    "Control": {
+      "comment": "Name of the Control keyboard modifier when used as a mapped output.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Control"
+          }
+        }
+      }
+    },
+    "Controller": {
+      "comment": "Heading for controller connection status.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controller"
+          }
+        }
+      }
+    },
+    "Controller connected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controller connected"
+          }
+        }
+      }
+    },
+    "Controller not found": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controller not found"
+          }
+        }
+      }
+    },
+    "Defaults": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Defaults"
+          }
+        }
+      }
+    },
+    "Defaults restored. Save to apply them.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Defaults restored. Save to apply them."
+          }
+        }
+      }
+    },
+    "Delete": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete"
+          }
+        }
+      }
+    },
+    "Down arrow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Down arrow"
+          }
+        }
+      }
+    },
+    "Enable Paddr in Accessibility, then return to the app.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable Paddr in Accessibility, then return to the app."
+          }
+        }
+      }
+    },
+    "Enable Paddr in Input Monitoring, then return to the app.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable Paddr in Input Monitoring, then return to the app."
+          }
+        }
+      }
+    },
+    "Escape": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escape"
+          }
+        }
+      }
+    },
+    "Four corners": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Four corners"
+          }
+        }
+      }
+    },
+    "Four-way radial": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Four-way radial"
+          }
+        }
+      }
+    },
+    "Idle": {
+      "comment": "Short status value indicating that mapped output is idle.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Idle"
+          }
+        }
+      }
+    },
+    "Input Monitoring": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input Monitoring"
+          }
+        }
+      }
+    },
+    "Input Monitoring is required before Paddr can read the trackpads.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input Monitoring is required before Paddr can read the trackpads."
+          }
+        }
+      }
+    },
+    "Left": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left"
+          }
+        }
+      }
+    },
+    "Left / right": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left / right"
+          }
+        }
+      }
+    },
+    "Left arrow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left arrow"
+          }
+        }
+      }
+    },
+    "Left click": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left click"
+          }
+        }
+      }
+    },
+    "Left trackpad": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left trackpad"
+          }
+        }
+      }
+    },
+    "Mirrors how the trackpad will respond in this mode.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mirrors how the trackpad will respond in this mode."
+          }
+        }
+      }
+    },
+    "More": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More"
+          }
+        }
+      }
+    },
+    "Needed": {
+      "comment": "Short status value indicating that system access is needed.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Needed"
+          }
+        }
+      }
+    },
+    "Neutral": {
+      "comment": "Label for the center region of a trackpad that emits no output.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neutral"
+          }
+        }
+      }
+    },
+    "Neutral zone": {
+      "comment": "Label for the center region of a trackpad that emits no output.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neutral zone"
+          }
+        }
+      }
+    },
+    "Neutral zone size": {
+      "comment": "Accessibility label for the size of the center region that emits no output.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neutral zone size"
+          }
+        }
+      }
+    },
+    "None": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "None"
+          }
+        }
+      }
+    },
+    "Not found": {
+      "comment": "Short controller status value when no compatible controller is connected.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not found"
+          }
+        }
+      }
+    },
+    "Off": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off"
+          }
+        }
+      }
+    },
+    "On": {
+      "comment": "Accessibility value indicating that trackpad output is enabled.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On"
+          }
+        }
+      }
+    },
+    "Open Configuration": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Configuration"
+          }
+        }
+      }
+    },
+    "Open Configuration…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Configuration…"
+          }
+        }
+      }
+    },
+    "Open Settings": {
+      "comment": "Button that opens the relevant macOS privacy settings page.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings"
+          }
+        }
+      }
+    },
+    "Option": {
+      "comment": "Name of the Option keyboard modifier when used as a mapped output.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Option"
+          }
+        }
+      }
+    },
+    "Output": {
+      "comment": "Heading for mapped-output status.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Output"
+          }
+        }
+      }
+    },
+    "Output active": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Output active"
+          }
+        }
+      }
+    },
+    "Output idle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Output idle"
+          }
+        }
+      }
+    },
+    "Output waiting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Output waiting"
+          }
+        }
+      }
+    },
+    "Paddr": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paddr"
+          }
+        }
+      }
+    },
+    "Permissions": {
+      "comment": "Heading for macOS permission controls.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permissions"
+          }
+        }
+      }
+    },
+    "Pointer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pointer"
+          }
+        }
+      }
+    },
+    "Pointer settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pointer settings"
+          }
+        }
+      }
+    },
+    "Preview": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preview"
+          }
+        }
+      }
+    },
+    "Quit Paddr": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quit Paddr"
+          }
+        }
+      }
+    },
+    "Reads controller trackpad reports.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reads controller trackpad reports."
+          }
+        }
+      }
+    },
+    "Ready": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ready"
+          }
+        }
+      }
+    },
+    "Refresh": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refresh"
+          }
+        }
+      }
+    },
+    "Refresh controller and permission status": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refresh controller and permission status"
+          }
+        }
+      }
+    },
+    "Releasing mapped keys and mouse buttons…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Releasing mapped keys and mouse buttons…"
+          }
+        }
+      }
+    },
+    "Request": {
+      "comment": "Button that requests a macOS privacy permission.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request"
+          }
+        }
+      }
+    },
+    "Required": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Required"
+          }
+        }
+      }
+    },
+    "Return": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Return"
+          }
+        }
+      }
+    },
+    "Right": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right"
+          }
+        }
+      }
+    },
+    "Right arrow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right arrow"
+          }
+        }
+      }
+    },
+    "Right click": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right click"
+          }
+        }
+      }
+    },
+    "Right trackpad": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right trackpad"
+          }
+        }
+      }
+    },
+    "Save & Apply": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save & Apply"
+          }
+        }
+      }
+    },
+    "Saved": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved"
+          }
+        }
+      }
+    },
+    "Saved settings could not be loaded. Defaults are shown.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved settings could not be loaded. Defaults are shown."
+          }
+        }
+      }
+    },
+    "Scroll": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scroll"
+          }
+        }
+      }
+    },
+    "Scroll settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scroll settings"
+          }
+        }
+      }
+    },
+    "Select a highlighted pad area, then choose its keyboard or mouse action.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a highlighted pad area, then choose its keyboard or mouse action."
+          }
+        }
+      }
+    },
+    "Selected area": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selected area"
+          }
+        }
+      }
+    },
+    "Sends mapped mouse and keyboard input.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sends mapped mouse and keyboard input."
+          }
+        }
+      }
+    },
+    "Sensitivity": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sensitivity"
+          }
+        }
+      }
+    },
+    "Settings could not be saved. Your edits are still available.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings could not be saved. Your edits are still available."
+          }
+        }
+      }
+    },
+    "Shift": {
+      "comment": "Name of the Shift keyboard modifier when used as a mapped output.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shift"
+          }
+        }
+      }
+    },
+    "Some settings are invalid. Review the values and try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some settings are invalid. Review the values and try again."
+          }
+        }
+      }
+    },
+    "Space": {
+      "comment": "Name of the Space keyboard key when used as a mapped output.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Space"
+          }
+        }
+      }
+    },
+    "Status": {
+      "comment": "Heading for the app status summary.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status"
+          }
+        }
+      }
+    },
+    "System access": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System access"
+          }
+        }
+      }
+    },
+    "System access needed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System access needed"
+          }
+        }
+      }
+    },
+    "Tab": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab"
+          }
+        }
+      }
+    },
+    "Tap area": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap area"
+          }
+        }
+      }
+    },
+    "The radius starts at the pad center. Movement pauses inside it, and leaving it cancels the tap.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The radius starts at the pad center. Movement pauses inside it, and leaving it cancels the tap."
+          }
+        }
+      }
+    },
+    "This trackpad will not emit pointer, scroll, or button input.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This trackpad will not emit pointer, scroll, or button input."
+          }
+        }
+      }
+    },
+    "Top": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Top"
+          }
+        }
+      }
+    },
+    "Top / bottom": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Top / bottom"
+          }
+        }
+      }
+    },
+    "Top left": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Top left"
+          }
+        }
+      }
+    },
+    "Top right": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Top right"
+          }
+        }
+      }
+    },
+    "Touch tap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touch tap"
+          }
+        }
+      }
+    },
+    "Touch tap action": {
+      "comment": "Accessibility label for the action emitted by tapping a trackpad.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touch tap action"
+          }
+        }
+      }
+    },
+    "Touches inside the center deadzone do not emit a zone action.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touches inside the center deadzone do not emit a zone action."
+          }
+        }
+      }
+    },
+    "Touches inside the neutral zone do not emit an action.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touches inside the neutral zone do not emit an action."
+          }
+        }
+      }
+    },
+    "Trackpad Configuration": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trackpad Configuration"
+          }
+        }
+      }
+    },
+    "Trackpad Output": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trackpad Output"
+          }
+        }
+      }
+    },
+    "Trackpad off": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trackpad off"
+          }
+        }
+      }
+    },
+    "Trackpad output": {
+      "comment": "Label for the master trackpad-output toggle.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trackpad output"
+          }
+        }
+      }
+    },
+    "Trackpad output is active.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trackpad output is active."
+          }
+        }
+      }
+    },
+    "Trackpad output is off.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trackpad output is off."
+          }
+        }
+      }
+    },
+    "Trackpad output stopped because of an error.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trackpad output stopped because of an error."
+          }
+        }
+      }
+    },
+    "Trackpad output stopped.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trackpad output stopped."
+          }
+        }
+      }
+    },
+    "Unsaved changes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unsaved changes"
+          }
+        }
+      }
+    },
+    "Up arrow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Up arrow"
+          }
+        }
+      }
+    },
+    "Waiting": {
+      "comment": "Short status value indicating that output is waiting for a controller.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting"
+          }
+        }
+      }
+    },
+    "Waiting for Steam Controller 2 through the puck…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for Steam Controller 2 through the puck…"
+          }
+        }
+      }
+    },
+    "Zone action": {
+      "comment": "Accessibility label for the action assigned to a button zone.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zone action"
+          }
+        }
+      }
+    },
+    "Zone settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zone settings"
+          }
+        }
+      }
+    },
+    "Zones": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zones"
+          }
+        }
+      }
+    }
   },
-  "version" : "1.0"
+  "version": "1.0"
 }

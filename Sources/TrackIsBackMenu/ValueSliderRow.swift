@@ -1,5 +1,19 @@
 import SwiftUI
 
+extension Binding where Value == Double {
+    /// Snaps writes to the given step without using `Slider(step:)`, which would
+    /// draw tick marks under the track.
+    func quantized(step: Double, in range: ClosedRange<Double>) -> Binding<Double> {
+        Binding(
+            get: { wrappedValue },
+            set: { newValue in
+                let snapped = (newValue / step).rounded() * step
+                wrappedValue = Swift.min(Swift.max(snapped, range.lowerBound), range.upperBound)
+            }
+        )
+    }
+}
+
 struct ValueSliderRow: View {
     let title: LocalizedStringResource
     let systemImage: String
@@ -15,7 +29,7 @@ struct ValueSliderRow: View {
             labelWidth: PaddrStyle.sliderLabelWidth
         ) {
             HStack(spacing: 10) {
-                Slider(value: $value, in: range, step: step)
+                Slider(value: $value.quantized(step: step, in: range), in: range)
                     .frame(minWidth: PaddrStyle.sliderMinimumWidth)
                     .accessibilityLabel(title)
                     .accessibilityValue(valueText)
