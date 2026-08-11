@@ -24,18 +24,17 @@ struct AppHeaderView: View {
                 }
             }
 
-            if model.status.needsActionMessage {
-                Label {
-                    Text(model.status.message)
-                        .fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: statusMessageSymbol)
-                        .accessibilityHidden(true)
-                }
-                .paddrTypography(.caption)
-                .foregroundStyle(statusMessageColor)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+            // Always-present status line: swapping the text in a reserved slot keeps the
+            // header height stable, so status flips never trigger a window refit.
+            Label {
+                Text(model.status.message)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: statusMessageSymbol)
+                    .accessibilityHidden(true)
             }
+            .paddrTypography(.caption)
+            .foregroundStyle(statusMessageColor)
         }
         .padding(PaddrStyle.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -101,7 +100,7 @@ struct AppHeaderView: View {
 
     private var statusMessageSymbol: String {
         if case .failure = model.status { return "exclamationmark.triangle.fill" }
-        return "info.circle.fill"
+        return model.status.needsActionMessage ? "info.circle.fill" : "info.circle"
     }
 
     private var statusMessageColor: Color {

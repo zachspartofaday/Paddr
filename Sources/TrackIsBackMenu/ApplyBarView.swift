@@ -11,7 +11,7 @@ struct ApplyBarView: View {
                 systemImage: model.hasUnsavedChanges ? "circle.fill" : "checkmark.circle.fill"
             )
             .paddrTypography(.callout)
-            .foregroundStyle(model.hasUnsavedChanges ? .orange : PaddrStyle.accent)
+            .foregroundStyle(model.hasUnsavedChanges ? PaddrStyle.warningText : PaddrStyle.accentText)
 
             Spacer()
 
