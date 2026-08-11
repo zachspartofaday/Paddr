@@ -23,6 +23,16 @@ public enum ZoneSelectionPolicy {
         let current = normalized(selection, for: layout)
         guard let index = zones.firstIndex(of: current) else { return zones[0] }
 
+        if layout == .radialFour {
+            switch direction {
+            case .left: return .left
+            case .right: return .right
+            case .up: return .up
+            case .down: return .down
+            case .previous, .next: break
+            }
+        }
+
         switch direction {
         case .previous:
             return zones[(index - 1 + zones.count) % zones.count]
