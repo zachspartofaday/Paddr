@@ -95,37 +95,74 @@ public enum TrackpadRuntime {
         var reportCount = 0
         var actionCount = 0
 
-        defer {
-            let leftReleases = (try? leftMapper.releaseAll()) ?? []
-            let rightReleases = (try? rightMapper.releaseAll()) ?? []
-            let releases = arbiter.process(leftReleases, from: .leftPad)
-                + arbiter.process(rightReleases, from: .rightPad)
-                + arbiter.releaseAll()
-            if !observeOnly { try? output.dispatch(releases) }
+        let streamOutcome: Result<TrackpadStreamTermination, any Error>
+        do {
+            streamOutcome = .success(try device.stream(
+                shouldContinue: {
+                    stopToken.shouldContinue && (deadline.map { dependencies.now() < $0 } ?? true)
+                },
+                onReport: { bytes, timestamp in
+                    guard let pads = TritonParser.parseTrackpads(bytes, timestampNanoseconds: timestamp) else { return }
+                    reportCount += 1
+                    let left = try leftMapper.process(pads.left)
+                    let right = try rightMapper.process(pads.right)
+                    let actions = arbiter.process(left, from: .leftPad)
+                        + arbiter.process(right, from: .rightPad)
+                    actionCount += actions.count
+                    for action in actions { onAction?(action.description) }
+                    if !observeOnly { try output.dispatch(actions) }
+                    if reportCount.isMultiple(of: 100) {
+                        onProgress?(TrackpadRunSummary(reportCount: reportCount, actionCount: actionCount))
+                    }
+                }
+            ))
+        } catch {
+            streamOutcome = .failure(error)
         }
 
-        let termination = try device.stream(
-            shouldContinue: {
-                stopToken.shouldContinue && (deadline.map { dependencies.now() < $0 } ?? true)
-            },
-            onReport: { bytes, timestamp in
-                guard let pads = TritonParser.parseTrackpads(bytes, timestampNanoseconds: timestamp) else { return }
-                reportCount += 1
-                let left = try leftMapper.process(pads.left)
-                let right = try rightMapper.process(pads.right)
-                let actions = arbiter.process(left, from: .leftPad)
-                    + arbiter.process(right, from: .rightPad)
-                actionCount += actions.count
-                for action in actions { onAction?(action.description) }
-                if !observeOnly { try output.dispatch(actions) }
-                if reportCount.isMultiple(of: 100) {
-                    onProgress?(TrackpadRunSummary(reportCount: reportCount, actionCount: actionCount))
+        var cleanupFailures: [String] = []
+        let leftReleases: [TrackpadOutputAction]
+        do {
+            leftReleases = try leftMapper.releaseAll()
+        } catch {
+            leftReleases = []
+            cleanupFailures.append("left-pad release mapping failed: \(error)")
+        }
+        let rightReleases: [TrackpadOutputAction]
+        do {
+            rightReleases = try rightMapper.releaseAll()
+        } catch {
+            rightReleases = []
+            cleanupFailures.append("right-pad release mapping failed: \(error)")
+        }
+        let releases = arbiter.process(leftReleases, from: .leftPad)
+            + arbiter.process(rightReleases, from: .rightPad)
+            + arbiter.releaseAll()
+        if !observeOnly {
+            for release in releases {
+                do {
+                    try output.dispatch([release])
+                } catch {
+                    cleanupFailures.append("\(release.description): \(error)")
                 }
             }
-        )
+        }
+        if !cleanupFailures.isEmpty {
+            let streamFailure: String
+            switch streamOutcome {
+            case .success:
+                streamFailure = ""
+            case let .failure(error):
+                streamFailure = " Runtime also failed: \(error)."
+            }
+            throw TrackIsBackError.output(
+                "Could not release held outputs: \(cleanupFailures.joined(separator: "; ")).\(streamFailure)"
+            )
+        }
+
         return TrackpadRunResult(
             summary: TrackpadRunSummary(reportCount: reportCount, actionCount: actionCount),
-            termination: termination
+            termination: try streamOutcome.get()
         )
     }
 }
@@ -185,37 +222,36 @@ public actor TrackpadSession: TrackpadSessionControlling {
                     observeOnly,
                     token,
                     { description in
-                        if eventGate.isCurrent(request) {
+                        eventGate.enqueue(ifCurrent: request) {
                             continuation.yield(.connected(description))
                         }
                     },
                     { summary in
-                        if eventGate.isCurrent(request) {
+                        eventGate.enqueue(ifCurrent: request) {
                             continuation.yield(.progress(summary))
                         }
                     }
                 )
             }
-            guard eventGate.isCurrent(request) else {
+            let delivered = eventGate.enqueue(ifCurrent: request) {
+                switch outcome {
+                case let .success(result):
+                    switch result.termination {
+                    case .stopped: continuation.yield(.stopped(result.summary))
+                    case .deviceRemoved: continuation.yield(.deviceRemoved(result.summary))
+                    }
+                case let .failure(error as TrackIsBackError):
+                    if case .device = error {
+                        continuation.yield(.deviceUnavailable(error.description))
+                    } else {
+                        continuation.yield(.failed(error.description))
+                    }
+                case let .failure(error):
+                    continuation.yield(.failed(String(describing: error)))
+                }
                 continuation.finish()
-                return
             }
-            switch outcome {
-            case let .success(result):
-                switch result.termination {
-                case .stopped: continuation.yield(.stopped(result.summary))
-                case .deviceRemoved: continuation.yield(.deviceRemoved(result.summary))
-                }
-            case let .failure(error as TrackIsBackError):
-                if case .device = error {
-                    continuation.yield(.deviceUnavailable(error.description))
-                } else {
-                    continuation.yield(.failed(error.description))
-                }
-            case let .failure(error):
-                continuation.yield(.failed(String(describing: error)))
-            }
-            continuation.finish()
+            if !delivered { continuation.finish() }
         }
         activeWorker = WorkerRecord(id: request, stopToken: token, task: task)
         continuation.onTermination = { @Sendable [weak token] _ in token?.requestStop() }
@@ -278,14 +314,19 @@ public actor TrackpadSession: TrackpadSessionControlling {
     }
 }
 
-private final class SessionEventGate: Sendable {
+final class SessionEventGate: Sendable {
     private let generation = Mutex<UInt64>(0)
 
     func activate(_ value: UInt64) {
         generation.withLock { $0 = value }
     }
 
-    func isCurrent(_ value: UInt64) -> Bool {
-        generation.withLock { $0 == value }
+    @discardableResult
+    func enqueue(ifCurrent value: UInt64, _ operation: () -> Void) -> Bool {
+        generation.withLock { current in
+            guard current == value else { return false }
+            operation()
+            return true
+        }
     }
 }

@@ -23,8 +23,21 @@ public protocol TrackpadOutputDispatching: Sendable {
 
 public final class CGEventOutput: TrackpadOutputDispatching, Sendable {
     private let heldMouseButtons = Mutex<Set<MouseButtonBinding>>([])
+    #if canImport(CoreGraphics)
+    private let currentMouseLocation: @Sendable () -> CGPoint?
+    #endif
 
-    public init() {}
+    public init() {
+        #if canImport(CoreGraphics)
+        currentMouseLocation = { CGEvent(source: nil)?.location }
+        #endif
+    }
+
+    #if canImport(CoreGraphics)
+    init(currentMouseLocation: @escaping @Sendable () -> CGPoint?) {
+        self.currentMouseLocation = currentMouseLocation
+    }
+    #endif
 
     public func dispatch(_ actions: [TrackpadOutputAction]) throws {
         try heldMouseButtons.withLock { heldButtons in
@@ -57,7 +70,12 @@ public final class CGEventOutput: TrackpadOutputDispatching, Sendable {
         source: CGEventSource?
     ) throws {
         #if canImport(CoreGraphics)
-        guard let location = CGEvent(source: nil)?.location else { return }
+        guard let location = currentMouseLocation() else {
+            let transition = isPressed ? "down" : "up"
+            throw TrackIsBackError.output(
+                "Could not determine the mouse location for a \(button.rawValue) mouse-button \(transition) event."
+            )
+        }
         let mouseButton: CGMouseButton = button == .left ? .left : .right
         let eventType: CGEventType
         switch (button, isPressed) {
