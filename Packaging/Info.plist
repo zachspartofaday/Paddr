@@ -5,21 +5,21 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleExecutable</key>
-    <string>PuckPads</string>
+    <string>Paddr</string>
     <key>CFBundleIdentifier</key>
-    <string>com.partofaday.PuckPads</string>
+    <string>com.partofaday.Paddr</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>PuckPads</string>
+    <string>Paddr</string>
     <key>CFBundleDisplayName</key>
-    <string>PuckPads</string>
+    <string>Paddr</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-	<string>0.6.0</string>
+	<string>0.6.1</string>
     <key>CFBundleVersion</key>
-	<string>9</string>
+	<string>10</string>
     <key>LSMinimumSystemVersion</key>
     <string>26.0</string>
     <key>LSUIElement</key>

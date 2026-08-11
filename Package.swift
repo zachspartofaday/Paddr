@@ -3,17 +3,28 @@
 import PackageDescription
 
 let package = Package(
-    name: "PuckPads",
+    name: "Paddr",
     platforms: [.macOS("26.0")],
     products: [
         .library(name: "TrackIsBackCore", targets: ["TrackIsBackCore"]),
-        .executable(name: "PuckPads", targets: ["TrackIsBackCLI"]),
-        .executable(name: "PuckPadsMenu", targets: ["TrackIsBackMenu"])
+        .executable(name: "Paddr", targets: ["TrackIsBackMenu"]),
+        .executable(name: "PaddrCLI", targets: ["TrackIsBackCLI"])
     ],
     targets: [
         .target(name: "TrackIsBackCore"),
         .executableTarget(name: "TrackIsBackCLI", dependencies: ["TrackIsBackCore"]),
-        .executableTarget(name: "TrackIsBackMenu", dependencies: ["TrackIsBackCore"]),
-        .testTarget(name: "TrackIsBackTests", dependencies: ["TrackIsBackCore"])
+        .target(
+            name: "PaddrAppSupport",
+            dependencies: ["TrackIsBackCore"]
+        ),
+        .executableTarget(
+            name: "TrackIsBackMenu",
+            dependencies: ["TrackIsBackCore", "PaddrAppSupport"]
+        ),
+        .testTarget(name: "TrackIsBackTests", dependencies: ["TrackIsBackCore"]),
+        .testTarget(
+            name: "PaddrAppSupportTests",
+            dependencies: ["PaddrAppSupport", "TrackIsBackCore"]
+        )
     ]
 )

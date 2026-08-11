@@ -3,30 +3,14 @@ import Foundation
 public enum ConfigurationStore {
     public static var defaultURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/PuckPads/config.json")
-    }
-
-    private static var tracksBackLegacyURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/TracksBack/config.json")
-    }
-
-    private static var trackIsBackLegacyURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/TrackIsBack/config.json")
+            .appendingPathComponent(".config/Paddr/config.json")
     }
 
     public static func load(from url: URL? = nil) throws -> TrackIsBackConfiguration {
-        let candidate: URL
-        if let url {
-            candidate = url
-        } else if FileManager.default.fileExists(atPath: defaultURL.path) {
-            candidate = defaultURL
-        } else if FileManager.default.fileExists(atPath: tracksBackLegacyURL.path) {
-            candidate = tracksBackLegacyURL
-        } else {
-            candidate = trackIsBackLegacyURL
-        }
+        let candidate = url ?? defaultCandidateURL(
+            fileManager: .default,
+            homeDirectory: FileManager.default.homeDirectoryForCurrentUser
+        )
         guard FileManager.default.fileExists(atPath: candidate.path) else { return .default }
         do {
             let data = try Data(contentsOf: candidate)
@@ -51,5 +35,18 @@ public enum ConfigurationStore {
             withIntermediateDirectories: true
         )
         try encoded(configuration).write(to: destination, options: .atomic)
+    }
+
+    static func defaultCandidateURL(fileManager: FileManager, homeDirectory: URL) -> URL {
+        let relativePaths = [
+            ".config/Paddr/config.json",
+            ".config/PuckPads/config.json",
+            ".config/TracksBack/config.json",
+            ".config/TrackIsBack/config.json"
+        ]
+        return relativePaths
+            .map { homeDirectory.appendingPathComponent($0) }
+            .first { fileManager.fileExists(atPath: $0.path) }
+            ?? homeDirectory.appendingPathComponent(relativePaths[0])
     }
 }

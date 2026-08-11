@@ -7,7 +7,7 @@ public enum DPadDirection: String, CaseIterable, Hashable, Sendable {
     case left
 }
 
-public enum MouseButtonBinding: String, Equatable, Sendable {
+public enum MouseButtonBinding: String, Equatable, Hashable, Sendable {
     case left
     case right
 }
@@ -58,9 +58,9 @@ public struct PadMapper: Sendable {
         let wasTouched = previous?.isTouched == true
         var actions: [TrackpadOutputAction] = []
 
-        if sample.isTouched, !wasTouched {
+        if configuration.mode.allowsTouchTap, sample.isTouched, !wasTouched {
             tapOrigin = (sample.x, sample.y, sample.timestampNanoseconds)
-            tapEligible = configuration.mode != .mouse
+            tapEligible = configuration.mode == .scroll
                 || configuration.mouseDeadzone == 0
                 || Self.isInsideMouseDeadzone(sample, deadzone: configuration.mouseDeadzone)
         }
@@ -104,11 +104,18 @@ public struct PadMapper: Sendable {
 
         if !sample.isTouched, wasTouched {
             actions += try updateButtonZones(to: [])
-            if tapEligible, let origin = tapOrigin, let tapKey = configuration.tapKey {
+            if configuration.mode.allowsTouchTap,
+               tapEligible,
+               let origin = tapOrigin,
+               let tapKey = configuration.tapKey {
                 let elapsed = sample.timestampNanoseconds >= origin.timestamp
                     ? sample.timestampNanoseconds - origin.timestamp
                     : UInt64.max
-                let maximum = UInt64(configuration.tapMaximumMilliseconds * 1_000_000)
+                let milliseconds = min(
+                    max(configuration.tapMaximumMilliseconds, ConfigurationLimits.tapMaximumMilliseconds.lowerBound),
+                    ConfigurationLimits.tapMaximumMilliseconds.upperBound
+                )
+                let maximum = UInt64(milliseconds * 1_000_000)
                 if elapsed <= maximum {
                     actions += try tapActions(for: tapKey)
                 }
@@ -173,10 +180,10 @@ public struct PadMapper: Sendable {
             return [.left]
         case .fourCorners:
             guard (fx * fx + fy * fy).squareRoot() > deadzone else { return [] }
-            if fx < 0, fy >= 0 { return [.up] }
-            if fx >= 0, fy >= 0 { return [.right] }
-            if fx >= 0, fy < 0 { return [.down] }
-            return [.left]
+            if fx < 0, fy >= 0 { return [.topLeft] }
+            if fx >= 0, fy >= 0 { return [.topRight] }
+            if fx >= 0, fy < 0 { return [.bottomRight] }
+            return [.bottomLeft]
         case .horizontalTwo:
             guard abs(fx) > deadzone else { return [] }
             return fx < 0 ? [.left] : [.right]

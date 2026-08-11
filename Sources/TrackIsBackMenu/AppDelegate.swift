@@ -1,122 +1,147 @@
 import AppKit
+import PaddrAppSupport
 import SwiftUI
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
-    private let model = TrackIsBackMenuModel()
-    private let popover = NSPopover()
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    private let model = PaddrMenuModel()
+    private let statusMenu = NSMenu()
     private var statusItem: NSStatusItem?
-    private var documentationWindow: NSWindow?
-    private lazy var panelSize = TrackIsBackStyle.panelSize(for: NSScreen.main)
+    private var configurationWindowController: NSWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let isDocumentationPreview = CommandLine.arguments.contains("--documentation-preview")
-        NSApplication.shared.setActivationPolicy(isDocumentationPreview ? .regular : .accessory)
+        NSApplication.shared.setActivationPolicy(.accessory)
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem = item
-        if let button = item.button {
-            button.target = self
-            button.action = #selector(statusItemClicked(_:))
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-            button.toolTip = "PuckPads"
+        item.menu = statusMenu
+        statusMenu.delegate = self
+        item.button?.toolTip = String(localized: "Paddr")
+
+        model.statusDidChange = { [weak self] in
+            self?.updateStatusItem()
         }
-
-        popover.behavior = .transient
-        popover.animates = true
-        popover.delegate = self
-        popover.contentSize = panelSize
-        popover.contentViewController = NSHostingController(
-            rootView: MenuContentView(model: model, panelSize: panelSize)
-        )
-
-        model.statusDidChange = { [weak self] in self?.updateIcon() }
-        updateIcon()
-
-        if isDocumentationPreview {
-            showDocumentationWindow()
-        }
-    }
-
-    func popoverWillShow(_ notification: Notification) {
-        model.refreshStatus()
+        updateStatusItem()
+        showConfigurationWindow()
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
         model.refreshStatus()
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showConfigurationWindow()
+        return true
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        let waitsForKeyRelease = model.stopForTermination {
+        let waitsForOutputRelease = model.stopForTermination {
             sender.reply(toApplicationShouldTerminate: true)
         }
-        return waitsForKeyRelease ? .terminateLater : .terminateNow
+        return waitsForOutputRelease ? .terminateLater : .terminateNow
     }
 
-    @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
-        guard let event = NSApplication.shared.currentEvent else { return }
-        if event.type == .rightMouseUp || event.modifierFlags.contains(.control) {
-            showContextMenu(from: sender)
-        } else if popover.isShown {
-            popover.performClose(sender)
-        } else {
-            model.refreshStatus()
-            popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
-        }
-    }
-
-    private func showContextMenu(from button: NSStatusBarButton) {
-        let menu = NSMenu()
-        let stateItem = NSMenuItem(
-            title: model.isEnabled ? "Turn Trackpads Off" : "Turn Trackpads On",
-            action: #selector(toggleEnabled),
-            keyEquivalent: ""
-        )
-        stateItem.target = self
-        menu.addItem(stateItem)
-        menu.addItem(.separator())
-        let quitItem = NSMenuItem(title: "Quit PuckPads", action: #selector(quit), keyEquivalent: "q")
-        quitItem.target = self
-        menu.addItem(quitItem)
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
+    func menuWillOpen(_ menu: NSMenu) {
+        model.refreshStatus()
+        rebuildStatusMenu()
     }
 
     @objc private func toggleEnabled() {
         model.isEnabled.toggle()
+        rebuildStatusMenu()
+    }
+
+    @objc private func openConfiguration() {
+        showConfigurationWindow()
     }
 
     @objc private func quit() {
         NSApplication.shared.terminate(nil)
     }
 
-    private func updateIcon() {
+    private func rebuildStatusMenu() {
+        statusMenu.removeAllItems()
+
+        let outputItem = NSMenuItem(
+            title: String(localized: "Trackpad Output"),
+            action: #selector(toggleEnabled),
+            keyEquivalent: ""
+        )
+        outputItem.target = self
+        outputItem.state = model.isEnabled ? .on : .off
+        outputItem.image = NSImage(
+            systemSymbolName: model.isEnabled ? "wave.3.right.circle.fill" : "pause.circle",
+            accessibilityDescription: String(localized: "Trackpad Output")
+        )
+        statusMenu.addItem(outputItem)
+
+        let configurationItem = NSMenuItem(
+            title: String(localized: "Open Configuration…"),
+            action: #selector(openConfiguration),
+            keyEquivalent: ","
+        )
+        configurationItem.target = self
+        configurationItem.image = NSImage(
+            systemSymbolName: "slider.horizontal.3",
+            accessibilityDescription: String(localized: "Open Configuration")
+        )
+        statusMenu.addItem(configurationItem)
+
+        statusMenu.addItem(.separator())
+        let quitItem = NSMenuItem(
+            title: String(localized: "Quit Paddr"),
+            action: #selector(quit),
+            keyEquivalent: "q"
+        )
+        quitItem.target = self
+        statusMenu.addItem(quitItem)
+    }
+
+    private func updateStatusItem() {
         let symbol = model.isEnabled ? "hand.point.up.left.fill" : "hand.point.up.left"
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "PuckPads")
+        let image = NSImage(
+            systemSymbolName: symbol,
+            accessibilityDescription: String(localized: "Paddr")
+        )
         image?.isTemplate = !model.isEnabled
         statusItem?.button?.image = image
         statusItem?.button?.contentTintColor = model.isEnabled
             ? (model.controllerConnected ? .systemBlue : .systemOrange)
             : nil
+        rebuildStatusMenu()
     }
 
-    private func showDocumentationWindow() {
+    private func showConfigurationWindow() {
+        model.refreshStatus()
+        if let window = configurationWindowController?.window {
+            window.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate()
+            return
+        }
+
         let window = NSWindow(
-            contentRect: NSRect(
-                origin: .zero,
-                size: panelSize
-            ),
-            styleMask: [.titled, .closable, .miniaturizable],
+            contentRect: NSRect(origin: .zero, size: PaddrStyle.defaultWindowSize),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
-        window.title = "PuckPads"
+        window.title = String(localized: "Paddr")
+        window.contentMinSize = PaddrStyle.minimumWindowSize
+        window.tabbingMode = .disallowed
+        window.isReleasedWhenClosed = false
         window.contentViewController = NSHostingController(
-            rootView: MenuContentView(model: model, panelSize: panelSize)
+            rootView: ConfigurationView(model: model)
         )
-        window.center()
-        window.makeKeyAndOrderFront(nil)
+        let autosaveName = "PaddrConfigurationWindow.v3"
+        if !window.setFrameUsingName(autosaveName) {
+            window.setContentSize(PaddrStyle.defaultWindowSize)
+            window.center()
+        }
+        window.setFrameAutosaveName(autosaveName)
+
+        let controller = NSWindowController(window: window)
+        configurationWindowController = controller
+        controller.showWindow(nil)
         NSApplication.shared.activate()
-        documentationWindow = window
     }
 }

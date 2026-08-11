@@ -1,0 +1,64 @@
+name: Bug report
+description: Report reproducible Paddr behavior or controller compatibility problems.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping test Paddr. Remove controller serial numbers, private IOHID paths, and account information.
+  - type: input
+    id: version
+    attributes:
+      label: Paddr version
+      placeholder: 0.6.1 (10)
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and build
+      placeholder: macOS 27 Beta 5 (build …)
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection
+      options:
+        - Puck
+        - Bluetooth
+        - Direct USB
+        - Controller unavailable
+    validations:
+      required: true
+  - type: textarea
+    id: configuration
+    attributes:
+      label: Relevant configuration
+      description: Include pad modes, layouts, bindings, and signing type if permission behavior is involved.
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: "1. …\n2. …\n3. …"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed serial numbers, credentials, private filesystem paths, and unredacted hardware captures.
+          required: true

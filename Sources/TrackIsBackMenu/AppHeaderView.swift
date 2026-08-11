@@ -1,67 +1,110 @@
 import AppKit
+import PaddrAppSupport
 import SwiftUI
 
 struct AppHeaderView: View {
-    @Bindable var model: TrackIsBackMenuModel
+    @Bindable var model: PaddrMenuModel
+
+    private var outputTitle: LocalizedStringResource {
+        if model.isRunning { return "Output active" }
+        if model.isEnabled { return "Output waiting" }
+        return "Output idle"
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                Image(nsImage: NSApplication.shared.applicationIconImage)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 46, height: 46)
-                    .shadow(color: .black.opacity(0.12), radius: 5, y: 2)
-                    .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Text("Trackpad Configuration")
+                    .paddrTypography(.title)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("PuckPads")
-                        .font(.title2.bold())
-                    Text(model.statusMessage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
+                Spacer()
 
-                Spacer(minLength: 12)
+                Button("Refresh", systemImage: "arrow.clockwise", action: model.refreshStatus)
+                    .labelStyle(.iconOnly)
+                    .paddrActionButton()
+                    .help("Refresh controller and permission status")
 
-                Toggle(isOn: $model.isEnabled) {
-                    Text(model.isEnabled ? "On" : "Off")
-                        .font(.headline)
-                }
-                .toggleStyle(.switch)
-                .controlSize(.regular)
-                .accessibilityLabel("Trackpad output")
-                .accessibilityValue(model.isEnabled ? "On" : "Off")
+                Toggle("Trackpad output", isOn: $model.isEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .accessibilityValue(
+                        model.isEnabled
+                            ? LocalizedStringResource("On")
+                            : LocalizedStringResource("Off")
+                    )
             }
 
-            HStack(spacing: 8) {
-                StatusBadge(
-                    title: model.controllerConnected ? "Controller connected" : "Controller not found",
-                    systemImage: model.controllerConnected ? "gamecontroller.fill" : "gamecontroller",
-                    state: model.controllerConnected ? .ready : .problem
-                )
-                StatusBadge(
-                    title: model.isRunning ? "Output active" : "Output idle",
-                    systemImage: model.isRunning ? "wave.3.right.circle.fill" : "pause.circle",
-                    state: model.isRunning ? .ready : .neutral
-                )
-            }
+            statusStrip
 
-            if model.isRunning {
-                Text("\(model.reportCount) reports · \(model.actionCount) mapped actions")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .monospacedDigit()
+            if model.status.needsActionMessage {
+                Label {
+                    Text(model.status.message)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: statusMessageSymbol)
+                        .accessibilityHidden(true)
+                }
+                .paddrTypography(.caption)
+                .foregroundStyle(statusMessageColor)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(TrackIsBackStyle.cardPadding)
+        .padding(PaddrStyle.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial)
-        .clipShape(.rect(cornerRadius: TrackIsBackStyle.cardCornerRadius))
-        .overlay {
-            RoundedRectangle(cornerRadius: TrackIsBackStyle.cardCornerRadius)
-                .stroke(.primary.opacity(0.08), lineWidth: 0.75)
+        .paddrCard()
+    }
+
+    private var statusStrip: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) { statusPills }
+            Grid(horizontalSpacing: 8, verticalSpacing: 8) {
+                GridRow {
+                    controllerPill
+                    outputPill
+                }
+                GridRow { accessPill }
+            }
         }
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder private var statusPills: some View {
+        controllerPill
+        outputPill
+        accessPill
+    }
+
+    private var controllerPill: some View {
+        StatusBadge(
+            title: model.controllerConnected ? "Controller connected" : "Controller not found",
+            systemImage: model.controllerConnected ? "gamecontroller.fill" : "gamecontroller",
+            state: model.controllerConnected ? .ready : .problem
+        )
+    }
+
+    private var outputPill: some View {
+        StatusBadge(
+            title: outputTitle,
+            systemImage: model.isRunning ? "wave.3.right.circle.fill" : (model.isEnabled ? "hourglass.circle" : "pause.circle"),
+            state: model.isRunning ? .ready : .neutral
+        )
+    }
+
+    private var accessPill: some View {
+        StatusBadge(
+            title: model.hasSystemAccess ? "Access ready" : "Access needed",
+            systemImage: model.hasSystemAccess ? "checkmark.shield.fill" : "exclamationmark.shield",
+            state: model.hasSystemAccess ? .ready : .problem
+        )
+    }
+
+    private var statusMessageSymbol: String {
+        if case .failure = model.status { return "exclamationmark.triangle.fill" }
+        return model.status == .configurationSaved ? "checkmark.circle.fill" : "info.circle.fill"
+    }
+
+    private var statusMessageColor: Color {
+        if case .failure = model.status { return .red }
+        return .secondary
     }
 }
