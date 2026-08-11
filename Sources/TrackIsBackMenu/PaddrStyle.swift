@@ -22,9 +22,9 @@ enum PaddrStyle {
     static let defaultWindowSize = NSSize(width: 1_120, height: 600)
     static let minimumWindowSize = NSSize(width: 640, height: 360)
     static let padColumnWidth: CGFloat = 530
-    static let zoneMapWidth: CGFloat = 196
+    static let zoneMapWidth: CGFloat = 190
     static let zoneMapHeight: CGFloat = 182
-    static let zoneInspectorWidth: CGFloat = 265
+    static let zoneInspectorWidth: CGFloat = 266
     static let panelPadding: CGFloat = 16
     static let sectionSpacing: CGFloat = 12
     static let cardPadding: CGFloat = 14
@@ -35,6 +35,7 @@ enum PaddrStyle {
     static let insetHorizontalPadding: CGFloat = 14
     static let insetVerticalPadding: CGFloat = 14
     static let insetHeaderHeight: CGFloat = 28
+    static let insetHeaderContentSpacing: CGFloat = 14
     static let settingsLabelWidth: CGFloat = 108
     static let sliderLabelWidth: CGFloat = 152
     static let sliderMinimumWidth: CGFloat = 160
@@ -45,6 +46,9 @@ enum PaddrStyle {
     static let dividerInset: CGFloat = 8
     static let dividerTopSpacing: CGFloat = 8
     static let dividerBottomSpacing: CGFloat = 12
+    static let zoneDividerInset: CGFloat = 12
+    static let zoneSubdivisionSpacing: CGFloat = 18
+    static let commandBarMinimumHeight: CGFloat = 50
 }
 
 private struct PaddrTypographyModifier: ViewModifier {
@@ -56,19 +60,28 @@ private struct PaddrCardModifier: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content
-            .background(
-                reduceTransparency ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor)) : AnyShapeStyle(.regularMaterial),
-                in: .rect(cornerRadius: PaddrStyle.cardCornerRadius)
-            )
+        Group {
+            if reduceTransparency {
+                content.background(
+                    Color(nsColor: .controlBackgroundColor),
+                    in: .rect(cornerRadius: PaddrStyle.cardCornerRadius)
+                )
+            } else {
+                content.glassEffect(
+                    .regular,
+                    in: .rect(cornerRadius: PaddrStyle.cardCornerRadius)
+                )
+            }
+        }
             .overlay {
                 RoundedRectangle(cornerRadius: PaddrStyle.cardCornerRadius)
                     .strokeBorder(
                         Color(nsColor: .separatorColor).opacity(
-                            colorSchemeContrast == .increased ? 1 : 0.72
+                            colorSchemeContrast == .increased ? 1 : 0.46
                         ),
-                        lineWidth: 1
+                        lineWidth: colorSchemeContrast == .increased ? 1.5 : 1
                     )
             }
     }

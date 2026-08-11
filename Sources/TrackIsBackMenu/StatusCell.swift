@@ -27,12 +27,12 @@ struct StatusCell: View {
 
             Spacer(minLength: 4)
         }
-        .padding(.horizontal, 10)
-        .frame(maxWidth: .infinity, minHeight: 42)
-        .background(.secondary.opacity(0.065), in: .rect(cornerRadius: 10))
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .background(state.color.opacity(0.075), in: .rect(cornerRadius: 10))
         .overlay {
             RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Color(nsColor: .separatorColor).opacity(0.42), lineWidth: 1)
+                .strokeBorder(state.color.opacity(0.22), lineWidth: 1)
         }
         .accessibilityElement(children: .combine)
     }

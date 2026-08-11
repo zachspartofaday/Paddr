@@ -13,42 +13,73 @@ struct ZonePadMap: View {
         GeometryReader { proxy in
             Canvas { context, size in
                 let bounds = CGRect(origin: .zero, size: size)
-                context.fill(Path(bounds), with: .color(.secondary.opacity(0.08)))
+                let padShape = Path(roundedRect: bounds, cornerRadius: 30)
+                context.fill(
+                    padShape,
+                    with: .linearGradient(
+                        Gradient(colors: [
+                            Color.primary.opacity(0.085),
+                            Color.primary.opacity(0.035)
+                        ]),
+                        startPoint: CGPoint(x: bounds.midX, y: bounds.minY),
+                        endPoint: CGPoint(x: bounds.midX, y: bounds.maxY)
+                    )
+                )
 
                 for zone in layout.zones {
                     let path = path(for: zone, in: bounds)
+                    let isSelected = zone == selection
                     context.fill(
                         path,
-                        with: .color(zone == selection ? PaddrStyle.accent.opacity(0.38) : .primary.opacity(0.055))
+                        with: isSelected
+                            ? .linearGradient(
+                                Gradient(colors: [
+                                    PaddrStyle.accent.opacity(0.34),
+                                    PaddrStyle.accent.opacity(0.18)
+                                ]),
+                                startPoint: CGPoint(x: bounds.midX, y: bounds.minY),
+                                endPoint: CGPoint(x: bounds.midX, y: bounds.maxY)
+                            )
+                            : .color(.primary.opacity(0.025))
                     )
                     context.stroke(
                         path,
-                        with: .color(zone == selection ? PaddrStyle.accent : .primary.opacity(0.22)),
-                        lineWidth: zone == selection ? 1.5 : 1
+                        with: .color(isSelected ? PaddrStyle.accent.opacity(0.95) : .primary.opacity(0.19)),
+                        lineWidth: isSelected ? 1.75 : 0.75
                     )
-                    context.draw(
-                        OutputBindingText.text(for: configuration[bindingFor: zone])
-                            .font(.caption.bold())
-                            .foregroundStyle(zone == selection ? .primary : .secondary),
-                        at: labelPoint(for: zone, in: bounds)
-                    )
+                    drawLabel(for: zone, selected: isSelected, in: bounds, context: &context)
                 }
 
                 if let neutral = neutralPath(in: bounds) {
-                    context.fill(neutral, with: .color(.secondary.opacity(0.16)))
-                    context.stroke(neutral, with: .color(.secondary.opacity(0.32)), lineWidth: 1)
-                    context.draw(Text("Neutral").font(.caption).foregroundStyle(.secondary), at: center(in: bounds))
+                    context.fill(neutral, with: .color(.black.opacity(0.16)))
+                    context.stroke(
+                        neutral,
+                        with: .color(.secondary.opacity(0.62)),
+                        style: StrokeStyle(lineWidth: 1, dash: [3, 3])
+                    )
+                    context.draw(
+                        Text(verbatim: "○")
+                            .font(.caption.bold())
+                            .foregroundStyle(.secondary),
+                        at: center(in: bounds)
+                    )
                 }
             }
             .clipShape(.rect(cornerRadius: 30))
             .overlay {
-                RoundedRectangle(cornerRadius: 30)
-                    .strokeBorder(
-                        isFocused ? PaddrStyle.accent : .primary.opacity(0.24),
-                        lineWidth: isFocused ? 3 : 1
-                    )
+                ZStack {
+                    RoundedRectangle(cornerRadius: 30)
+                        .strokeBorder(.white.opacity(0.10), lineWidth: 1)
+                        .padding(1)
+                    RoundedRectangle(cornerRadius: 30)
+                        .strokeBorder(
+                            .primary.opacity(0.30),
+                            lineWidth: 1
+                        )
+                }
             }
-            .contentShape(.rect)
+            .contentShape(.interaction, .rect(cornerRadius: 30))
+            .contentShape(.focusEffect, .rect(cornerRadius: 30))
             .gesture(
                 SpatialTapGesture().onEnded { value in
                     if let zone = hitZone(at: value.location, size: proxy.size) {
@@ -138,9 +169,75 @@ struct ZonePadMap: View {
     }
 
     private func labelPoint(for zone: ButtonZone, in bounds: CGRect) -> CGPoint {
-        let columns: [ButtonZone: CGFloat] = [.topLeft: 0.17, .left: 0.17, .bottomLeft: 0.17, .up: 0.5, .center: 0.5, .down: 0.5, .topRight: 0.83, .right: 0.83, .bottomRight: 0.83]
-        let rows: [ButtonZone: CGFloat] = [.topLeft: 0.17, .up: 0.17, .topRight: 0.17, .left: 0.5, .center: 0.5, .right: 0.5, .bottomLeft: 0.83, .down: 0.83, .bottomRight: 0.83]
-        return CGPoint(x: bounds.minX + bounds.width * (columns[zone] ?? 0.5), y: bounds.minY + bounds.height * (rows[zone] ?? 0.5))
+        let position: CGPoint
+        switch layout {
+        case .radialFour:
+            position = switch zone {
+            case .up: CGPoint(x: 0.5, y: 0.23)
+            case .right: CGPoint(x: 0.77, y: 0.5)
+            case .down: CGPoint(x: 0.5, y: 0.77)
+            default: CGPoint(x: 0.23, y: 0.5)
+            }
+        case .fourCorners:
+            position = switch zone {
+            case .topLeft: CGPoint(x: 0.25, y: 0.25)
+            case .topRight: CGPoint(x: 0.75, y: 0.25)
+            case .bottomRight: CGPoint(x: 0.75, y: 0.75)
+            default: CGPoint(x: 0.25, y: 0.75)
+            }
+        case .horizontalTwo:
+            position = CGPoint(x: zone == .left ? 0.25 : 0.75, y: 0.5)
+        case .verticalTwo:
+            position = CGPoint(x: 0.5, y: zone == .up ? 0.25 : 0.75)
+        case .gridNine:
+            let columns: [ButtonZone: CGFloat] = [
+                .topLeft: 1.0 / 6.0, .left: 1.0 / 6.0, .bottomLeft: 1.0 / 6.0,
+                .up: 0.5, .center: 0.5, .down: 0.5,
+                .topRight: 5.0 / 6.0, .right: 5.0 / 6.0, .bottomRight: 5.0 / 6.0
+            ]
+            let rows: [ButtonZone: CGFloat] = [
+                .topLeft: 1.0 / 6.0, .up: 1.0 / 6.0, .topRight: 1.0 / 6.0,
+                .left: 0.5, .center: 0.5, .right: 0.5,
+                .bottomLeft: 5.0 / 6.0, .down: 5.0 / 6.0, .bottomRight: 5.0 / 6.0
+            ]
+            position = CGPoint(x: columns[zone] ?? 0.5, y: rows[zone] ?? 0.5)
+        }
+        return CGPoint(
+            x: bounds.minX + bounds.width * position.x,
+            y: bounds.minY + bounds.height * position.y
+        )
+    }
+
+    private func drawLabel(
+        for zone: ButtonZone,
+        selected: Bool,
+        in bounds: CGRect,
+        context: inout GraphicsContext
+    ) {
+        let point = labelPoint(for: zone, in: bounds)
+        let plateSize = CGSize(width: layout == .gridNine ? 38 : 78, height: 22)
+        let plateRect = CGRect(
+            x: point.x - plateSize.width / 2,
+            y: point.y - plateSize.height / 2,
+            width: plateSize.width,
+            height: plateSize.height
+        )
+        let plate = Path(roundedRect: plateRect, cornerRadius: plateSize.height / 2)
+        context.fill(
+            plate,
+            with: .color(selected ? .black.opacity(0.24) : .primary.opacity(0.10))
+        )
+        context.stroke(
+            plate,
+            with: .color(selected ? .white.opacity(0.30) : .primary.opacity(0.14)),
+            lineWidth: 0.75
+        )
+        context.draw(
+            OutputBindingText.text(for: configuration[bindingFor: zone])
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(selected ? .white : .secondary),
+            at: point
+        )
     }
 
     private func center(in bounds: CGRect) -> CGPoint { CGPoint(x: bounds.midX, y: bounds.midY) }

@@ -37,6 +37,8 @@ export DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
 swift test -Xswiftc -warnings-as-errors
 scripts/check-localization.sh
 swift build -c release -Xswiftc -warnings-as-errors --arch arm64
+swift build -c release -Xswiftc -warnings-as-errors --arch arm64 --product PaddrCLI
+scripts/test-cli.sh "$(swift build -c release --arch arm64 --show-bin-path)/PaddrCLI"
 ```
 
 To assemble a local ad-hoc app without touching the repository's `dist` directory:
@@ -59,6 +61,16 @@ Before opening a pull request:
 - describe anything you could not test directly, especially physical-controller and assistive-technology behavior.
 
 The repository does not publish, notarize, or upload artifacts from contributor pull requests. Never run release publication against this project unless the maintainer has explicitly coordinated it.
+
+## Brand assets
+
+`Assets/PaddrIcon.png` is the single source of truth for the app icon. Regenerate the checked-in AppIcon renditions after changing it:
+
+```bash
+scripts/generate-app-icon.sh
+```
+
+The generator requires a square PNG at least 1024 pixels wide and writes only the filenames declared by the AppIcon catalog.
 
 `@zachspartofaday` is the code owner and sole merge authority. Community review is welcome, but only the maintainer approves and merges changes.
 

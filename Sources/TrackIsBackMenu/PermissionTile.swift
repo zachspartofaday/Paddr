@@ -27,14 +27,16 @@ struct PermissionTile: View {
                     .paddrActionButton()
             }
         }
-        .padding(.horizontal, 8)
-        .frame(maxWidth: .infinity, minHeight: 38)
-        .background(.secondary.opacity(0.045), in: .rect(cornerRadius: 10))
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, minHeight: 40)
+        .background(tileColor.opacity(0.07), in: .rect(cornerRadius: 10))
         .overlay {
             RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Color(nsColor: .separatorColor).opacity(0.38), lineWidth: 1)
+                .strokeBorder(tileColor.opacity(0.20), lineWidth: 1)
         }
         .help(Text(detail))
         .accessibilityElement(children: .contain)
     }
+
+    private var tileColor: Color { isGranted ? PaddrStyle.accent : .orange }
 }

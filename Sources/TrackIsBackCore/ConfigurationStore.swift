@@ -7,12 +7,38 @@ public enum ConfigurationStore {
     }
 
     public static func load(from url: URL? = nil) throws -> TrackIsBackConfiguration {
-        let candidate = url ?? defaultCandidateURL(
+        try load(
+            from: url,
             fileManager: .default,
             homeDirectory: FileManager.default.homeDirectoryForCurrentUser
         )
-        guard FileManager.default.fileExists(atPath: candidate.path) else { return .default }
+    }
+
+    static func load(
+        from url: URL?,
+        fileManager: FileManager,
+        homeDirectory: URL
+    ) throws -> TrackIsBackConfiguration {
+        let isExplicitURL = url != nil
+        let candidate = url ?? defaultCandidateURL(
+            fileManager: fileManager,
+            homeDirectory: homeDirectory
+        )
+        guard fileManager.fileExists(atPath: candidate.path) else {
+            if isExplicitURL {
+                throw TrackIsBackError.configuration(
+                    "Configuration file does not exist at \(candidate.path)."
+                )
+            }
+            return .default
+        }
         do {
+            let values = try candidate.resourceValues(forKeys: [.isRegularFileKey])
+            guard values.isRegularFile == true else {
+                throw TrackIsBackError.configuration(
+                    "Configuration path is not a regular file: \(candidate.path)."
+                )
+            }
             let data = try Data(contentsOf: candidate)
             return try JSONDecoder().decode(TrackIsBackConfiguration.self, from: data).validated()
         } catch let error as TrackIsBackError {

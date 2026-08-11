@@ -40,23 +40,18 @@ struct PadConfigurationView: View {
                     .fixedSize(horizontal: true, vertical: false)
 
                     Spacer(minLength: 8)
-
-                    if configuration.mode == .dpad {
-                        Picker("Area layout", selection: $configuration.zoneLayout) {
-                            ForEach(PadZoneLayout.allCases, id: \.self) { layout in
-                                Text(layout.displayName).tag(layout)
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                        .frame(width: 160, alignment: .trailing)
-                        .help("Choose how the trackpad is divided into button areas.")
-                    }
                 }
                 .frame(maxWidth: .infinity, minHeight: PaddrStyle.behaviorRowHeight)
                 .padding(.horizontal, PaddrStyle.insetHorizontalPadding)
 
-                PaddrSectionContainer(title: settingsTitle) {
+                PaddrSectionContainer(
+                    title: settingsTitle,
+                    accessory: {
+                        if configuration.mode == .dpad {
+                            areaLayoutPicker
+                        }
+                    }
+                ) {
                     modeSettings
                 }
             }
@@ -67,10 +62,17 @@ struct PadConfigurationView: View {
                 Spacer()
                 Text(summary)
                     .paddrTypography(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(
+                        configuration.mode == .disabled ? Color.secondary : PaddrStyle.accent
+                    )
                     .padding(.horizontal, 9)
                     .padding(.vertical, 4)
-                    .background(.secondary.opacity(0.10), in: .capsule)
+                    .background(
+                        configuration.mode == .disabled
+                            ? Color.secondary.opacity(0.08)
+                            : PaddrStyle.accent.opacity(0.10),
+                        in: .capsule
+                    )
             }
             .frame(minHeight: PaddrStyle.cardHeaderHeight)
             .contentShape(.rect)
@@ -126,5 +128,17 @@ struct PadConfigurationView: View {
             step: 0.1,
             valueText: configuration.sensitivity.formatted(.number.precision(.fractionLength(1))) + "×"
         )
+    }
+
+    private var areaLayoutPicker: some View {
+        Picker("Area layout", selection: $configuration.zoneLayout) {
+            ForEach(PadZoneLayout.allCases, id: \.self) { layout in
+                Text(layout.displayName).tag(layout)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(width: 160, alignment: .trailing)
+        .help("Choose how the trackpad is divided into button areas.")
     }
 }
