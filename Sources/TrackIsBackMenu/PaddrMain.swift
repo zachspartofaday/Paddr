@@ -3,11 +3,11 @@ import TrackIsBackCore
 
 @main
 @MainActor
-struct TrackIsBackMenuMain {
+struct PaddrMain {
     static func main() {
         if CommandLine.arguments.contains("--smoke-test") {
             let configuration = (try? ConfigurationStore.load()) ?? .default
-            print("PuckPadsMenu smoke test")
+            print("Paddr smoke test")
             print("left=\(configuration.left.mode.rawValue), right=\(configuration.right.mode.rawValue)")
             print("device=\(TritonHIDDevice.probe()?.description ?? "not found")")
             return

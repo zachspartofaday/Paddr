@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 #if canImport(IOKit)
 import IOKit
 import IOKit.hid
@@ -31,27 +32,57 @@ public struct TritonDeviceSummary: Sendable {
 }
 
 #if canImport(IOKit)
-private final class HIDReportCollector {
-    private let lock = NSLock()
-    private var reports: [([UInt8], UInt64)] = []
+private final class HIDCallbackState: Sendable {
+    private struct State: ~Copyable {
+        var reports: [([UInt8], UInt64)] = []
+        var deviceRemoved = false
+    }
+
+    private let state = Mutex(State())
 
     func append(_ bytes: [UInt8]) {
-        lock.lock()
-        reports.append((bytes, DispatchTime.now().uptimeNanoseconds))
-        lock.unlock()
+        state.withLock { state in
+            guard !state.deviceRemoved else { return }
+            state.reports.append((bytes, DispatchTime.now().uptimeNanoseconds))
+        }
     }
 
     func drain() -> [([UInt8], UInt64)] {
-        lock.lock()
-        defer { lock.unlock() }
-        let result = reports
-        reports.removeAll(keepingCapacity: true)
-        return result
+        state.withLock { state in
+            guard !state.deviceRemoved else { return [] }
+            let result = state.reports
+            state.reports.removeAll(keepingCapacity: true)
+            return result
+        }
+    }
+
+    func markRemoved() {
+        state.withLock { state in
+            state.deviceRemoved = true
+            state.reports.removeAll(keepingCapacity: false)
+        }
+    }
+
+    var isRemoved: Bool {
+        state.withLock { $0.deviceRemoved }
     }
 }
 #endif
 
-public final class TritonHIDDevice {
+public enum TrackpadStreamTermination: Equatable, Sendable {
+    case stopped
+    case deviceRemoved
+}
+
+public protocol TrackpadHIDStreaming {
+    var summaryDescription: String { get }
+    func stream(
+        shouldContinue: () -> Bool,
+        onReport: ([UInt8], UInt64) throws -> Void
+    ) throws -> TrackpadStreamTermination
+}
+
+public final class TritonHIDDevice: TrackpadHIDStreaming {
     public static let vendorID: UInt16 = 0x28DE
     public static let productIDs: [UInt16] = [0x1304, 0x1305]
     public static let expectedReportLength = 54
@@ -60,9 +91,11 @@ public final class TritonHIDDevice {
     private let manager: IOHIDManager
     private let device: IOHIDDevice
     private let buffer: UnsafeMutablePointer<UInt8>
-    private let collector = HIDReportCollector()
+    private let callbackState = HIDCallbackState()
     #endif
     public let summary: TritonDeviceSummary
+
+    public var summaryDescription: String { summary.description }
 
     #if canImport(IOKit)
     private init(manager: IOHIDManager, device: IOHIDDevice, summary: TritonDeviceSummary) throws {
@@ -113,35 +146,45 @@ public final class TritonHIDDevice {
         #endif
     }
 
-    public func stream(shouldContinue: () -> Bool, onReport: ([UInt8], UInt64) throws -> Void) throws {
+    public func stream(
+        shouldContinue: () -> Bool,
+        onReport: ([UInt8], UInt64) throws -> Void
+    ) throws -> TrackpadStreamTermination {
         #if canImport(IOKit)
         let callback: IOHIDReportCallback = { context, result, _, _, _, report, length in
             guard result == kIOReturnSuccess, let context, length == TritonHIDDevice.expectedReportLength else { return }
-            let collector = Unmanaged<HIDReportCollector>.fromOpaque(context).takeUnretainedValue()
-            collector.append(Array(UnsafeBufferPointer(start: report, count: length)))
+            let state = Unmanaged<HIDCallbackState>.fromOpaque(context).takeUnretainedValue()
+            state.append(Array(UnsafeBufferPointer(start: report, count: length)))
         }
+        let removalCallback: IOHIDCallback = { context, _, _ in
+            guard let context else { return }
+            Unmanaged<HIDCallbackState>.fromOpaque(context).takeUnretainedValue().markRemoved()
+        }
+        let context = Unmanaged.passUnretained(callbackState).toOpaque()
         IOHIDDeviceRegisterInputReportCallback(
             device,
             buffer,
             summary.maximumInputReportSize,
             callback,
-            Unmanaged.passUnretained(collector).toOpaque()
+            context
         )
+        IOHIDDeviceRegisterRemovalCallback(device, removalCallback, context)
         IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
         defer {
             IOHIDDeviceRegisterInputReportCallback(device, buffer, summary.maximumInputReportSize, nil, nil)
+            IOHIDDeviceRegisterRemovalCallback(device, nil, nil)
             IOHIDDeviceUnscheduleFromRunLoop(device, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
         }
 
-        while shouldContinue() {
+        while shouldContinue(), !callbackState.isRemoved {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
-            for (bytes, timestamp) in collector.drain() {
+            guard !callbackState.isRemoved else { break }
+            for (bytes, timestamp) in callbackState.drain() {
+                guard !callbackState.isRemoved else { break }
                 try onReport(bytes, timestamp)
             }
         }
-        for (bytes, timestamp) in collector.drain() {
-            try onReport(bytes, timestamp)
-        }
+        return callbackState.isRemoved ? .deviceRemoved : .stopped
         #else
         throw TrackIsBackError.device("IOHID is unavailable on this platform.")
         #endif

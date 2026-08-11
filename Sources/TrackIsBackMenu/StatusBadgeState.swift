@@ -7,7 +7,7 @@ enum StatusBadgeState {
 
     var color: Color {
         switch self {
-        case .ready: TrackIsBackStyle.accent
+        case .ready: PaddrStyle.accent
         case .problem: .orange
         case .neutral: .secondary
         }

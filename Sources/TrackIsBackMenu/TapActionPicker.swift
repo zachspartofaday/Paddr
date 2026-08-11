@@ -13,26 +13,23 @@ struct TapActionPicker: View {
     }
 
     var body: some View {
-        LabeledContent {
-            Picker("Tap action", selection: $selection) {
+        AdaptiveControlRow(title: "Touch tap", systemImage: "hand.tap") {
+            Picker("Touch tap action", selection: $selection) {
                 Text("None").tag(String?.none)
                 if let customSelection {
-                    Text(customSelection).tag(Optional(customSelection))
+                    OutputBindingText(binding: customSelection).tag(Optional(customSelection))
                 }
                 Divider()
                 Label("Left click", systemImage: "computermouse.fill").tag(Optional(TapBindingCatalog.leftMouseButton))
                 Label("Right click", systemImage: "computermouse").tag(Optional(TapBindingCatalog.rightMouseButton))
                 Divider()
                 ForEach(KeyCatalog.commonNames, id: \.self) { key in
-                    Text(key.capitalized).tag(Optional(key))
+                    OutputBindingText(binding: key).tag(Optional(key))
                 }
             }
             .labelsHidden()
             .pickerStyle(.menu)
-            .controlSize(.regular)
-            .frame(minWidth: 180)
-        } label: {
-            Label("Touch tap", systemImage: "hand.tap")
+            .frame(minWidth: 190)
         }
         .help("Click a mouse button or emit a keyboard key after a short touch and release.")
     }

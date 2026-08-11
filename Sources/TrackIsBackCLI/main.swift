@@ -16,23 +16,23 @@ private struct CLIOptions {
 
 private func help() -> String {
     """
-    PuckPads — Steam Controller 2 trackpads for native macOS games
+    Paddr — Steam Controller 2 trackpads for native macOS games
 
     Usage:
-      scripts/puck-pads.sh [options]
-      swift run PuckPads -- [options]
+      scripts/paddr.sh [options]
+      swift run PaddrCLI -- [options]
 
     Pad modes:
       disabled | mouse | scroll | dpad
 
     Main options:
-      --config PATH                 Load JSON configuration (default: ~/.config/PuckPads/config.json if present).
+      --config PATH                 Load JSON configuration (default: ~/.config/Paddr/config.json if present).
       --write-config PATH           Write the effective configuration and exit.
       --show-config                 Print the effective configuration and exit.
       --left-mode MODE              Set the left pad mode.
       --right-mode MODE             Set the right pad mode.
-      --left-sensitivity N          Left mouse/scroll sensitivity multiplier.
-      --right-sensitivity N         Right mouse/scroll sensitivity multiplier.
+      --left-sensitivity N          Left mouse/scroll sensitivity, 0.1...20.
+      --right-sensitivity N         Right mouse/scroll sensitivity, 0.1...20.
       --left-tap ACTION|none        Tap a key, mouse-left, or mouse-right; likewise --right-tap.
       --left-mouse-deadzone N       Center tap radius from 0...1; likewise --right-mouse-deadzone.
       --left-up ACTION              Left D-pad up-zone action; likewise --left-right/--left-down/--left-left.
@@ -43,8 +43,8 @@ private func help() -> String {
       --right-layout LAYOUT         Set the right button-zone layout.
       --left-grid-POSITION ACTION   Set a 3×3 action: top-left, top, top-right, left, center,
                                     right, bottom-left, bottom, or bottom-right. Right side also supported.
-      --tap-max-ms N                Set maximum tap duration for both pads.
-      --tap-max-movement N          Set maximum raw movement for both pad taps.
+      --tap-max-ms N                Tap duration for both pads, 1...5000 ms.
+      --tap-max-movement N          Tap movement for both pads, 0...100000 raw units.
       --duration SECONDS            Stop after a finite duration; otherwise run until Control-C.
       --observe-only                Parse/log actions without posting mouse, scroll, or key events.
       --verbose                     Print resolved actions.
@@ -57,13 +57,13 @@ private func help() -> String {
       Any button zone can instead use mouse-left or mouse-right.
 
     Examples:
-      scripts/puck-pads.sh
-      scripts/puck-pads.sh --left-mode dpad --left-up w --left-right d --left-down s --left-left a
-      scripts/puck-pads.sh --left-mode dpad --left-up mouse-left --left-down mouse-right
-      scripts/puck-pads.sh --right-mode mouse --right-sensitivity 1.5 --right-tap space
+      scripts/paddr.sh
+      scripts/paddr.sh --left-mode dpad --left-up w --left-right d --left-down s --left-left a
+      scripts/paddr.sh --left-mode dpad --left-up mouse-left --left-down mouse-right
+      scripts/paddr.sh --right-mode mouse --right-sensitivity 1.5 --right-tap space
 
     Safety:
-      Puck/dongle mode only. PuckPads opens IOHID without seizing it and has no feature-report API;
+      Puck/dongle mode only. Paddr opens IOHID without seizing it and has no feature-report API;
       it never changes lizard mode, IMU, haptics, rumble, firmware, or Apple's native gamepad mapping.
     """
 }
@@ -81,6 +81,11 @@ private func url(_ path: String) -> URL {
 private func parse(_ rawArguments: [String]) throws -> CLIOptions {
     var args = rawArguments
     if args.first == "--" { args.removeFirst() }
+    if args.contains("-h") || args.contains("--help") {
+        var options = CLIOptions()
+        options.showHelp = true
+        return options
+    }
     let explicitConfigurationURL = try value(after: "--config", in: args).map(url)
     var options = CLIOptions(configuration: try ConfigurationStore.load(from: explicitConfigurationURL))
     options.configurationURL = explicitConfigurationURL
@@ -246,7 +251,7 @@ private func run(_ options: CLIOptions) throws {
     let deadline = options.durationSeconds.map { Date().addingTimeInterval($0) }
     print(options.observeOnly ? "Observing until stopped." : "Output enabled; press Control-C to stop.")
     let verbose = options.verbose
-    let summary = try TrackpadRuntime.run(
+    let result = try TrackpadRuntime.run(
         configuration: options.configuration,
         observeOnly: options.observeOnly,
         stopToken: stop,
@@ -255,6 +260,7 @@ private func run(_ options: CLIOptions) throws {
             if verbose { print("- \(action)") }
         }
     )
+    let summary = result.summary
     print("Summary: reports=\(summary.reportCount), actions=\(summary.actionCount), featureReports=0")
 }
 

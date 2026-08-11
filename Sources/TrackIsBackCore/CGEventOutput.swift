@@ -4,6 +4,7 @@ import ApplicationServices
 #if canImport(CoreGraphics)
 import CoreGraphics
 #endif
+import Synchronization
 
 public enum Permissions {
     public static func accessibilityTrusted(prompt: Bool) -> Bool {
@@ -16,29 +17,45 @@ public enum Permissions {
     }
 }
 
-public final class CGEventOutput {
-    #if canImport(CoreGraphics)
-    private let source = CGEventSource(stateID: .hidSystemState)
-    #endif
+public protocol TrackpadOutputDispatching: Sendable {
+    func dispatch(_ actions: [TrackpadOutputAction]) throws
+}
+
+public final class CGEventOutput: TrackpadOutputDispatching, Sendable {
+    private let heldMouseButtons = Mutex<Set<MouseButtonBinding>>([])
 
     public init() {}
 
     public func dispatch(_ actions: [TrackpadOutputAction]) throws {
-        for action in actions {
-            switch action {
-            case let .mouseMove(dx, dy):
-                try postMouseMove(dx: dx, dy: dy)
-            case let .mouseButton(button, isPressed):
-                try postMouseButton(button, isPressed: isPressed)
-            case let .scroll(dx, dy):
-                try postScroll(dx: dx, dy: dy)
-            case let .key(key, isPressed):
-                try postKey(key, isPressed: isPressed)
+        try heldMouseButtons.withLock { heldButtons in
+            #if canImport(CoreGraphics)
+            let source = CGEventSource(stateID: .hidSystemState)
+            #endif
+            for action in actions {
+                switch action {
+                case let .mouseMove(dx, dy):
+                    try postMouseMove(dx: dx, dy: dy, heldButtons: heldButtons, source: source)
+                case let .mouseButton(button, isPressed):
+                    try postMouseButton(button, isPressed: isPressed, source: source)
+                    if isPressed {
+                        heldButtons.insert(button)
+                    } else {
+                        heldButtons.remove(button)
+                    }
+                case let .scroll(dx, dy):
+                    try postScroll(dx: dx, dy: dy, source: source)
+                case let .key(key, isPressed):
+                    try postKey(key, isPressed: isPressed, source: source)
+                }
             }
         }
     }
 
-    private func postMouseButton(_ button: MouseButtonBinding, isPressed: Bool) throws {
+    private func postMouseButton(
+        _ button: MouseButtonBinding,
+        isPressed: Bool,
+        source: CGEventSource?
+    ) throws {
         #if canImport(CoreGraphics)
         guard let location = CGEvent(source: nil)?.location else { return }
         let mouseButton: CGMouseButton = button == .left ? .left : .right
@@ -61,15 +78,24 @@ public final class CGEventOutput {
         #endif
     }
 
-    private func postMouseMove(dx: Double, dy: Double) throws {
+    private func postMouseMove(
+        dx: Double,
+        dy: Double,
+        heldButtons: Set<MouseButtonBinding>,
+        source: CGEventSource?
+    ) throws {
         #if canImport(CoreGraphics)
         guard dx != 0 || dy != 0, let current = CGEvent(source: nil)?.location else { return }
         let destination = CGPoint(x: current.x + dx, y: current.y + dy)
+        let eventType = Self.mouseMovementEventType(heldButtons: heldButtons)
+        let mouseButton: CGMouseButton = heldButtons.contains(.right) && !heldButtons.contains(.left)
+            ? .right
+            : .left
         guard let event = CGEvent(
             mouseEventSource: source,
-            mouseType: .mouseMoved,
+            mouseType: eventType,
             mouseCursorPosition: destination,
-            mouseButton: .left
+            mouseButton: mouseButton
         ) else { throw TrackIsBackError.output("Could not create a mouse event.") }
         event.post(tap: .cghidEventTap)
         #else
@@ -77,15 +103,18 @@ public final class CGEventOutput {
         #endif
     }
 
-    private func postScroll(dx: Double, dy: Double) throws {
+    private func postScroll(dx: Double, dy: Double, source: CGEventSource?) throws {
         #if canImport(CoreGraphics)
+        guard dx.isFinite, dy.isFinite else {
+            throw TrackIsBackError.output("Scroll output must be finite.")
+        }
         guard dx != 0 || dy != 0 else { return }
         guard let event = CGEvent(
             scrollWheelEvent2Source: source,
             units: .pixel,
             wheelCount: 2,
-            wheel1: Int32(dy.rounded()),
-            wheel2: Int32(dx.rounded()),
+            wheel1: Self.clampedScrollValue(dy),
+            wheel2: Self.clampedScrollValue(dx),
             wheel3: 0
         ) else { throw TrackIsBackError.output("Could not create a scroll event.") }
         event.post(tap: .cghidEventTap)
@@ -94,7 +123,15 @@ public final class CGEventOutput {
         #endif
     }
 
-    private func postKey(_ key: KeyBinding, isPressed: Bool) throws {
+    public static func clampedScrollValue(_ value: Double) -> Int32 {
+        guard value.isFinite else { return 0 }
+        let rounded = value.rounded()
+        if rounded >= Double(Int32.max) { return Int32.max }
+        if rounded <= Double(Int32.min) { return Int32.min }
+        return Int32(rounded)
+    }
+
+    private func postKey(_ key: KeyBinding, isPressed: Bool, source: CGEventSource?) throws {
         #if canImport(CoreGraphics)
         guard let event = CGEvent(
             keyboardEventSource: source,
@@ -106,4 +143,12 @@ public final class CGEventOutput {
         throw TrackIsBackError.output("CoreGraphics output is unavailable.")
         #endif
     }
+
+    #if canImport(CoreGraphics)
+    static func mouseMovementEventType(heldButtons: Set<MouseButtonBinding>) -> CGEventType {
+        if heldButtons.contains(.left) { return .leftMouseDragged }
+        if heldButtons.contains(.right) { return .rightMouseDragged }
+        return .mouseMoved
+    }
+    #endif
 }

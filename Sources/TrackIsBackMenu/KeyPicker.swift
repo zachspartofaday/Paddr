@@ -20,7 +20,7 @@ struct OutputBindingPicker: View {
                 .tag(TapBindingCatalog.rightMouseButton)
             Divider()
             ForEach(keyChoices, id: \.self) { key in
-                Text(key.capitalized).tag(key)
+                OutputBindingText(binding: key).tag(key)
             }
         }
         .labelsHidden()

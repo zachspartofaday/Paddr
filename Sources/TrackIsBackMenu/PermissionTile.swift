@@ -1,53 +1,39 @@
 import SwiftUI
 
 struct PermissionTile: View {
-    let title: String
-    let detail: String
+    let title: LocalizedStringResource
+    let detail: LocalizedStringResource
     let isGranted: Bool
     let requestAction: () -> Void
     let settingsAction: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: isGranted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                .font(.title3)
-                .foregroundStyle(isGranted ? TrackIsBackStyle.accent : .orange)
+        HStack(spacing: 8) {
+            Image(systemName: isGranted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                .foregroundStyle(isGranted ? PaddrStyle.accent : .orange)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.body)
-                Text(detail)
-                    .font(.caption)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).paddrTypography(.callout).fontWeight(.semibold)
+                Text(isGranted ? "Ready" : "Required")
+                    .paddrTypography(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
             }
 
-            Spacer(minLength: 8)
+            Spacer(minLength: 4)
 
-            if isGranted {
-                Label("Ready", systemImage: "checkmark")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                GlassEffectContainer(spacing: 8) {
-                    HStack(spacing: 8) {
-                        Button("Request", action: requestAction)
-                            .buttonStyle(.glass)
-
-                        Button("Open Settings", systemImage: "gearshape", action: settingsAction)
-                            .labelStyle(.iconOnly)
-                            .buttonStyle(.glass)
-                            .help("Open \(title) settings")
-                    }
-                    .controlSize(.regular)
-                }
+            if !isGranted {
+                Button("Request", action: requestAction)
+                    .paddrActionButton(prominent: true)
+                Button("Open Settings", systemImage: "gearshape", action: settingsAction)
+                    .labelStyle(.iconOnly)
+                    .paddrActionButton()
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, minHeight: 54)
-        .background(.primary.opacity(0.045))
-        .clipShape(.rect(cornerRadius: 10))
+        .padding(9)
+        .frame(maxWidth: .infinity, minHeight: 48)
+        .background(.secondary.opacity(0.07), in: .rect(cornerRadius: 11))
+        .help(Text(detail))
+        .accessibilityElement(children: .contain)
     }
 }

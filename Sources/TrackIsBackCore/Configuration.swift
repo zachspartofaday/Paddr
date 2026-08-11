@@ -10,6 +10,21 @@ public enum PadMode: String, Codable, CaseIterable, Sendable {
     case mouse
     case scroll
     case dpad
+
+    public var allowsTouchTap: Bool {
+        self == .mouse || self == .scroll
+    }
+}
+
+public enum ConfigurationLimits {
+    public static let sensitivity = 0.1...20.0
+    public static let tapMaximumMilliseconds = 1.0...5_000.0
+    public static let tapMaximumMovement = 0.0...100_000.0
+    public static let mouseDeadzone = 0.0...1.0
+
+    public static func containsDPadDeadzone(_ value: Double) -> Bool {
+        value.isFinite && value >= 0 && value < 1
+    }
 }
 
 public enum PadZoneLayout: String, Codable, CaseIterable, Sendable {
@@ -19,13 +34,24 @@ public enum PadZoneLayout: String, Codable, CaseIterable, Sendable {
     case verticalTwo = "vertical-two"
     case gridNine = "grid-nine"
 
-    public var displayName: String {
+    public var displayName: LocalizedStringResource {
         switch self {
-        case .radialFour: return "Four-way radial"
-        case .fourCorners: return "Four corners"
-        case .horizontalTwo: return "Left / right"
-        case .verticalTwo: return "Top / bottom"
-        case .gridNine: return "3 × 3 grid"
+        case .radialFour: LocalizedStringResource("Four-way radial")
+        case .fourCorners: LocalizedStringResource("Four corners")
+        case .horizontalTwo: LocalizedStringResource("Left / right")
+        case .verticalTwo: LocalizedStringResource("Top / bottom")
+        case .gridNine: LocalizedStringResource("3 × 3 grid")
+        }
+    }
+
+    public var zones: [ButtonZone] {
+        switch self {
+        case .radialFour: [.up, .right, .down, .left]
+        case .fourCorners: [.topLeft, .topRight, .bottomRight, .bottomLeft]
+        case .horizontalTwo: [.left, .right]
+        case .verticalTwo: [.up, .down]
+        case .gridNine:
+            [.topLeft, .up, .topRight, .left, .center, .right, .bottomLeft, .down, .bottomRight]
         }
     }
 }
@@ -132,6 +158,54 @@ public struct PadConfiguration: Codable, Equatable, Sendable {
         self.gridKeys = gridKeys
     }
 
+    public subscript(bindingFor zone: ButtonZone) -> String {
+        get {
+            if zoneLayout == .gridNine {
+                switch zone {
+                case .topLeft: return gridKeys.topLeft
+                case .up: return gridKeys.top
+                case .topRight: return gridKeys.topRight
+                case .left: return gridKeys.left
+                case .center: return gridKeys.center
+                case .right: return gridKeys.right
+                case .bottomLeft: return gridKeys.bottomLeft
+                case .down: return gridKeys.bottom
+                case .bottomRight: return gridKeys.bottomRight
+                }
+            }
+            switch zone {
+            case .topLeft, .up: return dpadKeys.up
+            case .topRight, .right: return dpadKeys.right
+            case .bottomRight, .down: return dpadKeys.down
+            case .bottomLeft, .left: return dpadKeys.left
+            case .center: return gridKeys.center
+            }
+        }
+        set {
+            if zoneLayout == .gridNine {
+                switch zone {
+                case .topLeft: gridKeys.topLeft = newValue
+                case .up: gridKeys.top = newValue
+                case .topRight: gridKeys.topRight = newValue
+                case .left: gridKeys.left = newValue
+                case .center: gridKeys.center = newValue
+                case .right: gridKeys.right = newValue
+                case .bottomLeft: gridKeys.bottomLeft = newValue
+                case .down: gridKeys.bottom = newValue
+                case .bottomRight: gridKeys.bottomRight = newValue
+                }
+                return
+            }
+            switch zone {
+            case .topLeft, .up: dpadKeys.up = newValue
+            case .topRight, .right: dpadKeys.right = newValue
+            case .bottomRight, .down: dpadKeys.down = newValue
+            case .bottomLeft, .left: dpadKeys.left = newValue
+            case .center: gridKeys.center = newValue
+            }
+        }
+    }
+
     private enum CodingKeys: String, CodingKey {
         case mode, sensitivity, mouseDeadzone, tapKey, tapMaximumMilliseconds, tapMaximumMovement
         case dpadDeadzone, zoneLayout, dpadKeys, gridKeys
@@ -184,19 +258,21 @@ public struct TrackIsBackConfiguration: Codable, Equatable, Sendable {
     }
 
     private func validate(side: PadSide, pad: inout PadConfiguration) throws {
-        guard pad.sensitivity.isFinite, pad.sensitivity > 0 else {
-            throw TrackIsBackError.configuration("\(side.rawValue) sensitivity must be a positive finite number.")
+        guard pad.sensitivity.isFinite, ConfigurationLimits.sensitivity.contains(pad.sensitivity) else {
+            throw TrackIsBackError.configuration("\(side.rawValue) sensitivity must be between 0.1 and 20.")
         }
-        guard pad.mouseDeadzone.isFinite, (0...1).contains(pad.mouseDeadzone) else {
+        guard pad.mouseDeadzone.isFinite, ConfigurationLimits.mouseDeadzone.contains(pad.mouseDeadzone) else {
             throw TrackIsBackError.configuration("\(side.rawValue) mouseDeadzone must be between 0 and 1.")
         }
-        guard pad.tapMaximumMilliseconds.isFinite, pad.tapMaximumMilliseconds > 0 else {
-            throw TrackIsBackError.configuration("\(side.rawValue) tapMaximumMilliseconds must be positive.")
+        guard pad.tapMaximumMilliseconds.isFinite,
+              ConfigurationLimits.tapMaximumMilliseconds.contains(pad.tapMaximumMilliseconds) else {
+            throw TrackIsBackError.configuration("\(side.rawValue) tapMaximumMilliseconds must be between 1 and 5000.")
         }
-        guard pad.tapMaximumMovement.isFinite, pad.tapMaximumMovement >= 0 else {
-            throw TrackIsBackError.configuration("\(side.rawValue) tapMaximumMovement must be zero or greater.")
+        guard pad.tapMaximumMovement.isFinite,
+              ConfigurationLimits.tapMaximumMovement.contains(pad.tapMaximumMovement) else {
+            throw TrackIsBackError.configuration("\(side.rawValue) tapMaximumMovement must be between 0 and 100000.")
         }
-        guard pad.dpadDeadzone.isFinite, (0..<1).contains(pad.dpadDeadzone) else {
+        guard ConfigurationLimits.containsDPadDeadzone(pad.dpadDeadzone) else {
             throw TrackIsBackError.configuration("\(side.rawValue) dpadDeadzone must be at least 0 and less than 1.")
         }
         if let tapKey = pad.tapKey {

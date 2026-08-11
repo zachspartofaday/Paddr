@@ -52,3 +52,30 @@ public enum KeyCatalog {
         }
     }
 }
+
+public enum OutputBindingPresentation {
+    public static func localizedName(for binding: String) -> LocalizedStringResource? {
+        switch binding {
+        case TapBindingCatalog.leftMouseButton: LocalizedStringResource("Left click")
+        case TapBindingCatalog.rightMouseButton: LocalizedStringResource("Right click")
+        case "up": LocalizedStringResource("Up arrow")
+        case "right": LocalizedStringResource("Right arrow")
+        case "down": LocalizedStringResource("Down arrow")
+        case "left": LocalizedStringResource("Left arrow")
+        case "space": LocalizedStringResource("Space")
+        case "return": LocalizedStringResource("Return")
+        case "tab": LocalizedStringResource("Tab")
+        case "escape": LocalizedStringResource("Escape")
+        case "delete": LocalizedStringResource("Delete")
+        case "shift": LocalizedStringResource("Shift")
+        case "control": LocalizedStringResource("Control")
+        case "option": LocalizedStringResource("Option")
+        case "command": LocalizedStringResource("Command")
+        default: nil
+        }
+    }
+
+    public static func verbatimName(for binding: String) -> String {
+        binding.hasPrefix("code:") ? binding : binding.uppercased()
+    }
+}
