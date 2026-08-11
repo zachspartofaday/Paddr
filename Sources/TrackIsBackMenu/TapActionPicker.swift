@@ -13,7 +13,7 @@ struct TapActionPicker: View {
     }
 
     var body: some View {
-        AdaptiveControlRow(title: "Touch tap", systemImage: "hand.tap") {
+        PaddrSettingsRow(title: "Touch tap", systemImage: "hand.tap") {
             Picker("Touch tap action", selection: $selection) {
                 Text("None").tag(String?.none)
                 if let customSelection {
@@ -29,7 +29,7 @@ struct TapActionPicker: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
-            .frame(minWidth: 190)
+            .frame(width: 190)
         }
         .help("Click a mouse button or emit a keyboard key after a short touch and release.")
     }

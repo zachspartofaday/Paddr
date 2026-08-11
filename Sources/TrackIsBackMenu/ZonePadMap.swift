@@ -19,13 +19,17 @@ struct ZonePadMap: View {
                     let path = path(for: zone, in: bounds)
                     context.fill(
                         path,
-                        with: .color(zone == selection ? PaddrStyle.accent.opacity(0.30) : .primary.opacity(0.045))
+                        with: .color(zone == selection ? PaddrStyle.accent.opacity(0.38) : .primary.opacity(0.055))
                     )
-                    context.stroke(path, with: .color(.primary.opacity(0.18)), lineWidth: 1)
+                    context.stroke(
+                        path,
+                        with: .color(zone == selection ? PaddrStyle.accent : .primary.opacity(0.22)),
+                        lineWidth: zone == selection ? 1.5 : 1
+                    )
                     context.draw(
                         OutputBindingText.text(for: configuration[bindingFor: zone])
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(zone == selection ? PaddrStyle.accent : .secondary),
+                            .font(.caption.bold())
+                            .foregroundStyle(zone == selection ? .primary : .secondary),
                         at: labelPoint(for: zone, in: bounds)
                     )
                 }
@@ -33,7 +37,7 @@ struct ZonePadMap: View {
                 if let neutral = neutralPath(in: bounds) {
                     context.fill(neutral, with: .color(.secondary.opacity(0.16)))
                     context.stroke(neutral, with: .color(.secondary.opacity(0.32)), lineWidth: 1)
-                    context.draw(Text("Neutral").font(.caption2).foregroundStyle(.secondary), at: center(in: bounds))
+                    context.draw(Text("Neutral").font(.caption).foregroundStyle(.secondary), at: center(in: bounds))
                 }
             }
             .clipShape(.rect(cornerRadius: 30))

@@ -33,6 +33,10 @@ verify_app() {
 
     plist="$verified_app/Contents/Info.plist"
     binary="$verified_app/Contents/MacOS/Paddr"
+    if ! test -x "$binary"; then
+        echo "App binary is not executable: $binary" >&2
+        return 1
+    fi
     test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$expected_version"
     test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")" = "$expected_build"
     test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")" = "com.partofaday.Paddr"

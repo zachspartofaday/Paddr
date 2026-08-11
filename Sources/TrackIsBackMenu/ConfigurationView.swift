@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ConfigurationView: View {
     @Bindable var model: PaddrMenuModel
+    @State private var configurationContentHeight: CGFloat = 0
 
     var body: some View {
         ZStack {
@@ -10,7 +11,7 @@ struct ConfigurationView: View {
 
             VStack(spacing: 0) {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: PaddrStyle.sectionSpacing) {
+                    VStack(alignment: .leading, spacing: PaddrStyle.sectionSpacing) {
                         AppHeaderView(model: model)
                         if !model.hasSystemAccess { SystemAccessView(model: model) }
                         ViewThatFits(in: .horizontal) {
@@ -42,6 +43,14 @@ struct ConfigurationView: View {
                         }
                     }
                     .padding(PaddrStyle.panelPadding)
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: ConfigurationContentHeightKey.self,
+                                value: proxy.size.height
+                            )
+                        }
+                    }
                 }
                 .scrollIndicators(.automatic)
 
@@ -55,5 +64,38 @@ struct ConfigurationView: View {
         .paddrTypography(.callout)
         .controlSize(.regular)
         .tint(PaddrStyle.accent)
+        .background {
+            WindowContentFitter(
+                targetHeight: max(
+                    PaddrStyle.minimumWindowSize.height,
+                    configurationContentHeight + 50
+                )
+            )
+        }
+        .onPreferenceChange(ConfigurationContentHeightKey.self) { configurationContentHeight = $0 }
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button("Refresh", systemImage: "arrow.clockwise", action: model.refreshStatus)
+                    .labelStyle(.iconOnly)
+                    .help("Refresh controller and permission status")
+
+                Toggle("Trackpad output", isOn: $model.isEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .accessibilityValue(
+                        model.isEnabled
+                            ? LocalizedStringResource("On")
+                            : LocalizedStringResource("Off")
+                    )
+            }
+        }
+    }
+}
+
+private struct ConfigurationContentHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
