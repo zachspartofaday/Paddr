@@ -20,7 +20,7 @@ PuckPads does not send controller feature reports. It does not change lizard mod
 
 ## Standalone app — recommended
 
-1. Download `PuckPads.app` from [Releases](https://github.com/zachspartofaday/PuckPads/releases) when a signed beta is available, or build the app locally using the instructions below.
+1. Download the current `PuckPads.app` archive from [Releases](https://github.com/zachspartofaday/PuckPads/releases), or build the app locally using the instructions below.
 2. Move it to Applications and launch it.
 3. Open PuckPads from its menu-bar icon.
 4. Use **Request** for Input Monitoring and Accessibility. The adjacent gear buttons open the matching Privacy & Security panes if macOS previously denied access.
@@ -29,6 +29,9 @@ PuckPads does not send controller feature reports. It does not change lizard mod
 The panel expands up to 1,120 points tall while respecting the display's visible frame, minimizing scrolling for expanded pad configurations. Pad sections still collapse independently, and save controls stay pinned below the configuration. Native macOS segmented and pop-up controls adopt the macOS 27 Liquid Glass appearance. PuckPads is built with the macOS 27 SDK while retaining macOS 26.0 as its minimum deployment target in case Apple back-deploys controller support.
 
 The center tap percentage represents radius from the physical pad center: 50% reaches halfway to the edge and 100% reserves the full normalized pad radius.
+
+> [!IMPORTANT]
+> The current downloadable beta is ad-hoc signed and is not notarized. It does not have a stable Apple Developer identity, so macOS may request permissions again after an update and may apply additional Gatekeeper restrictions. A Developer ID-signed and notarized release will replace it when that signing identity is available to the build environment.
 
 ### Requirements
 
