@@ -31,6 +31,7 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var configurationTask: Task<Void, Never>?
     @ObservationIgnored private var configurationEpoch: UInt64 = 0
     @ObservationIgnored private var statusRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var statusRefreshEpoch: UInt64 = 0
     @ObservationIgnored private var lifecycleTask: Task<Void, Never>?
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
     @ObservationIgnored private var permissionRefreshTask: Task<Void, Never>?
@@ -53,12 +54,18 @@ public final class PaddrMenuModel {
     }
 
     public func refreshStatus() {
+        statusRefreshEpoch &+= 1
+        let operation = statusRefreshEpoch
         statusRefreshTask?.cancel()
         statusRefreshTask = Task { [weak self] in
             guard let self else { return }
             await initializationTask?.value
-            guard !Task.isCancelled, terminationState == .idle else { return }
-            await refreshStatusNow()
+            guard !Task.isCancelled,
+                  statusRefreshEpoch == operation,
+                  terminationState == .idle
+            else { return }
+            await refreshStatusNow(operation: operation)
+            guard statusRefreshEpoch == operation else { return }
             statusRefreshTask = nil
         }
     }
@@ -101,9 +108,12 @@ public final class PaddrMenuModel {
         initializationTask = nil
     }
 
-    private func refreshStatusNow() async {
+    private func refreshStatusNow(operation: UInt64? = nil) async {
         let controllerDescription = await dependencies.probeController()
-        guard !Task.isCancelled, terminationState == .idle else { return }
+        guard !Task.isCancelled,
+              operation.map({ statusRefreshEpoch == $0 }) ?? true,
+              terminationState == .idle
+        else { return }
         self.controllerDescription = controllerDescription
         inputMonitoringStatus = dependencies.inputMonitoringStatus()
         accessibilityTrusted = dependencies.accessibilityTrusted(false)
