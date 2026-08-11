@@ -31,6 +31,7 @@ final class MenuModelTests: XCTestCase {
         state.accessibilityGranted = true
         state.controller = "Fake"
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
 
         model.isEnabled = true
         await waitUntil(model: model) { !model.isEnabled }
@@ -42,6 +43,7 @@ final class MenuModelTests: XCTestCase {
     func testDisconnectedEnableStaysOnAndWaits() async {
         let state = readyState(controller: nil)
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
 
         model.isEnabled = true
         await waitUntil(model: model) { model.status == .waitingForController }
@@ -58,6 +60,7 @@ final class MenuModelTests: XCTestCase {
         let model = PaddrMenuModel(
             dependencies: dependencies(state: state, session: session, sleeper: sleeper)
         )
+        await waitUntil(model: model) { model.isInitialized }
 
         model.isEnabled = true
         await waitUntil(model: model) { model.status == .waitingForController }
@@ -78,6 +81,7 @@ final class MenuModelTests: XCTestCase {
             .deviceRemoved(.init(reportCount: 4, actionCount: 2))
         ])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
 
         model.isEnabled = true
         await waitUntil(model: model) { model.status == .waitingForController && model.reportCount == 4 }
@@ -87,21 +91,24 @@ final class MenuModelTests: XCTestCase {
         XCTAssertNil(model.controllerDescription)
     }
 
-    func testSaveAndApplyPersistsValidatedConfiguration() {
+    func testSaveAndApplyPersistsValidatedConfiguration() async {
         let state = readyState(controller: nil)
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
         model.configuration.left.sensitivity = 3.4
 
         model.saveAndApply()
+        await waitUntil(model: model) { model.status == .configurationSaved }
 
         XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 3.4)
         XCTAssertFalse(model.hasUnsavedChanges)
         XCTAssertEqual(model.status, .configurationSaved)
     }
 
-    func testAlreadyGrantedPermissionRequestsReturnToOperationalStatus() {
+    func testAlreadyGrantedPermissionRequestsReturnToOperationalStatus() async {
         let state = readyState(controller: nil)
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
 
         model.requestInputMonitoring()
         XCTAssertEqual(model.status, .off)
@@ -114,6 +121,7 @@ final class MenuModelTests: XCTestCase {
         let state = ModelDependencyState()
         let sleeper = ManualSleeper()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, sleeper: sleeper))
+        await waitUntil(model: model) { model.isInitialized }
 
         model.requestInputMonitoring()
         XCTAssertEqual(model.status, .requestingInputMonitoring)
@@ -132,6 +140,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(controller: "Fake")
         let session = ScriptedSession(events: [.connected("Fake puck")])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
         model.configuration.left.sensitivity = 7
 
         model.isEnabled = true
@@ -147,6 +156,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(controller: "Fake")
         let session = ScriptedSession(events: [])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
         model.configuration.left.sensitivity = 21
 
         model.isEnabled = true
@@ -166,6 +176,7 @@ final class MenuModelTests: XCTestCase {
         state.saveFailure = "disk full"
         let session = ScriptedSession(events: [])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
         model.configuration.left.sensitivity = 6
 
         model.isEnabled = true
@@ -180,13 +191,18 @@ final class MenuModelTests: XCTestCase {
         }
     }
 
-    func testSaveAndApplyFailurePreservesDraft() {
+    func testSaveAndApplyFailurePreservesDraft() async {
         let state = readyState(controller: nil)
         state.saveFailure = "disk full"
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
         model.configuration.left.sensitivity = 6
 
         model.saveAndApply()
+        await waitUntil(model: model) {
+            if case .failure(.configurationSave) = model.status { return true }
+            return false
+        }
 
         XCTAssertEqual(model.configuration.left.sensitivity, 6)
         XCTAssertTrue(model.hasUnsavedChanges)
@@ -199,6 +215,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(controller: "Fake")
         let session = ScriptedSession(events: [.connected("Fake puck")], keepsStreamOpen: true)
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
         model.isEnabled = true
         await waitUntil(model: model) { model.isRunning }
 
@@ -219,6 +236,7 @@ final class MenuModelTests: XCTestCase {
         let model = PaddrMenuModel(
             dependencies: dependencies(state: state, session: session, sleeper: sleeper)
         )
+        await waitUntil(model: model) { model.isInitialized }
         model.isEnabled = true
         await waitUntil(model: model) { model.status == .waitingForController }
 
@@ -239,6 +257,7 @@ final class MenuModelTests: XCTestCase {
         let model = PaddrMenuModel(
             dependencies: dependencies(state: state, session: session, sleeper: sleeper)
         )
+        await waitUntil(model: model) { model.isInitialized }
         model.configuration.left.sensitivity = 3
 
         model.isEnabled = true
@@ -259,6 +278,7 @@ final class MenuModelTests: XCTestCase {
     func testRelaunchLoadsConfigurationSavedByEnable() async {
         let state = readyState(controller: nil)
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
         model.configuration.right.sensitivity = 8
 
         model.isEnabled = true
@@ -266,6 +286,7 @@ final class MenuModelTests: XCTestCase {
         state.loadedConfiguration = try! XCTUnwrap(state.savedConfiguration)
 
         let relaunched = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: relaunched) { relaunched.isInitialized }
         XCTAssertEqual(relaunched.configuration.right.sensitivity, 8)
         XCTAssertFalse(relaunched.hasUnsavedChanges)
     }
@@ -274,6 +295,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(controller: "Fake")
         let session = ScriptedSession(events: [.connected("Fake puck")], keepsStreamOpen: true)
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
         model.isEnabled = true
         await waitUntil(model: model) { model.isRunning }
 
@@ -290,6 +312,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(controller: "Fake")
         let session = GatedSession(blockedStops: [2])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
         model.isEnabled = true
         await waitUntil(model: model) { model.isRunning }
 
@@ -322,6 +345,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(controller: "Fake")
         let session = GatedSession(blockedStops: [1])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
         model.isEnabled = true
         await session.waitForStop(1)
 
@@ -343,6 +367,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(controller: nil)
         let session = GatedSession(blockedStops: [2])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
         model.isEnabled = true
         await waitUntil(model: model) { model.status == .waitingForController }
 
@@ -366,6 +391,7 @@ final class MenuModelTests: XCTestCase {
         let model = PaddrMenuModel(
             dependencies: dependencies(state: state, session: session, sleeper: sleeper)
         )
+        await waitUntil(model: model) { model.isInitialized }
         model.isEnabled = true
         await waitUntil(model: model) { model.status == .waitingForController }
 
@@ -385,6 +411,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(controller: "Fake")
         let session = GatedSession(blockedStops: [2])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
         model.isEnabled = true
         await waitUntil(model: model) { model.isRunning }
 
@@ -407,6 +434,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(controller: nil)
         let session = GatedSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
         model.isEnabled = true
         await waitUntil(model: model) { model.status == .waitingForController }
 
@@ -419,12 +447,13 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(didReply)
     }
 
-    func testRestoreDefaultsMarksConfigurationUnsaved() {
+    func testRestoreDefaultsMarksConfigurationUnsaved() async {
         let state = readyState(controller: nil)
         var custom = TrackIsBackConfiguration.default
         custom.left.sensitivity = 4
         state.loadedConfiguration = custom
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
 
         model.restoreDefaults()
 
@@ -433,11 +462,12 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.status, .defaultsRestored)
     }
 
-    func testConfigurationLoadFailureUsesDefaultsAndSurfacesError() {
+    func testConfigurationLoadFailureUsesDefaultsAndSurfacesError() async {
         let state = readyState(controller: nil)
         state.loadFailure = "Saved sensitivity is outside the supported range."
 
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
 
         XCTAssertEqual(model.configuration, .default)
         XCTAssertTrue(model.hasUnsavedChanges)
@@ -448,12 +478,14 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(diagnostic, "Saved sensitivity is outside the supported range.")
     }
 
-    func testConfigurationLoadFailureCanSaveRecoveryDefaults() {
+    func testConfigurationLoadFailureCanSaveRecoveryDefaults() async {
         let state = readyState(controller: nil)
         state.loadFailure = "Saved sensitivity is outside the supported range."
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
 
         model.saveAndApply()
+        await waitUntil(model: model) { model.status == .configurationSaved }
 
         XCTAssertEqual(state.savedConfiguration, .default)
         XCTAssertFalse(model.hasUnsavedChanges)
