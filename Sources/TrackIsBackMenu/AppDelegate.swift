@@ -129,6 +129,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         window.titleVisibility = .visible
         window.toolbarStyle = .unifiedCompact
         window.contentMinSize = PaddrStyle.minimumWindowSize
+        window.collectionBehavior.insert(.fullScreenNone)
+        window.standardWindowButton(.zoomButton)?.isEnabled = false
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
         window.contentViewController = NSHostingController(

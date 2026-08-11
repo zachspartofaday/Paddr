@@ -266,6 +266,139 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.status, .releasingOutputs)
     }
 
+    func testTerminationCannotBeSupersededAndRepliesToEveryWaitingRequestOnce() async {
+        let state = readyState(controller: "Fake")
+        let session = GatedSession(blockedStops: [2])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+
+        var firstReplyCount = 0
+        var secondReplyCount = 0
+        XCTAssertTrue(model.stopForTermination { firstReplyCount += 1 })
+        await session.waitForStop(2)
+
+        model.isEnabled = false
+        model.configuration.left.sensitivity = 4
+        model.saveAndApply()
+        XCTAssertTrue(model.stopForTermination { secondReplyCount += 1 })
+        XCTAssertEqual(firstReplyCount, 0)
+        XCTAssertEqual(secondReplyCount, 0)
+
+        await session.releaseStop(2)
+        await waitUntil(model: model) { firstReplyCount == 1 && secondReplyCount == 1 }
+
+        let startCount = await session.startCount
+        let stopCount = await session.stopCount
+        XCTAssertEqual(firstReplyCount, 1)
+        XCTAssertEqual(secondReplyCount, 1)
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 2)
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertFalse(model.hasPendingLifecycleWork)
+    }
+
+    func testTerminationDuringEnableDrainsTheCancelledStartBeforeReplying() async {
+        let state = readyState(controller: "Fake")
+        let session = GatedSession(blockedStops: [1])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        model.isEnabled = true
+        await session.waitForStop(1)
+
+        var didReply = false
+        XCTAssertTrue(model.stopForTermination { didReply = true })
+        await session.waitForStop(2)
+        XCTAssertFalse(didReply)
+
+        await session.releaseStop(1)
+        await waitUntil(model: model) { didReply }
+
+        let startCount = await session.startCount
+        let stopCount = await session.stopCount
+        XCTAssertEqual(startCount, 0)
+        XCTAssertEqual(stopCount, 2)
+    }
+
+    func testTerminationDuringDisableDrainsThePendingStop() async {
+        let state = readyState(controller: nil)
+        let session = GatedSession(blockedStops: [2])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        model.isEnabled = true
+        await waitUntil(model: model) { model.status == .waitingForController }
+
+        model.isEnabled = false
+        await session.waitForStop(2)
+        var didReply = false
+        XCTAssertTrue(model.stopForTermination { didReply = true })
+        await session.waitForStop(3)
+        XCTAssertFalse(didReply)
+
+        await session.releaseStop(2)
+        await waitUntil(model: model) { didReply }
+        let stopCount = await session.stopCount
+        XCTAssertEqual(stopCount, 3)
+    }
+
+    func testTerminationCancelsPendingReconnect() async {
+        let state = readyState(controller: nil)
+        let sleeper = ManualSleeper()
+        let session = GatedSession()
+        let model = PaddrMenuModel(
+            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+        )
+        model.isEnabled = true
+        await waitUntil(model: model) { model.status == .waitingForController }
+
+        var didReply = false
+        XCTAssertTrue(model.stopForTermination { didReply = true })
+        await waitUntil(model: model) { didReply }
+
+        state.controller = "Late controller"
+        sleeper.wake()
+        let startCount = await session.startCount
+        let stopCount = await session.stopCount
+        XCTAssertEqual(startCount, 0)
+        XCTAssertEqual(stopCount, 2)
+    }
+
+    func testTerminationDuringSaveAndApplyPreventsRestart() async {
+        let state = readyState(controller: "Fake")
+        let session = GatedSession(blockedStops: [2])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+
+        model.configuration.right.sensitivity = 6
+        model.saveAndApply()
+        await session.waitForStop(2)
+        var didReply = false
+        XCTAssertTrue(model.stopForTermination { didReply = true })
+        await session.waitForStop(3)
+        XCTAssertFalse(didReply)
+
+        await session.releaseStop(2)
+        await waitUntil(model: model) { didReply }
+        let startCount = await session.startCount
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(state.savedConfiguration?.right.sensitivity, 6)
+    }
+
+    func testCompletedDisableLeavesNoDeferredTerminationWork() async {
+        let state = readyState(controller: nil)
+        let session = GatedSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        model.isEnabled = true
+        await waitUntil(model: model) { model.status == .waitingForController }
+
+        model.isEnabled = false
+        await session.waitForStop(2)
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+
+        var didReply = false
+        XCTAssertFalse(model.stopForTermination { didReply = true })
+        XCTAssertFalse(didReply)
+    }
+
     func testRestoreDefaultsMarksConfigurationUnsaved() {
         let state = readyState(controller: nil)
         var custom = TrackIsBackConfiguration.default
@@ -401,6 +534,74 @@ private actor ScriptedSession: TrackpadSessionControlling {
         stopCount += 1
         continuation?.finish()
         continuation = nil
+    }
+}
+
+private actor GatedSession: TrackpadSessionControlling {
+    private let blockedStops: Set<Int>
+    private let gate = IndexedStopGate()
+    private let stopEvents: AsyncStream<Int>
+    private let stopEventsContinuation: AsyncStream<Int>.Continuation
+    private var eventContinuation: AsyncStream<TrackpadSessionEvent>.Continuation?
+    private(set) var startCount = 0
+    private(set) var stopCount = 0
+
+    init(blockedStops: Set<Int> = []) {
+        self.blockedStops = blockedStops
+        (stopEvents, stopEventsContinuation) = AsyncStream<Int>.makeStream(
+            bufferingPolicy: .bufferingNewest(16)
+        )
+    }
+
+    func start(
+        configuration: TrackIsBackConfiguration,
+        observeOnly: Bool
+    ) async -> AsyncStream<TrackpadSessionEvent> {
+        startCount += 1
+        let (stream, continuation) = AsyncStream<TrackpadSessionEvent>.makeStream()
+        eventContinuation = continuation
+        continuation.yield(.connected("Fake puck"))
+        return stream
+    }
+
+    func stop() async {
+        stopCount += 1
+        let stopNumber = stopCount
+        stopEventsContinuation.yield(stopNumber)
+        if blockedStops.contains(stopNumber) {
+            await gate.wait(for: stopNumber)
+        }
+        eventContinuation?.finish()
+        eventContinuation = nil
+    }
+
+    func waitForStop(_ expectedCount: Int) async {
+        if stopCount >= expectedCount { return }
+        for await count in stopEvents where count >= expectedCount { return }
+    }
+
+    func releaseStop(_ stopNumber: Int) async {
+        await gate.release(stopNumber)
+    }
+}
+
+private actor IndexedStopGate {
+    private var released: Set<Int> = []
+    private var waiters: [Int: [CheckedContinuation<Void, Never>]] = [:]
+
+    func wait(for index: Int) async {
+        if released.remove(index) != nil { return }
+        await withCheckedContinuation { continuation in
+            waiters[index, default: []].append(continuation)
+        }
+    }
+
+    func release(_ index: Int) {
+        guard let continuations = waiters.removeValue(forKey: index) else {
+            released.insert(index)
+            return
+        }
+        for continuation in continuations { continuation.resume() }
     }
 }
 

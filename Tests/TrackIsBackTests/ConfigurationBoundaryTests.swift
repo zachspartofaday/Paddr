@@ -26,6 +26,80 @@ final class ConfigurationBoundaryTests: XCTestCase {
         )
     }
 
+    func testMissingImplicitConfigurationUsesDefaults() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let loaded = try ConfigurationStore.load(
+            from: nil,
+            fileManager: .default,
+            homeDirectory: home
+        )
+
+        XCTAssertEqual(loaded, .default)
+    }
+
+    func testMissingExplicitConfigurationIsRejected() {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathComponent("missing.json")
+
+        XCTAssertThrowsError(try ConfigurationStore.load(from: missing)) { error in
+            XCTAssertTrue(String(describing: error).contains("does not exist"))
+            XCTAssertTrue(String(describing: error).contains(missing.path))
+        }
+    }
+
+    func testExplicitConfigurationMustBeARegularFile() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        XCTAssertThrowsError(try ConfigurationStore.load(from: directory)) { error in
+            XCTAssertTrue(String(describing: error).contains("not a regular file"))
+        }
+    }
+
+    func testUnreadableExplicitConfigurationIsRejected() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try Data("{}".utf8).write(to: file)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: NSNumber(value: 0)],
+            ofItemAtPath: file.path
+        )
+
+        XCTAssertThrowsError(try ConfigurationStore.load(from: file)) { error in
+            XCTAssertTrue(String(describing: error).contains("Could not load configuration"))
+        }
+    }
+
+    func testMalformedExplicitConfigurationIsRejected() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try Data("not-json".utf8).write(to: file)
+
+        XCTAssertThrowsError(try ConfigurationStore.load(from: file)) { error in
+            XCTAssertTrue(String(describing: error).contains("Could not load configuration"))
+        }
+    }
+
+    func testValidExplicitConfigurationLoads() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        var expected = TrackIsBackConfiguration.default
+        expected.left.sensitivity = 4.2
+        try ConfigurationStore.encoded(expected).write(to: file)
+
+        XCTAssertEqual(try ConfigurationStore.load(from: file), expected)
+    }
+
     func testEveryInclusiveConfigurationBoundaryIsAccepted() throws {
         for sensitivity in [0.1, 20] {
             for milliseconds in [1.0, 5_000] {

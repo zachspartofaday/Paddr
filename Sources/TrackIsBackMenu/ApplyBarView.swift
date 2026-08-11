@@ -28,8 +28,12 @@ struct ApplyBarView: View {
             }
         }
         .padding(.horizontal, PaddrStyle.panelPadding)
-        .frame(minHeight: 50)
+        .frame(minHeight: PaddrStyle.commandBarMinimumHeight)
         .background(.thickMaterial)
-        .overlay(alignment: .top) { Divider() }
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor).opacity(0.42))
+                .frame(height: 1)
+        }
     }
 }

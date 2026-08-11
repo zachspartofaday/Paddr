@@ -29,7 +29,9 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var lifecycleTask: Task<Void, Never>?
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
     @ObservationIgnored private var permissionRefreshTask: Task<Void, Never>?
-    @ObservationIgnored private var terminationCompletion: (@MainActor () -> Void)?
+    @ObservationIgnored private var terminationTask: Task<Void, Never>?
+    @ObservationIgnored private var terminationState = TerminationState.idle
+    @ObservationIgnored private var terminationCompletions: [@MainActor () -> Void] = []
     @ObservationIgnored public var statusDidChange: (@MainActor () -> Void)?
 
     public var hasUnsavedChanges: Bool { needsInitialSave || configuration != savedConfiguration }
@@ -65,6 +67,7 @@ public final class PaddrMenuModel {
     }
 
     public func saveAndApply() {
+        guard terminationState == .idle else { return }
         let validated: TrackIsBackConfiguration
         do {
             validated = try configuration.validated()
@@ -88,11 +91,13 @@ public final class PaddrMenuModel {
     }
 
     public func restoreDefaults() {
+        guard terminationState == .idle else { return }
         configuration = .default
         status = .defaultsRestored
     }
 
     public func requestInputMonitoring() {
+        guard terminationState == .idle else { return }
         _ = dependencies.requestInputMonitoring()
         inputMonitoringStatus = dependencies.inputMonitoringStatus()
         status = inputMonitoringStatus == .granted ? operationalStatus : .requestingInputMonitoring
@@ -100,61 +105,101 @@ public final class PaddrMenuModel {
     }
 
     public func requestAccessibility() {
+        guard terminationState == .idle else { return }
         accessibilityTrusted = dependencies.accessibilityTrusted(true)
         status = accessibilityTrusted ? operationalStatus : .requestingAccessibility
         schedulePermissionRefresh()
     }
 
     public func openInputMonitoringSettings() {
+        guard terminationState == .idle else { return }
         dependencies.openPrivacySettings("Privacy_ListenEvent")
         status = .inputMonitoringSettings
     }
 
     public func openAccessibilitySettings() {
+        guard terminationState == .idle else { return }
         dependencies.openPrivacySettings("Privacy_Accessibility")
         status = .accessibilitySettings
     }
 
     public func stopForTermination(completion: @escaping @MainActor () -> Void) -> Bool {
-        guard isEnabled || sessionID != nil || isRunning || lifecycleTask != nil else { return false }
-        terminationCompletion = completion
+        switch terminationState {
+        case .stopping:
+            terminationCompletions.append(completion)
+            return true
+        case .finished:
+            return false
+        case .idle:
+            break
+        }
+
+        guard hasPendingLifecycleWork else {
+            permissionRefreshTask?.cancel()
+            permissionRefreshTask = nil
+            return false
+        }
+
+        terminationState = .stopping
+        terminationCompletions = [completion]
         status = .releasingOutputs
         lifecycleEpoch &+= 1
-        let operation = lifecycleEpoch
-        reconnectTask?.cancel()
+
+        let priorLifecycleTask = lifecycleTask
+        let priorReconnectTask = reconnectTask
+        let priorPermissionTask = permissionRefreshTask
+        priorLifecycleTask?.cancel()
+        priorReconnectTask?.cancel()
+        priorPermissionTask?.cancel()
+
+        isEnabled = false
         reconnectTask = nil
-        lifecycleTask?.cancel()
-        lifecycleTask = Task { [weak self] in
-            guard let self else { return }
-            await self.dependencies.session.stop()
-            guard self.lifecycleEpoch == operation else { return }
-            self.finishTerminationIfNeeded()
+        permissionRefreshTask = nil
+        sessionID = nil
+        isRunning = false
+
+        terminationTask = Task { [self] in
+            await dependencies.session.stop()
+            await priorLifecycleTask?.value
+            await priorReconnectTask?.value
+            await priorPermissionTask?.value
+            completeTermination()
         }
+        statusDidChange?()
         return true
     }
 
     private func beginEnabledTransition() {
+        guard terminationState == .idle else { return }
         isEnabled ? startLifecycle(commitDraft: true) : stopLifecycle()
     }
 
     private func startLifecycle(commitDraft: Bool) {
+        guard terminationState == .idle else { return }
         lifecycleEpoch &+= 1
         let operation = lifecycleEpoch
         lifecycleTask?.cancel()
         lifecycleTask = Task { [weak self] in
-            await self?.start(operation: operation, commitDraft: commitDraft)
+            guard let self else { return }
+            await self.start(operation: operation, commitDraft: commitDraft)
+            self.clearLifecycleTask(operation: operation)
         }
     }
 
     private func stopLifecycle() {
+        guard terminationState == .idle else { return }
         lifecycleEpoch &+= 1
+        let operation = lifecycleEpoch
         reconnectTask?.cancel()
         reconnectTask = nil
         sessionID = nil
         isRunning = false
         status = .off
         lifecycleTask?.cancel()
-        lifecycleTask = Task { [dependencies] in await dependencies.session.stop() }
+        lifecycleTask = Task { [weak self, dependencies] in
+            await dependencies.session.stop()
+            self?.clearLifecycleTask(operation: operation)
+        }
     }
 
     private func start(operation: UInt64, commitDraft: Bool) async {
@@ -304,13 +349,12 @@ public final class PaddrMenuModel {
             update(summary)
             isRunning = false
             sessionID = nil
-            if isEnabled, terminationCompletion == nil {
+            if isEnabled, terminationState == .idle {
                 status = .waitingForController
                 scheduleReconnect(operation: lifecycleEpoch)
             } else {
                 status = .stopped
             }
-            finishTerminationIfNeeded()
         case let .deviceRemoved(summary):
             update(summary)
             controllerDescription = nil
@@ -318,7 +362,6 @@ public final class PaddrMenuModel {
             sessionID = nil
             status = .waitingForController
             if isEnabled { scheduleReconnect(operation: lifecycleEpoch) }
-            finishTerminationIfNeeded()
         case .deviceUnavailable:
             controllerDescription = nil
             isRunning = false
@@ -331,7 +374,6 @@ public final class PaddrMenuModel {
             let failure = MenuFailure.output(diagnostic: message)
             if isEnabled { isEnabled = false }
             status = .failure(failure)
-            finishTerminationIfNeeded()
         }
         statusDidChange?()
     }
@@ -341,14 +383,36 @@ public final class PaddrMenuModel {
         actionCount = summary.actionCount
     }
 
-    private func finishTerminationIfNeeded() {
-        let completion = terminationCompletion
-        terminationCompletion = nil
-        completion?()
-        if completion != nil { statusDidChange?() }
+    var hasPendingLifecycleWork: Bool {
+        isEnabled || sessionID != nil || isRunning || lifecycleTask != nil || reconnectTask != nil
+    }
+
+    private func clearLifecycleTask(operation: UInt64) {
+        guard lifecycleEpoch == operation, terminationState == .idle else { return }
+        lifecycleTask = nil
+        statusDidChange?()
+    }
+
+    private func completeTermination() {
+        guard terminationState == .stopping else { return }
+        terminationState = .finished
+        lifecycleTask = nil
+        reconnectTask = nil
+        permissionRefreshTask = nil
+        terminationTask = nil
+        let completions = terminationCompletions
+        terminationCompletions.removeAll()
+        for completion in completions { completion() }
+        statusDidChange?()
     }
 
     private func isCurrent(_ operation: UInt64) -> Bool {
-        !Task.isCancelled && lifecycleEpoch == operation
+        !Task.isCancelled && terminationState == .idle && lifecycleEpoch == operation
     }
+}
+
+private enum TerminationState {
+    case idle
+    case stopping
+    case finished
 }

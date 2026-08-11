@@ -26,7 +26,8 @@ private func help() -> String {
       disabled | mouse | scroll | dpad
 
     Main options:
-      --config PATH                 Load JSON configuration (default: ~/.config/Paddr/config.json if present).
+      --config PATH                 Load an existing JSON configuration file.
+                                    Without this option, use ~/.config/Paddr/config.json if present.
       --write-config PATH           Write the effective configuration and exit.
       --show-config                 Print the effective configuration and exit.
       --left-mode MODE              Set the left pad mode.

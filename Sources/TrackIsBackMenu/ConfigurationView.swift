@@ -4,6 +4,7 @@ import SwiftUI
 struct ConfigurationView: View {
     @Bindable var model: PaddrMenuModel
     @State private var configurationContentHeight: CGFloat = 0
+    @State private var commandBarHeight = PaddrStyle.commandBarMinimumHeight
 
     var body: some View {
         ZStack {
@@ -55,6 +56,14 @@ struct ConfigurationView: View {
                 .scrollIndicators(.automatic)
 
                 ApplyBarView(model: model)
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: CommandBarHeightKey.self,
+                                value: proxy.size.height
+                            )
+                        }
+                    }
             }
         }
         .frame(
@@ -65,14 +74,23 @@ struct ConfigurationView: View {
         .controlSize(.regular)
         .tint(PaddrStyle.accent)
         .background {
-            WindowContentFitter(
-                targetHeight: max(
-                    PaddrStyle.minimumWindowSize.height,
-                    configurationContentHeight + 50
+            if configurationContentHeight > 0 {
+                WindowContentFitter(
+                    targetHeight: max(
+                        PaddrStyle.minimumWindowSize.height,
+                        configurationContentHeight + commandBarHeight
+                    )
                 )
-            )
+            }
         }
-        .onPreferenceChange(ConfigurationContentHeightKey.self) { configurationContentHeight = $0 }
+        .onPreferenceChange(ConfigurationContentHeightKey.self) { measuredHeight in
+            guard measuredHeight > 0 else { return }
+            configurationContentHeight = measuredHeight
+        }
+        .onPreferenceChange(CommandBarHeightKey.self) { measuredHeight in
+            guard measuredHeight > 0 else { return }
+            commandBarHeight = measuredHeight
+        }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button("Refresh", systemImage: "arrow.clockwise", action: model.refreshStatus)
@@ -89,6 +107,14 @@ struct ConfigurationView: View {
                     )
             }
         }
+    }
+}
+
+private struct CommandBarHeightKey: PreferenceKey {
+    static let defaultValue = PaddrStyle.commandBarMinimumHeight
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 

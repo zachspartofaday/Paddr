@@ -20,7 +20,7 @@ struct PaddrSectionContainer<Accessory: View, Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: PaddrStyle.insetHeaderContentSpacing) {
             HStack(spacing: PaddrStyle.settingsControlSpacing) {
                 Text(title)
                     .paddrTypography(.callout)
@@ -30,10 +30,6 @@ struct PaddrSectionContainer<Accessory: View, Content: View>: View {
             }
             .frame(minHeight: PaddrStyle.insetHeaderHeight)
 
-            PaddrInsetDivider()
-                .padding(.top, PaddrStyle.dividerTopSpacing)
-                .padding(.bottom, PaddrStyle.dividerBottomSpacing)
-
             content()
         }
         .padding(.horizontal, PaddrStyle.insetHorizontalPadding)
@@ -42,16 +38,16 @@ struct PaddrSectionContainer<Accessory: View, Content: View>: View {
         .background(
             reduceTransparency
                 ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor))
-                : AnyShapeStyle(.thinMaterial),
+                : AnyShapeStyle(Color.primary.opacity(0.032)),
             in: .rect(cornerRadius: PaddrStyle.insetCornerRadius)
         )
         .overlay {
             RoundedRectangle(cornerRadius: PaddrStyle.insetCornerRadius)
                 .strokeBorder(
                     Color(nsColor: .separatorColor).opacity(
-                        colorSchemeContrast == .increased ? 0.95 : 0.58
+                        colorSchemeContrast == .increased ? 0.95 : 0.30
                     ),
-                    lineWidth: 1
+                    lineWidth: colorSchemeContrast == .increased ? 1.5 : 1
                 )
         }
     }
@@ -71,14 +67,17 @@ struct PaddrInsetDivider: View {
         Rectangle()
             .fill(
                 Color(nsColor: .separatorColor).opacity(
-                    colorSchemeContrast == .increased ? 0.9 : 0.52
+                    colorSchemeContrast == .increased ? 0.9 : 0.34
                 )
             )
             .frame(
                 maxWidth: axis == .horizontal ? .infinity : 1,
                 maxHeight: axis == .vertical ? .infinity : 1
             )
-            .padding(axis == .horizontal ? .horizontal : .vertical, PaddrStyle.dividerInset)
+            .padding(
+                axis == .horizontal ? .horizontal : .vertical,
+                axis == .horizontal ? PaddrStyle.dividerInset : PaddrStyle.zoneDividerInset
+            )
     }
 }
 

@@ -18,17 +18,17 @@ struct ButtonZoneConfigurationView: View {
             HStack(alignment: .top, spacing: 0) {
                 mapSection.frame(width: PaddrStyle.zoneMapWidth)
                 PaddrInsetDivider(axis: .vertical)
-                    .padding(.horizontal, 6)
+                    .padding(.horizontal, 8)
                 inspector.frame(width: PaddrStyle.zoneInspectorWidth)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: PaddrStyle.zoneSubdivisionSpacing) {
                 mapSection
-                PaddrInsetDivider()
-                    .padding(.vertical, PaddrStyle.dividerBottomSpacing)
                 inspector
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onChange(of: configuration.zoneLayout) { _, layout in
             selectedZone = ZoneSelectionPolicy.normalized(selectedZone, for: layout)
         }
@@ -58,7 +58,7 @@ struct ButtonZoneConfigurationView: View {
     }
 
     private var inspector: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: PaddrStyle.insetHeaderContentSpacing) {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: PaddrStyle.settingsControlSpacing) {
                     selectedAreaTitle
@@ -73,10 +73,6 @@ struct ButtonZoneConfigurationView: View {
             }
             .frame(minHeight: PaddrStyle.insetHeaderHeight)
             .frame(maxWidth: .infinity)
-
-            PaddrInsetDivider()
-                .padding(.top, PaddrStyle.dividerTopSpacing)
-                .padding(.bottom, PaddrStyle.dividerBottomSpacing)
 
             PaddrSettingsRow(title: "Action", systemImage: "keyboard") {
                 OutputBindingPicker(
