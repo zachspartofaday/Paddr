@@ -26,6 +26,69 @@ final class ConfigurationBoundaryTests: XCTestCase {
         )
     }
 
+    func testTracksBackConfigurationIsUsedWhenItIsTheOnlyCandidate() throws {
+        let (home, candidate) = try isolatedConfiguration(at: ".config/TracksBack/config.json")
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        XCTAssertEqual(
+            ConfigurationStore.defaultCandidateURL(fileManager: .default, homeDirectory: home),
+            candidate
+        )
+    }
+
+    func testTrackIsBackConfigurationIsUsedWhenItIsTheOnlyCandidate() throws {
+        let (home, candidate) = try isolatedConfiguration(at: ".config/TrackIsBack/config.json")
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        XCTAssertEqual(
+            ConfigurationStore.defaultCandidateURL(fileManager: .default, homeDirectory: home),
+            candidate
+        )
+    }
+
+    func testConfigurationCandidateUsesFullCurrentToOldestPrecedence() throws {
+        let fileManager = FileManager.default
+        let home = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let relativePaths = [
+            ".config/Paddr/config.json",
+            ".config/PuckPads/config.json",
+            ".config/TracksBack/config.json",
+            ".config/TrackIsBack/config.json"
+        ]
+        defer { try? fileManager.removeItem(at: home) }
+        for relativePath in relativePaths {
+            let candidate = home.appendingPathComponent(relativePath)
+            try fileManager.createDirectory(
+                at: candidate.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data().write(to: candidate)
+        }
+
+        XCTAssertEqual(
+            ConfigurationStore.defaultCandidateURL(fileManager: fileManager, homeDirectory: home),
+            home.appendingPathComponent(relativePaths[0])
+        )
+    }
+
+    func testOldSchemaDocumentSuppliesEveryAddedPadDefault() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let oldSchema = """
+        {
+          "left": { "mode": "scroll" },
+          "right": { "mode": "mouse", "sensitivity": 2.75 }
+        }
+        """
+        try Data(oldSchema.utf8).write(to: file)
+
+        let loaded = try ConfigurationStore.load(from: file)
+        assertOldSchemaDefaults(in: loaded.left, mode: .scroll, sensitivity: 1)
+        assertOldSchemaDefaults(in: loaded.right, mode: .mouse, sensitivity: 2.75)
+    }
+
     func testMissingImplicitConfigurationUsesDefaults() throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: home) }
@@ -154,6 +217,51 @@ final class ConfigurationBoundaryTests: XCTestCase {
         )
     }
     #endif
+
+    private func assertOldSchemaDefaults(
+        in pad: PadConfiguration,
+        mode: PadMode,
+        sensitivity: Double,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(pad.mode, mode, file: file, line: line)
+        XCTAssertEqual(pad.sensitivity, sensitivity, file: file, line: line)
+        XCTAssertEqual(pad.mouseDeadzone, 0, file: file, line: line)
+        XCTAssertNil(pad.tapKey, file: file, line: line)
+        XCTAssertEqual(pad.tapMaximumMilliseconds, 250, file: file, line: line)
+        XCTAssertEqual(pad.tapMaximumMovement, 2_200, file: file, line: line)
+        XCTAssertEqual(pad.dpadDeadzone, 0.22, file: file, line: line)
+        XCTAssertEqual(pad.zoneLayout, .radialFour, file: file, line: line)
+        XCTAssertEqual(
+            pad.dpadKeys,
+            DirectionKeyConfiguration(up: "up", right: "right", down: "down", left: "left"),
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            pad.gridKeys,
+            GridKeyConfiguration(
+                topLeft: "q", top: "w", topRight: "e",
+                left: "a", center: "space", right: "d",
+                bottomLeft: "z", bottom: "x", bottomRight: "c"
+            ),
+            file: file,
+            line: line
+        )
+    }
+
+    private func isolatedConfiguration(at relativePath: String) throws -> (home: URL, candidate: URL) {
+        let fileManager = FileManager.default
+        let home = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let candidate = home.appendingPathComponent(relativePath)
+        try fileManager.createDirectory(
+            at: candidate.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data().write(to: candidate)
+        return (home, candidate)
+    }
 
     private func assertInvalid(_ keyPath: WritableKeyPath<PadConfiguration, Double>, _ value: Double) {
         var pad = PadConfiguration(mode: .mouse)

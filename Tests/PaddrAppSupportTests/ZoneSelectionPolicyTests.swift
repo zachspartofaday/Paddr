@@ -102,15 +102,83 @@ final class ZoneSelectionPolicyTests: XCTestCase {
         assertDirectionalNavigation(from: .bottomRight, in: .gridNine, left: .down, right: .bottomRight, up: .right, down: .bottomRight)
     }
 
-    func testEveryVisibleZoneWritesTheBindingReadForThatLayout() {
+    func testEveryVisibleZoneWritesTheBindingReadForThatLayout() throws {
         let bindings = ["q", "w", "e", "a", "s", "d", "z", "x", "c"]
         for layout in PadZoneLayout.allCases {
             var configuration = PadConfiguration(mode: .dpad, dpadDeadzone: 0, zoneLayout: layout)
             for (zone, binding) in zip(layout.zones, bindings) {
                 configuration[bindingFor: zone] = binding
+            }
+
+            let expectedBindings = Array(bindings.prefix(layout.zones.count))
+            for (zone, binding) in zip(layout.zones, expectedBindings) {
                 XCTAssertEqual(configuration[bindingFor: zone], binding)
             }
+            XCTAssertEqual(concreteBindings(in: configuration, for: layout), expectedBindings)
+
+            for (zone, binding) in zip(layout.zones, expectedBindings) {
+                var mapper = PadMapper(side: .left, configuration: configuration)
+                let actions = try mapper.process(touchedSample(in: zone))
+                XCTAssertEqual(
+                    actions,
+                    [.key(try KeyCatalog.resolve(binding), isPressed: true)],
+                    "Mapper mismatch for \(zone.rawValue) in \(layout.rawValue)"
+                )
+            }
         }
+    }
+
+    private func concreteBindings(
+        in configuration: PadConfiguration,
+        for layout: PadZoneLayout
+    ) -> [String] {
+        switch layout {
+        case .radialFour, .fourCorners:
+            [
+                configuration.dpadKeys.up,
+                configuration.dpadKeys.right,
+                configuration.dpadKeys.down,
+                configuration.dpadKeys.left
+            ]
+        case .horizontalTwo:
+            [configuration.dpadKeys.left, configuration.dpadKeys.right]
+        case .verticalTwo:
+            [configuration.dpadKeys.up, configuration.dpadKeys.down]
+        case .gridNine:
+            [
+                configuration.gridKeys.topLeft,
+                configuration.gridKeys.top,
+                configuration.gridKeys.topRight,
+                configuration.gridKeys.left,
+                configuration.gridKeys.center,
+                configuration.gridKeys.right,
+                configuration.gridKeys.bottomLeft,
+                configuration.gridKeys.bottom,
+                configuration.gridKeys.bottomRight
+            ]
+        }
+    }
+
+    private func touchedSample(in zone: ButtonZone) -> TrackpadSample {
+        let coordinates: (x: Int16, y: Int16) = switch zone {
+        case .topLeft: (-20_000, 20_000)
+        case .up: (0, 20_000)
+        case .topRight: (20_000, 20_000)
+        case .left: (-20_000, 0)
+        case .center: (0, 0)
+        case .right: (20_000, 0)
+        case .bottomLeft: (-20_000, -20_000)
+        case .down: (0, -20_000)
+        case .bottomRight: (20_000, -20_000)
+        }
+        return TrackpadSample(
+            isTouched: true,
+            isClicked: false,
+            x: coordinates.x,
+            y: coordinates.y,
+            pressure: 0,
+            timestampNanoseconds: 1
+        )
     }
 
     private func assertDirectionalNavigation(

@@ -262,7 +262,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { didComplete }
 
         let stopCount = await session.stopCount
-        XCTAssertGreaterThanOrEqual(stopCount, 2)
+        XCTAssertEqual(stopCount, 2)
         XCTAssertEqual(model.status, .releasingOutputs)
     }
 
