@@ -5,18 +5,31 @@ struct SystemAccessView: View {
     @Bindable var model: PaddrMenuModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("System access needed", systemImage: "lock.shield")
-                .paddrTypography(.headline)
-
-            ViewThatFits(in: .horizontal) {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                permissionsHeader
+                Spacer(minLength: 8)
                 HStack(spacing: 8) { permissionControls }
-                VStack(spacing: 8) { permissionControls }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                permissionsHeader
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) { permissionControls }
+                    VStack(spacing: 8) { permissionControls }
+                }
             }
         }
         .padding(PaddrStyle.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .paddrCard()
+    }
+
+    private var permissionsHeader: some View {
+        Text("Permissions")
+            .paddrTypography(.headline)
+            .frame(minHeight: PaddrStyle.cardHeaderHeight)
+            .fixedSize()
     }
 
     @ViewBuilder private var permissionControls: some View {

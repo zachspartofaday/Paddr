@@ -290,10 +290,28 @@ final class MenuModelTests: XCTestCase {
         let model = PaddrMenuModel(dependencies: environment)
 
         XCTAssertEqual(model.configuration, .default)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertTrue(model.needsInitialSave)
         guard case let .failure(.configurationLoad(diagnostic)) = model.status else {
             return XCTFail("Expected a typed load failure")
         }
         XCTAssertEqual(diagnostic, "Saved sensitivity is outside the supported range.")
+    }
+
+    func testConfigurationLoadFailureCanSaveRecoveryDefaults() {
+        let state = readyState(controller: nil)
+        var environment = dependencies(state: state)
+        environment.loadConfiguration = {
+            throw TrackIsBackError.configuration("Saved sensitivity is outside the supported range.")
+        }
+        let model = PaddrMenuModel(dependencies: environment)
+
+        model.saveAndApply()
+
+        XCTAssertEqual(state.savedConfiguration, .default)
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertFalse(model.needsInitialSave)
+        XCTAssertEqual(model.status, .configurationSaved)
     }
 
     private func readyState(controller: String?) -> ModelDependencyState {

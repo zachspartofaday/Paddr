@@ -67,4 +67,22 @@ if "$script_dir/verify-release.sh" \
     exit 1
 fi
 
+nonexecutable_dir="$recipient_dir/nonexecutable"
+nonexecutable_stage="$recipient_dir/nonexecutable-stage"
+mkdir -p "$nonexecutable_dir" "$nonexecutable_stage"
+cp -R "$app_path" "$nonexecutable_stage/Paddr.app"
+chmod a-x "$nonexecutable_stage/Paddr.app/Contents/MacOS/Paddr"
+ditto -c -k --keepParent --norsrc \
+    "$nonexecutable_stage/Paddr.app" "$nonexecutable_dir/Paddr.zip"
+(
+    cd "$nonexecutable_dir"
+    shasum -a 256 Paddr.zip > Paddr.zip.sha256
+)
+if "$script_dir/verify-release.sh" \
+    "$app_path" "$nonexecutable_dir/Paddr.zip" "$nonexecutable_dir/Paddr.zip.sha256" \
+    "$expected_version" "$expected_build" >/dev/null 2>&1; then
+    echo "Release verification accepted a non-executable app binary." >&2
+    exit 1
+fi
+
 echo "Release artifacts verify from a clean recipient directory."

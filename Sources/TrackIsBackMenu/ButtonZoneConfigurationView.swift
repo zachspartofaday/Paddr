@@ -14,33 +14,23 @@ struct ButtonZoneConfigurationView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Divider()
-
-            AdaptiveControlRow(title: "Area layout", systemImage: "square.grid.3x3") {
-                Picker("Area layout", selection: $configuration.zoneLayout) {
-                    ForEach(PadZoneLayout.allCases, id: \.self) { layout in
-                        Text(layout.displayName).tag(layout)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .frame(minWidth: 200)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 0) {
+                mapSection.frame(width: PaddrStyle.zoneMapWidth)
+                PaddrInsetDivider(axis: .vertical)
+                    .padding(.horizontal, 6)
+                inspector.frame(width: PaddrStyle.zoneInspectorWidth)
             }
 
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 12) {
-                    padMap.frame(width: 190, height: 170)
-                    inspector.frame(width: 300)
-                }
-                VStack(alignment: .leading, spacing: 12) {
-                    padMap.frame(width: 210, height: 180)
-                    inspector
-                }
+            VStack(alignment: .leading, spacing: 0) {
+                mapSection
+                PaddrInsetDivider()
+                    .padding(.vertical, PaddrStyle.dividerBottomSpacing)
+                inspector
             }
-            .onChange(of: configuration.zoneLayout) { _, layout in
-                selectedZone = ZoneSelectionPolicy.normalized(selectedZone, for: layout)
-            }
+        }
+        .onChange(of: configuration.zoneLayout) { _, layout in
+            selectedZone = ZoneSelectionPolicy.normalized(selectedZone, for: layout)
         }
     }
 
@@ -53,36 +43,61 @@ struct ButtonZoneConfigurationView: View {
         )
     }
 
-    private var inspector: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            AdaptiveControlRow(title: "Selected area", systemImage: selectedZone.systemImage) {
-                Picker("Selected area", selection: $selectedZone) {
-                    ForEach(configuration.zoneLayout.zones, id: \.self) { zone in
-                        Label(zone.title, systemImage: zone.systemImage).tag(zone)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .frame(width: 130)
-                .accessibilityIdentifier("selected-area-picker")
-                .help("Choose the trackpad area to configure.")
-            }
+    private var mapSection: some View {
+        VStack(alignment: .leading, spacing: PaddrStyle.settingsRowSpacing) {
+            Text("Area map")
+                .paddrTypography(.callout)
+                .bold()
+                .frame(minHeight: PaddrStyle.insetHeaderHeight)
+            padMap.frame(
+                maxWidth: .infinity,
+                minHeight: PaddrStyle.zoneMapHeight,
+                maxHeight: PaddrStyle.zoneMapHeight
+            )
+        }
+    }
 
-            AdaptiveControlRow(title: "Action", systemImage: "keyboard") {
-                OutputBindingPicker(selection: $configuration[bindingFor: selectedZone], width: 130)
+    private var inspector: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: PaddrStyle.settingsControlSpacing) {
+                    selectedAreaTitle
+                    Spacer(minLength: PaddrStyle.settingsControlSpacing)
+                    selectedAreaPicker
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    selectedAreaTitle
+                    selectedAreaPicker.frame(maxWidth: .infinity, alignment: .trailing)
+                }
+            }
+            .frame(minHeight: PaddrStyle.insetHeaderHeight)
+            .frame(maxWidth: .infinity)
+
+            PaddrInsetDivider()
+                .padding(.top, PaddrStyle.dividerTopSpacing)
+                .padding(.bottom, PaddrStyle.dividerBottomSpacing)
+
+            PaddrSettingsRow(title: "Action", systemImage: "keyboard") {
+                OutputBindingPicker(
+                    selection: $configuration[bindingFor: selectedZone],
+                    width: PaddrStyle.compactPickerWidth
+                )
             }
 
             if configuration.zoneLayout != .gridNine {
-                VStack(alignment: .leading, spacing: 5) {
-                    Label("Center deadzone", systemImage: "circle.dotted")
-                        .paddrTypography(.callout)
-                        .fontWeight(.medium)
+                PaddrSettingsRow(title: "Neutral zone", systemImage: "circle.dotted") {
                     HStack(spacing: 8) {
                         Slider(
                             value: $configuration.dpadDeadzone,
                             in: 0...Double(1).nextDown,
                             step: 0.01
                         )
+                        .accessibilityLabel("Neutral zone size")
+                        .accessibilityValue(
+                            configuration.dpadDeadzone.formatted(.percent.precision(.fractionLength(0)))
+                        )
+                        .help("Touches inside the neutral zone do not emit an action.")
                         Text(configuration.dpadDeadzone.formatted(.percent.precision(.fractionLength(0))))
                             .paddrTypography(.caption)
                             .foregroundStyle(.secondary)
@@ -90,13 +105,30 @@ struct ButtonZoneConfigurationView: View {
                             .frame(width: 38, alignment: .trailing)
                     }
                 }
-                .help("Touches inside the center deadzone do not emit a zone action.")
+                .padding(.top, PaddrStyle.settingsRowSpacing)
             }
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
-        .background(.secondary.opacity(0.07), in: .rect(cornerRadius: 12))
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .accessibilityElement(children: .contain)
+    }
+
+    private var selectedAreaTitle: some View {
+        Text("Selected area")
+            .paddrTypography(.callout)
+            .bold()
+    }
+
+    private var selectedAreaPicker: some View {
+        Picker("Selected area", selection: $selectedZone) {
+            ForEach(configuration.zoneLayout.zones, id: \.self) { zone in
+                Label(zone.title, systemImage: zone.systemImage).tag(zone)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(width: PaddrStyle.compactPickerWidth, alignment: .trailing)
+        .accessibilityIdentifier("selected-area-picker")
+        .help("Choose the trackpad area to configure.")
     }
 }
 

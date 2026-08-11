@@ -21,6 +21,7 @@ public final class PaddrMenuModel {
     public private(set) var status: MenuStatus = .off
     public private(set) var reportCount = 0
     public private(set) var actionCount = 0
+    public private(set) var needsInitialSave = false
 
     @ObservationIgnored private let dependencies: MenuDependencies
     @ObservationIgnored private var sessionID: UUID?
@@ -31,7 +32,7 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var terminationCompletion: (@MainActor () -> Void)?
     @ObservationIgnored public var statusDidChange: (@MainActor () -> Void)?
 
-    public var hasUnsavedChanges: Bool { configuration != savedConfiguration }
+    public var hasUnsavedChanges: Bool { needsInitialSave || configuration != savedConfiguration }
     public var controllerConnected: Bool { controllerDescription != nil }
     public var hasSystemAccess: Bool { inputMonitoringStatus == .granted && accessibilityTrusted }
 
@@ -48,7 +49,10 @@ public final class PaddrMenuModel {
         }
         configuration = loaded
         savedConfiguration = loaded
-        if let loadFailure { status = .failure(.configurationLoad(diagnostic: loadFailure)) }
+        if let loadFailure {
+            needsInitialSave = true
+            status = .failure(.configurationLoad(diagnostic: loadFailure))
+        }
         refreshStatus()
     }
 
@@ -74,6 +78,7 @@ public final class PaddrMenuModel {
             try dependencies.saveConfiguration(validated)
             configuration = validated
             savedConfiguration = validated
+            needsInitialSave = false
             status = .configurationSaved
             if isEnabled { startLifecycle(commitDraft: false) }
         } catch {
@@ -207,7 +212,7 @@ public final class PaddrMenuModel {
             return false
         }
 
-        guard validated != savedConfiguration else {
+        guard needsInitialSave || validated != savedConfiguration else {
             configuration = validated
             return true
         }
@@ -217,6 +222,7 @@ public final class PaddrMenuModel {
             guard isCurrent(operation), isEnabled else { return false }
             configuration = validated
             savedConfiguration = validated
+            needsInitialSave = false
             return true
         } catch {
             failEnable(

@@ -1,40 +1,28 @@
-import AppKit
 import PaddrAppSupport
 import SwiftUI
 
 struct AppHeaderView: View {
     @Bindable var model: PaddrMenuModel
 
-    private var outputTitle: LocalizedStringResource {
-        if model.isRunning { return "Output active" }
-        if model.isEnabled { return "Output waiting" }
-        return "Output idle"
+    private var outputValue: LocalizedStringResource {
+        if model.isRunning { return "Active" }
+        if model.isEnabled { return "Waiting" }
+        return "Idle"
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Text("Trackpad Configuration")
-                    .paddrTypography(.title)
+        VStack(alignment: .leading, spacing: 8) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    statusTitle
+                    statusStrip
+                }
 
-                Spacer()
-
-                Button("Refresh", systemImage: "arrow.clockwise", action: model.refreshStatus)
-                    .labelStyle(.iconOnly)
-                    .paddrActionButton()
-                    .help("Refresh controller and permission status")
-
-                Toggle("Trackpad output", isOn: $model.isEnabled)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .accessibilityValue(
-                        model.isEnabled
-                            ? LocalizedStringResource("On")
-                            : LocalizedStringResource("Off")
-                    )
+                VStack(alignment: .leading, spacing: 8) {
+                    statusTitle
+                    statusStrip
+                }
             }
-
-            statusStrip
 
             if model.status.needsActionMessage {
                 Label {
@@ -56,43 +44,56 @@ struct AppHeaderView: View {
 
     private var statusStrip: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) { statusPills }
+            HStack(spacing: 8) {
+                statusCells
+            }
             Grid(horizontalSpacing: 8, verticalSpacing: 8) {
                 GridRow {
-                    controllerPill
-                    outputPill
+                    controllerCell
+                    outputCell
                 }
-                GridRow { accessPill }
+                GridRow { accessCell }
             }
+            VStack(spacing: 8) { statusCells }
         }
+        .frame(maxWidth: .infinity)
         .accessibilityElement(children: .contain)
     }
 
-    @ViewBuilder private var statusPills: some View {
-        controllerPill
-        outputPill
-        accessPill
+    private var statusTitle: some View {
+        Text("Status")
+            .paddrTypography(.headline)
+            .frame(minWidth: 72, alignment: .leading)
     }
 
-    private var controllerPill: some View {
-        StatusBadge(
-            title: model.controllerConnected ? "Controller connected" : "Controller not found",
+    @ViewBuilder private var statusCells: some View {
+        controllerCell
+        outputCell
+        accessCell
+    }
+
+    private var controllerCell: some View {
+        StatusCell(
+            title: "Controller",
+            value: model.controllerConnected ? "Connected" : "Not found",
             systemImage: model.controllerConnected ? "gamecontroller.fill" : "gamecontroller",
             state: model.controllerConnected ? .ready : .problem
         )
     }
 
-    private var outputPill: some View {
-        StatusBadge(
-            title: outputTitle,
+    private var outputCell: some View {
+        StatusCell(
+            title: "Output",
+            value: outputValue,
             systemImage: model.isRunning ? "wave.3.right.circle.fill" : (model.isEnabled ? "hourglass.circle" : "pause.circle"),
             state: model.isRunning ? .ready : .neutral
         )
     }
 
-    private var accessPill: some View {
-        StatusBadge(
-            title: model.hasSystemAccess ? "Access ready" : "Access needed",
+    private var accessCell: some View {
+        StatusCell(
+            title: "Access",
+            value: model.hasSystemAccess ? "Ready" : "Needed",
             systemImage: model.hasSystemAccess ? "checkmark.shield.fill" : "exclamationmark.shield",
             state: model.hasSystemAccess ? .ready : .problem
         )
@@ -100,7 +101,7 @@ struct AppHeaderView: View {
 
     private var statusMessageSymbol: String {
         if case .failure = model.status { return "exclamationmark.triangle.fill" }
-        return model.status == .configurationSaved ? "checkmark.circle.fill" : "info.circle.fill"
+        return "info.circle.fill"
     }
 
     private var statusMessageColor: Color {

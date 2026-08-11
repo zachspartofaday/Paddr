@@ -19,13 +19,32 @@ enum PaddrTextRole {
 
 enum PaddrStyle {
     static let accent = Color(red: 26.0 / 255.0, green: 159.0 / 255.0, blue: 1)
-    static let defaultWindowSize = NSSize(width: 1_120, height: 680)
-    static let minimumWindowSize = NSSize(width: 640, height: 620)
+    static let defaultWindowSize = NSSize(width: 1_120, height: 600)
+    static let minimumWindowSize = NSSize(width: 640, height: 360)
     static let padColumnWidth: CGFloat = 530
+    static let zoneMapWidth: CGFloat = 196
+    static let zoneMapHeight: CGFloat = 182
+    static let zoneInspectorWidth: CGFloat = 265
     static let panelPadding: CGFloat = 16
-    static let sectionSpacing: CGFloat = 10
+    static let sectionSpacing: CGFloat = 12
     static let cardPadding: CGFloat = 14
     static let cardCornerRadius: CGFloat = 16
+    static let cardHeaderHeight: CGFloat = 28
+    static let behaviorRowHeight: CGFloat = 28
+    static let insetCornerRadius: CGFloat = 12
+    static let insetHorizontalPadding: CGFloat = 14
+    static let insetVerticalPadding: CGFloat = 14
+    static let insetHeaderHeight: CGFloat = 28
+    static let settingsLabelWidth: CGFloat = 108
+    static let sliderLabelWidth: CGFloat = 152
+    static let sliderMinimumWidth: CGFloat = 160
+    static let settingsControlSpacing: CGFloat = 12
+    static let settingsRowSpacing: CGFloat = 12
+    static let settingsRowVerticalPadding: CGFloat = 2
+    static let compactPickerWidth: CGFloat = 130
+    static let dividerInset: CGFloat = 8
+    static let dividerTopSpacing: CGFloat = 8
+    static let dividerBottomSpacing: CGFloat = 12
 }
 
 private struct PaddrTypographyModifier: ViewModifier {
@@ -35,6 +54,7 @@ private struct PaddrTypographyModifier: ViewModifier {
 
 private struct PaddrCardModifier: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     func body(content: Content) -> some View {
         content
@@ -44,7 +64,12 @@ private struct PaddrCardModifier: ViewModifier {
             )
             .overlay {
                 RoundedRectangle(cornerRadius: PaddrStyle.cardCornerRadius)
-                    .strokeBorder(Color(nsColor: .separatorColor).opacity(0.55), lineWidth: 1)
+                    .strokeBorder(
+                        Color(nsColor: .separatorColor).opacity(
+                            colorSchemeContrast == .increased ? 1 : 0.72
+                        ),
+                        lineWidth: 1
+                    )
             }
     }
 }
@@ -55,9 +80,13 @@ private struct PaddrActionButtonModifier: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if prominent {
-            content.buttonStyle(.glassProminent).controlSize(.regular).font(.callout.weight(.semibold))
+            content
+                .buttonStyle(.glassProminent)
+                .controlSize(.regular)
+                .font(.callout)
+                .tint(PaddrStyle.accent)
         } else {
-            content.buttonStyle(.glass).controlSize(.regular).font(.callout.weight(.medium))
+            content.buttonStyle(.glass).controlSize(.regular).font(.callout)
         }
     }
 }

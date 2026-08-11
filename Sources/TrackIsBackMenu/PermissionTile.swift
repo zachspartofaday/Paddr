@@ -13,12 +13,9 @@ struct PermissionTile: View {
                 .foregroundStyle(isGranted ? PaddrStyle.accent : .orange)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).paddrTypography(.callout).fontWeight(.semibold)
-                Text(isGranted ? "Ready" : "Required")
-                    .paddrTypography(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            Text(title)
+                .paddrTypography(.callout)
+                .bold()
 
             Spacer(minLength: 4)
 
@@ -30,9 +27,13 @@ struct PermissionTile: View {
                     .paddrActionButton()
             }
         }
-        .padding(9)
-        .frame(maxWidth: .infinity, minHeight: 48)
-        .background(.secondary.opacity(0.07), in: .rect(cornerRadius: 11))
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, minHeight: 38)
+        .background(.secondary.opacity(0.045), in: .rect(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color(nsColor: .separatorColor).opacity(0.38), lineWidth: 1)
+        }
         .help(Text(detail))
         .accessibilityElement(children: .contain)
     }

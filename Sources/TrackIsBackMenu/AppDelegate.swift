@@ -126,13 +126,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             defer: false
         )
         window.title = String(localized: "Paddr")
+        window.titleVisibility = .visible
+        window.toolbarStyle = .unifiedCompact
         window.contentMinSize = PaddrStyle.minimumWindowSize
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
         window.contentViewController = NSHostingController(
             rootView: ConfigurationView(model: model)
         )
-        let autosaveName = "PaddrConfigurationWindow.v3"
+        let autosaveName = "PaddrConfigurationWindow.v4"
         if !window.setFrameUsingName(autosaveName) {
             window.setContentSize(PaddrStyle.defaultWindowSize)
             window.center()

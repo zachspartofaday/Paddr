@@ -10,7 +10,7 @@ struct ApplyBarView: View {
                 model.hasUnsavedChanges ? "Unsaved changes" : "Saved",
                 systemImage: model.hasUnsavedChanges ? "circle.fill" : "checkmark.circle.fill"
             )
-            .paddrTypography(.caption)
+            .paddrTypography(.callout)
             .foregroundStyle(model.hasUnsavedChanges ? .orange : PaddrStyle.accent)
 
             Spacer()
@@ -28,7 +28,7 @@ struct ApplyBarView: View {
             }
         }
         .padding(.horizontal, PaddrStyle.panelPadding)
-        .frame(minHeight: 58)
+        .frame(minHeight: 50)
         .background(.thickMaterial)
         .overlay(alignment: .top) { Divider() }
     }

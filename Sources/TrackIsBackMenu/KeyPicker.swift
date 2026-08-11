@@ -26,7 +26,7 @@ struct OutputBindingPicker: View {
         .labelsHidden()
         .pickerStyle(.menu)
         .controlSize(.regular)
-        .frame(width: width)
+        .frame(width: width, alignment: .trailing)
         .accessibilityLabel("Zone action")
         .help("Assign a keyboard key, left click, or right click to this touch area.")
     }
