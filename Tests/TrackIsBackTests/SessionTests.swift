@@ -110,6 +110,45 @@ final class SessionTests: XCTestCase {
         await stop.value
     }
 
+    func testSupersededStreamSuffixIsEmptyAcrossLateDeliveryBranches() async {
+        let runtime = GatedRuntime()
+        let session = TrackpadSession(runtime: runtime.run)
+        let oldStream = await session.start(configuration: configuration(sensitivity: 1))
+        await runtime.waitForStartCount(1)
+        var oldIterator = oldStream.makeAsyncIterator()
+        let initialEvents = [await oldIterator.next(), await oldIterator.next()]
+        XCTAssertEqual(initialEvents, [.connecting, .connected("worker:1")])
+
+        let replacementConfiguration = configuration(sensitivity: 2)
+        let replacement = Task {
+            await session.start(configuration: replacementConfiguration)
+        }
+        await waitForEpoch(2, session: session)
+        runtime.release(worker: 1)
+        _ = await replacement.value
+        await runtime.waitForStartCount(2)
+
+        var supersededEvents: [TrackpadSessionEvent] = []
+        while let event = await oldIterator.next() { supersededEvents.append(event) }
+        XCTAssertEqual(supersededEvents, [])
+
+        let stop = Task { await session.stop() }
+        await waitForEpoch(3, session: session)
+        runtime.release(worker: 2)
+        await stop.value
+    }
+
+    func testEventGateRejectsEnqueueFromSupersededGeneration() {
+        let gate = SessionEventGate()
+        var delivered: [String] = []
+        gate.activate(1)
+
+        XCTAssertTrue(gate.enqueue(ifCurrent: 1) { delivered.append("current") })
+        gate.activate(2)
+        XCTAssertFalse(gate.enqueue(ifCurrent: 1) { delivered.append("stale") })
+        XCTAssertEqual(delivered, ["current"])
+    }
+
     private func configuration(sensitivity: Double) -> TrackIsBackConfiguration {
         var configuration = TrackIsBackConfiguration.default
         configuration.left.sensitivity = sensitivity
@@ -177,6 +216,7 @@ private final class GatedRuntime: Sendable {
         startContinuation.yield(id)
         gate.wait()
         connected("late:\(id)")
+        progress(.init(reportCount: id, actionCount: id))
         state.withLock {
             $0.active -= 1
             $0.lifecycleEvents.append("finish:\(id)")
