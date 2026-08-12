@@ -5,7 +5,7 @@
 > [!WARNING]
 > Paddr is an early, hardware-specific beta built quickly after macOS 27 Beta 5 shipped. Expect bugs and compatibility changes. Please report reproducible problems in [Issues](https://github.com/zachspartofaday/Paddr/issues).
 
-![Paddr configuration window showing controller, access, and trackpad controls](docs/images/paddr-overview.png)
+![Paddr configuration window with the left trackpad set to Scroll, the right trackpad set to Pointer, and status pills showing Controller Connected, Output Idle, and Access Ready](docs/images/paddr-overview.png)
 
 ## What Paddr adds
 
@@ -16,7 +16,7 @@ Apple's HID service continues to provide native buttons, sticks, triggers, and c
 - touch-taps mapped to a keyboard key, left click, or right click; and
 - a pointer-mode center tap radius that reserves the pad center for tapping.
 
-![Paddr four-corner button-zone map and assignment inspector](docs/images/paddr-zones.png)
+![Paddr configuration window with the left trackpad set to Zones in Four corners mode, the Zone settings Mode row visible, the right trackpad set to Scroll, and status pills showing Controller Connected, Output Idle, and Access Ready](docs/images/paddr-zones.png)
 
 The interactive squircle map mirrors runtime hit-testing. Select a region on the map or with the **Selected area** pop-up, then assign its action. Radial, corner, and two-way layouts support an adjustable neutral region; the 3×3 layout dedicates the full pad to nine actions.
 
@@ -35,6 +35,9 @@ Puck mode is the only confirmed connection. Bluetooth and direct USB remain unva
 1. Download `Paddr.zip` from [Releases](https://github.com/zachspartofaday/Paddr/releases).
 2. Move `Paddr.app` to Applications and launch it.
 3. Grant Accessibility when prompted.
+
+![Paddr permission-request window showing one Accessibility tile with a Request button and Access Needed status](docs/images/paddr-permissions.png)
+
 4. Configure each trackpad and choose **Save & Apply**, or turn output on to save and activate the draft.
 
 Closing the configuration window leaves Paddr in the menu bar with quick actions for output, configuration, and quitting. The window remains ordinarily resizable but does not support full screen.
