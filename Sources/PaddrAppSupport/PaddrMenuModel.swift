@@ -5,7 +5,12 @@ import TrackIsBackCore
 @MainActor
 @Observable
 public final class PaddrMenuModel {
-    public var configuration: TrackIsBackConfiguration
+    public var configuration: TrackIsBackConfiguration {
+        didSet {
+            guard !isPublishingConfiguration else { return }
+            draftRevision &+= 1
+        }
+    }
     public private(set) var savedConfiguration: TrackIsBackConfiguration
     public var isEnabled = false {
         didSet {
@@ -30,6 +35,9 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var initializationTask: Task<Void, Never>?
     @ObservationIgnored private var configurationTask: Task<Void, Never>?
     @ObservationIgnored private var configurationEpoch: UInt64 = 0
+    @ObservationIgnored private var draftRevision: UInt64 = 0
+    @ObservationIgnored private var isPublishingConfiguration = false
+    @ObservationIgnored private var activationCommitPending = false
     @ObservationIgnored private var statusRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var statusRefreshEpoch: UInt64 = 0
     @ObservationIgnored private var lifecycleTask: Task<Void, Never>?
@@ -48,9 +56,9 @@ public final class PaddrMenuModel {
         self.dependencies = dependencies
         configuration = .default
         savedConfiguration = .default
-        let initialDraft = configuration
+        let initialDraftRevision = draftRevision
         initializationTask = Task { [weak self] in
-            await self?.initialize(replacing: initialDraft)
+            await self?.initialize(replacingRevision: initialDraftRevision)
         }
     }
 
@@ -74,6 +82,7 @@ public final class PaddrMenuModel {
     public func saveAndApply() {
         guard terminationState == .idle else { return }
         let draft = configuration
+        let initiatingDraftRevision = draftRevision
         let validated: TrackIsBackConfiguration
         do {
             validated = try draft.validated()
@@ -90,17 +99,21 @@ public final class PaddrMenuModel {
             await priorTask?.value
             guard let self else { return }
             await initializationTask?.value
-            await saveAndApply(validated, replacing: draft, operation: operation)
+            await saveAndApply(
+                validated,
+                replacingRevision: initiatingDraftRevision,
+                operation: operation
+            )
         }
     }
 
-    private func initialize(replacing initialDraft: TrackIsBackConfiguration) async {
+    private func initialize(replacingRevision initialDraftRevision: UInt64) async {
         do {
             let loaded = try await dependencies.loadConfiguration()
-            if configuration == initialDraft { configuration = loaded }
+            if draftRevision == initialDraftRevision { publishConfiguration(loaded) }
             savedConfiguration = loaded
         } catch {
-            if configuration == initialDraft { configuration = .default }
+            if draftRevision == initialDraftRevision { publishConfiguration(.default) }
             savedConfiguration = .default
             needsInitialSave = true
             status = .failure(.configurationLoad(diagnostic: String(describing: error)))
@@ -125,13 +138,13 @@ public final class PaddrMenuModel {
 
     private func saveAndApply(
         _ validated: TrackIsBackConfiguration,
-        replacing draft: TrackIsBackConfiguration,
+        replacingRevision initiatingDraftRevision: UInt64,
         operation: UInt64
     ) async {
         do {
             try await dependencies.saveConfiguration(validated)
             guard terminationState == .idle else { return }
-            if configuration == draft { configuration = validated }
+            if draftRevision == initiatingDraftRevision { publishConfiguration(validated) }
             savedConfiguration = validated
             needsInitialSave = false
             status = .configurationSaved
@@ -210,6 +223,7 @@ public final class PaddrMenuModel {
         priorPermissionTask?.cancel()
 
         isEnabled = false
+        activationCommitPending = false
         statusRefreshTask = nil
         reconnectTask = nil
         permissionRefreshTask = nil
@@ -236,18 +250,21 @@ public final class PaddrMenuModel {
 
     private func startLifecycle(commitDraft: Bool) {
         guard terminationState == .idle else { return }
+        if commitDraft { activationCommitPending = true }
+        let shouldCommitDraft = activationCommitPending
         lifecycleEpoch &+= 1
         let operation = lifecycleEpoch
         lifecycleTask?.cancel()
         lifecycleTask = Task { [weak self] in
             guard let self else { return }
-            await self.start(operation: operation, commitDraft: commitDraft)
+            await self.start(operation: operation, commitDraft: shouldCommitDraft)
             self.clearLifecycleTask(operation: operation)
         }
     }
 
     private func stopLifecycle() {
         guard terminationState == .idle else { return }
+        activationCommitPending = false
         lifecycleEpoch &+= 1
         let operation = lifecycleEpoch
         reconnectTask?.cancel()
@@ -273,8 +290,10 @@ public final class PaddrMenuModel {
         await dependencies.session.stop()
         guard isCurrent(operation), isEnabled else { return }
 
-        if commitDraft, !(await commitConfigurationForActivation(operation: operation)) {
-            return
+        if commitDraft {
+            guard await commitConfigurationForActivation(operation: operation) else { return }
+            guard isCurrent(operation), isEnabled else { return }
+            activationCommitPending = false
         }
 
         await refreshStatusNow()
@@ -311,6 +330,7 @@ public final class PaddrMenuModel {
     private func commitConfigurationForActivation(operation: UInt64) async -> Bool {
         while isCurrent(operation), isEnabled {
             let draft = configuration
+            let revision = draftRevision
             let validated: TrackIsBackConfiguration
             do {
                 validated = try draft.validated()
@@ -323,7 +343,7 @@ public final class PaddrMenuModel {
             }
 
             guard needsInitialSave || validated != savedConfiguration else {
-                configuration = validated
+                publishConfiguration(validated)
                 return true
             }
 
@@ -332,8 +352,8 @@ public final class PaddrMenuModel {
                 guard isCurrent(operation), isEnabled else { return false }
                 savedConfiguration = validated
                 needsInitialSave = false
-                guard configuration == draft else { continue }
-                configuration = validated
+                guard draftRevision == revision else { continue }
+                publishConfiguration(validated)
                 return true
             } catch {
                 failEnable(
@@ -453,6 +473,12 @@ public final class PaddrMenuModel {
         actionCount = summary.actionCount
     }
 
+    private func publishConfiguration(_ configuration: TrackIsBackConfiguration) {
+        isPublishingConfiguration = true
+        defer { isPublishingConfiguration = false }
+        self.configuration = configuration
+    }
+
     var hasPendingLifecycleWork: Bool {
         isEnabled || sessionID != nil || isRunning || configurationTask != nil
             || lifecycleTask != nil || reconnectTask != nil
@@ -474,6 +500,7 @@ public final class PaddrMenuModel {
         terminationState = .finished
         initializationTask = nil
         configurationTask = nil
+        activationCommitPending = false
         statusRefreshTask = nil
         lifecycleTask = nil
         reconnectTask = nil

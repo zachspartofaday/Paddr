@@ -48,6 +48,26 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.hasUnsavedChanges)
     }
 
+    func testDefaultsDuringInitializationPreservesDeliberateDefaultDraft() async {
+        let state = readyState(controller: nil)
+        var stored = TrackIsBackConfiguration.default
+        stored.left.sensitivity = 4
+        state.loadedConfiguration = stored
+        let loadGate = DispatchSemaphore(value: 0)
+        state.loadGate = loadGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+
+        model.configuration.left.sensitivity = 7
+        model.restoreDefaults()
+        loadGate.signal()
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertEqual(model.configuration, .default)
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 4)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertEqual(model.status, .defaultsRestored)
+    }
+
     func testMissingPermissionTurnsOutputBackOffWithFailure() async {
         let state = ModelDependencyState()
         state.inputGranted = false
@@ -207,6 +227,32 @@ final class MenuModelTests: XCTestCase {
 
         model.isEnabled = true
         await waitUntil { state.saveCallCount == 1 }
+        model.configuration.left.sensitivity = 5
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) { await session.startCount == 1 }
+
+        let startedSensitivity = await session.startedConfigurations.first?.left.sensitivity
+        XCTAssertEqual(state.saveCallCount, 2)
+        XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 5)
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 5)
+        XCTAssertEqual(model.configuration.left.sensitivity, 5)
+        XCTAssertEqual(startedSensitivity, 5)
+        XCTAssertFalse(model.hasUnsavedChanges)
+    }
+
+    func testEnableDuringOverlappingSaveCarriesCommitIntentToReplacementLifecycle() async {
+        let state = readyState(controller: "Fake")
+        let session = ScriptedSession(events: [.connected("Fake puck")])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.left.sensitivity = 3
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+
+        model.saveAndApply()
+        await waitUntil { state.saveCallCount == 1 }
+        model.isEnabled = true
         model.configuration.left.sensitivity = 5
         state.saveGate = nil
         saveGate.signal()
