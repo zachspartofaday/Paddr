@@ -16,7 +16,7 @@ Apple's HID service continues to provide native buttons, sticks, triggers, and c
 - touch-taps mapped to a keyboard key, left click, or right click; and
 - a pointer-mode center tap radius that reserves the pad center for tapping.
 
-![Paddr 3 × 3 button-zone map and assignment inspector](docs/images/paddr-zones.png)
+![Paddr four-corner button-zone map and assignment inspector](docs/images/paddr-zones.png)
 
 The interactive squircle map mirrors runtime hit-testing. Select a region on the map or with the **Selected area** pop-up, then assign its action. Radial, corner, and two-way layouts support an adjustable neutral region; the 3×3 layout dedicates the full pad to nine actions.
 
