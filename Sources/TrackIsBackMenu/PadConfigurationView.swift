@@ -87,6 +87,17 @@ struct PadConfigurationView: View {
                 VStack(spacing: PaddrStyle.settingsRowSpacing) {
                     sensitivityRow
                     ValueSliderRow(
+                        title: "Pointer acceleration",
+                        systemImage: "arrow.up.right.and.arrow.down.left",
+                        value: $configuration.mouseAcceleration,
+                        range: ConfigurationLimits.mouseAcceleration,
+                        step: 0.01,
+                        valueText: configuration.mouseAcceleration.formatted(
+                            .percent.precision(.fractionLength(0))
+                        )
+                    )
+                    .help("Zero is linear. Higher values increase fast-motion gain.")
+                    ValueSliderRow(
                         title: "Center tap radius",
                         systemImage: "scope",
                         value: $configuration.mouseDeadzone,

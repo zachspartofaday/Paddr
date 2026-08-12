@@ -361,11 +361,15 @@ final class MenuModelTests: XCTestCase {
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
         await waitUntil(model: model) { model.isInitialized }
         model.configuration.left.sensitivity = 3.4
+        model.configuration.left.mouseAcceleration = 0.25
+        model.configuration.right.mouseAcceleration = 0.75
 
         model.saveAndApply()
         await waitUntil(model: model) { model.status == .configurationSaved }
 
         XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 3.4)
+        XCTAssertEqual(state.savedConfiguration?.left.mouseAcceleration, 0.25)
+        XCTAssertEqual(state.savedConfiguration?.right.mouseAcceleration, 0.75)
         XCTAssertFalse(model.hasUnsavedChanges)
         XCTAssertEqual(model.status, .configurationSaved)
     }
@@ -755,6 +759,8 @@ final class MenuModelTests: XCTestCase {
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
         await waitUntil(model: model) { model.isInitialized }
         model.configuration.right.sensitivity = 8
+        model.configuration.left.mouseAcceleration = 0.2
+        model.configuration.right.mouseAcceleration = 0.8
 
         model.isEnabled = true
         await waitUntil(model: model) { model.status == .waitingForController }
@@ -763,6 +769,8 @@ final class MenuModelTests: XCTestCase {
         let relaunched = PaddrMenuModel(dependencies: dependencies(state: state))
         await waitUntil(model: relaunched) { relaunched.isInitialized }
         XCTAssertEqual(relaunched.configuration.right.sensitivity, 8)
+        XCTAssertEqual(relaunched.configuration.left.mouseAcceleration, 0.2)
+        XCTAssertEqual(relaunched.configuration.right.mouseAcceleration, 0.8)
         XCTAssertFalse(relaunched.hasUnsavedChanges)
     }
 

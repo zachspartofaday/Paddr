@@ -103,7 +103,6 @@ scripts/paddr.sh --left-mode dpad --left-layout grid-nine \
 
 ## Planned features
 
-- Mouse Acceleration Settings
 - Additional Zone Layouts
 - Custom Zone Layouts
 

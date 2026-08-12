@@ -253,6 +253,167 @@ final class TrackIsBackTests: XCTestCase {
         )
     }
 
+    func testZeroMouseAccelerationPreservesLegacyMouseActionsExactly() throws {
+        let configuration = PadConfiguration(mode: .mouse, mouseAcceleration: 0)
+
+        var positive = PadMapper(side: .right, configuration: configuration)
+        _ = try positive.process(sample(touched: true, time: 10))
+        XCTAssertEqual(
+            try positive.process(sample(touched: true, x: 700, y: 350, time: 20)),
+            [.mouseMove(dx: 1, dy: -0.5)]
+        )
+
+        var negative = PadMapper(side: .right, configuration: configuration)
+        _ = try negative.process(sample(touched: true, time: 20))
+        XCTAssertEqual(
+            try negative.process(sample(touched: true, x: -700, y: -350, time: 10)),
+            [.mouseMove(dx: -1, dy: 0.5)]
+        )
+
+        var diagonal = PadMapper(side: .right, configuration: configuration)
+        _ = try diagonal.process(sample(touched: true, x: -700, y: 700, time: 1))
+        XCTAssertEqual(
+            try diagonal.process(sample(touched: true, x: 700, y: -700, time: 2)),
+            [.mouseMove(dx: 2, dy: 2)]
+        )
+
+        var subthreshold = PadMapper(side: .right, configuration: configuration)
+        _ = try subthreshold.process(sample(touched: true, time: 1))
+        XCTAssertTrue(
+            try subthreshold.process(sample(touched: true, x: 34, y: -34, time: 2)).isEmpty
+        )
+
+        var deadzoneAndLift = PadMapper(
+            side: .right,
+            configuration: PadConfiguration(mode: .mouse, mouseAcceleration: 0, mouseDeadzone: 0.2)
+        )
+        _ = try deadzoneAndLift.process(sample(touched: true, time: 1))
+        XCTAssertTrue(
+            try deadzoneAndLift.process(sample(touched: true, x: 10_000, time: 2)).isEmpty
+        )
+        XCTAssertEqual(
+            try deadzoneAndLift.process(sample(touched: true, x: 10_700, time: 3)),
+            [.mouseMove(dx: 1, dy: 0)]
+        )
+        XCTAssertTrue(try deadzoneAndLift.process(sample(touched: false, x: 10_700, time: 4)).isEmpty)
+        XCTAssertTrue(try deadzoneAndLift.process(sample(touched: true, x: -10_000, time: 5)).isEmpty)
+        XCTAssertEqual(
+            try deadzoneAndLift.process(sample(touched: true, x: -10_700, time: 6)),
+            [.mouseMove(dx: -1, dy: 0)]
+        )
+    }
+
+    func testFasterEqualMouseDisplacementReceivesMoreAcceleration() throws {
+        let slow = try mouseMove(deltaX: 700, interval: 50_000_000, acceleration: 1)
+        let fast = try mouseMove(deltaX: 700, interval: 5_000_000, acceleration: 1)
+
+        XCTAssertEqual(slow.dx, 1)
+        XCTAssertGreaterThan(fast.dx, slow.dx)
+    }
+
+    func testMouseAccelerationSettingIsMonotonicAndCappedAtFourTimesLinear() throws {
+        let linear = try mouseMove(deltaX: 700, interval: 1_000_000, acceleration: 0)
+        let quarter = try mouseMove(deltaX: 700, interval: 1_000_000, acceleration: 0.25)
+        let half = try mouseMove(deltaX: 700, interval: 1_000_000, acceleration: 0.5)
+        let full = try mouseMove(deltaX: 700, interval: 1_000_000, acceleration: 1)
+
+        XCTAssertLessThan(linear.dx, quarter.dx)
+        XCTAssertLessThan(quarter.dx, half.dx)
+        XCTAssertLessThan(half.dx, full.dx)
+        XCTAssertEqual(full.dx, linear.dx * 4)
+    }
+
+    func testEquivalentUnscaledMouseSpeedsReceiveEquivalentGain() throws {
+        let short = try mouseMove(deltaX: 700, interval: 10_000_000, acceleration: 0.8)
+        let long = try mouseMove(deltaX: 1_400, interval: 20_000_000, acceleration: 0.8)
+
+        XCTAssertEqual(long.dx, short.dx * 2, accuracy: 0.000_000_1)
+    }
+
+    func testNonMonotonicAndStaleMouseTimestampsUseLinearGain() throws {
+        let equal = try mouseMove(start: 200_000_000, end: 200_000_000, acceleration: 1)
+        let reversed = try mouseMove(start: 200_000_000, end: 100_000_000, acceleration: 1)
+        let stale = try mouseMove(start: 200_000_000, end: 301_000_000, acceleration: 1)
+
+        XCTAssertEqual(equal.dx, 1)
+        XCTAssertEqual(reversed.dx, 1)
+        XCTAssertEqual(stale.dx, 1)
+    }
+
+    func testMouseAccelerationRestartsAfterLiftWithoutAJump() throws {
+        var mapper = PadMapper(
+            side: .right,
+            configuration: PadConfiguration(mode: .mouse, mouseAcceleration: 1)
+        )
+        _ = try mapper.process(sample(touched: true, time: 1_000_000))
+        XCTAssertEqual(
+            try mapper.process(sample(touched: true, x: 700, time: 2_000_000)),
+            [.mouseMove(dx: 4, dy: 0)]
+        )
+        XCTAssertTrue(try mapper.process(sample(touched: false, x: 700, time: 3_000_000)).isEmpty)
+        XCTAssertTrue(try mapper.process(sample(touched: true, x: 20_000, time: 4_000_000)).isEmpty)
+        XCTAssertEqual(
+            try mapper.process(sample(touched: true, x: 20_700, time: 5_000_000)),
+            [.mouseMove(dx: 4, dy: 0)]
+        )
+    }
+
+    func testMouseAccelerationDoesNotAffectScrollTapOrZones() throws {
+        var scroll = PadMapper(
+            side: .left,
+            configuration: PadConfiguration(mode: .scroll, scrollSensitivity: 0.5, mouseAcceleration: 1)
+        )
+        _ = try scroll.process(sample(touched: true, time: 1))
+        XCTAssertEqual(
+            try scroll.process(sample(touched: true, x: 240, y: 120, time: 2)),
+            [.scroll(dx: 0.5, dy: -0.25)]
+        )
+
+        var tap = PadMapper(
+            side: .right,
+            configuration: PadConfiguration(mode: .mouse, mouseAcceleration: 1, tapKey: "space")
+        )
+        _ = try tap.process(sample(touched: true, time: 1_000_000))
+        XCTAssertEqual(
+            try tap.process(sample(touched: false, time: 20_000_000)),
+            [
+                .key(try KeyCatalog.resolve("space"), isPressed: true),
+                .key(try KeyCatalog.resolve("space"), isPressed: false)
+            ]
+        )
+
+        var zones = PadMapper(
+            side: .left,
+            configuration: PadConfiguration(mode: .dpad, mouseAcceleration: 1, dpadKeys: .wasd)
+        )
+        XCTAssertEqual(
+            try zones.process(sample(touched: true, y: 20_000, time: 1)),
+            [.key(try KeyCatalog.resolve("w"), isPressed: true)]
+        )
+    }
+
+    private func mouseMove(
+        deltaX: Int16 = 700,
+        interval: UInt64 = 1_000_000,
+        start: UInt64 = 100_000_000,
+        end: UInt64? = nil,
+        acceleration: Double
+    ) throws -> (dx: Double, dy: Double) {
+        var mapper = PadMapper(
+            side: .right,
+            configuration: PadConfiguration(mode: .mouse, mouseAcceleration: acceleration)
+        )
+        _ = try mapper.process(sample(touched: true, time: start))
+        let actions = try mapper.process(
+            sample(touched: true, x: deltaX, time: end ?? start + interval)
+        )
+        guard case let .mouseMove(dx, dy)? = actions.first else {
+            XCTFail("Expected a mouse movement action")
+            return (0, 0)
+        }
+        return (dx, dy)
+    }
+
     private func sample(touched: Bool, x: Int16 = 0, y: Int16 = 0, time: UInt64) -> TrackpadSample {
         TrackpadSample(isTouched: touched, isClicked: false, x: x, y: y, pressure: 0, timestampNanoseconds: time)
     }
