@@ -23,11 +23,11 @@ public enum ProfileSelectionRequestResult: Equatable, Sendable {
 public final class PaddrMenuModel {
     public var configuration: TrackIsBackConfiguration {
         didSet {
-            guard !isPublishingConfiguration, !isRejectingPreInitializationConfiguration else { return }
-            guard isInitialized else {
-                isRejectingPreInitializationConfiguration = true
+            guard !isPublishingConfiguration, !isRejectingConfigurationEdit else { return }
+            guard isInitialized, !replacesActiveConfiguration else {
+                isRejectingConfigurationEdit = true
                 configuration = oldValue
-                isRejectingPreInitializationConfiguration = false
+                isRejectingConfigurationEdit = false
                 return
             }
             draftRevision &+= 1
@@ -77,8 +77,10 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var statusPublicationGeneration: UInt64?
     @ObservationIgnored private var allowsAuthoritativeStatusPublication = false
     @ObservationIgnored private var isPublishingConfiguration = false
-    @ObservationIgnored private var isRejectingPreInitializationConfiguration = false
+    @ObservationIgnored private var isRejectingConfigurationEdit = false
     @ObservationIgnored private var isRejectingPreInitializationEnabled = false
+    private var profileOperationInProgress = false
+    private var replacesActiveConfiguration = false
     @ObservationIgnored private var activationCommitPending = false
     @ObservationIgnored private var statusRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var statusRefreshEpoch: UInt64 = 0
@@ -97,10 +99,14 @@ public final class PaddrMenuModel {
     public var activeProfile: ConfigurationProfile {
         profiles.first { $0.id == activeProfileID } ?? .default
     }
-    public var canEditActiveProfile: Bool { isInitialized && activeProfileID != .default }
+    public var canEditActiveProfile: Bool {
+        isInitialized && !replacesActiveConfiguration && activeProfileID != .default
+    }
+    public var canManageProfiles: Bool { isInitialized && !profileOperationInProgress }
     public var canSaveAndApply: Bool {
         isInitialized
             && !storageWriteBlocked
+            && !replacesActiveConfiguration
             && (canEditActiveProfile || needsInitialSave)
             && (hasUnsavedChanges || isEnabled)
     }
@@ -146,6 +152,7 @@ public final class PaddrMenuModel {
     public func saveAndApply() {
         guard terminationState == .idle,
               isInitialized,
+              !replacesActiveConfiguration,
               canEditActiveProfile || needsInitialSave else { return }
         let draft = configuration
         let initiatingDraftRevision = draftRevision
@@ -178,6 +185,7 @@ public final class PaddrMenuModel {
         configurationEpoch &+= 1
         let operation = configurationEpoch
         let priorTask = configurationTask
+        profileOperationInProgress = true
         configurationTask = Task { [weak self] in
             await priorTask?.value
             guard let self else { return }
@@ -491,6 +499,8 @@ public final class PaddrMenuModel {
 
         configurationEpoch &+= 1
         let operation = configurationEpoch
+        profileOperationInProgress = true
+        replacesActiveConfiguration = replacingActiveConfiguration
         let shouldRestart = replacingActiveConfiguration && isEnabled
         let operationStatusGeneration: UInt64
         if shouldRestart {
@@ -1115,6 +1125,8 @@ public final class PaddrMenuModel {
     private func clearConfigurationTask(operation: UInt64) {
         guard configurationEpoch == operation else { return }
         configurationTask = nil
+        profileOperationInProgress = false
+        replacesActiveConfiguration = false
     }
 
     private func clearLifecycleTask(operation: UInt64) {
@@ -1128,6 +1140,8 @@ public final class PaddrMenuModel {
         terminationState = .finished
         initializationTask = nil
         configurationTask = nil
+        profileOperationInProgress = false
+        replacesActiveConfiguration = false
         activationCommitPending = false
         statusRefreshTask = nil
         lifecycleTask = nil

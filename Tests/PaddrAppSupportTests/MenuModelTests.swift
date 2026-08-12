@@ -1896,6 +1896,89 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(state.savedProfileDocument?.activeProfileID, second.id)
     }
 
+    func testProfileSelectionRejectsMutationsWhileActivationWorkIsPendingThenReenablesEditing() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await waitUntil { state.saveCallCount == 1 }
+
+        XCTAssertFalse(model.canEditActiveProfile)
+        XCTAssertFalse(model.canManageProfiles)
+        XCTAssertFalse(model.canSaveAndApply)
+        model.configuration.left.sensitivity = 9
+        model.restoreDefaults()
+        model.saveAndApply()
+        XCTAssertFalse(model.createProfile(named: "Racing"))
+        XCTAssertFalse(model.duplicateActiveProfile())
+        XCTAssertFalse(model.renameActiveProfile(to: "Renamed"))
+        XCTAssertFalse(model.deleteProfile(id: first.id, confirmed: true))
+        XCTAssertEqual(
+            model.requestProfileSelection(id: first.id, source: .menu),
+            .operationInProgress
+        )
+        XCTAssertEqual(model.configuration, first.configuration)
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertEqual(model.profiles, document.profiles)
+        XCTAssertEqual(state.saveCallCount, 1)
+
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) { model.activeProfileID == second.id }
+
+        XCTAssertTrue(model.canEditActiveProfile)
+        XCTAssertTrue(model.canManageProfiles)
+        XCTAssertEqual(model.configuration, second.configuration)
+        model.configuration.left.sensitivity = 7
+        model.saveAndApply()
+        await waitUntil { state.saveCallCount == 2 }
+        await waitUntil(model: model) { !model.hasUnsavedChanges }
+        XCTAssertEqual(state.savedProfileDocument?.activeProfile?.configuration.left.sensitivity, 7)
+    }
+
+    func testDocumentOnlyProfileSaveDoesNotFreezeOrOverwritePadEditing() async throws {
+        let state = readyState(receiver: nil)
+        let (document, _, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
+        await waitUntil { state.saveCallCount == 1 }
+        XCTAssertTrue(model.canEditActiveProfile)
+        XCTAssertFalse(model.canManageProfiles)
+        model.configuration.left.sensitivity = 8
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) { model.activeProfile.name == "Renamed" }
+        XCTAssertEqual(model.configuration.left.sensitivity, 8)
+        XCTAssertTrue(model.hasUnsavedChanges)
+
+        let inactiveID = second.id
+        let deleteGate = DispatchSemaphore(value: 0)
+        state.saveGate = deleteGate
+        XCTAssertTrue(model.deleteProfile(id: inactiveID, confirmed: true))
+        await waitUntil { state.saveCallCount == 2 }
+        XCTAssertTrue(model.canEditActiveProfile)
+        XCTAssertFalse(model.canManageProfiles)
+        model.configuration.left.sensitivity = 9
+        state.saveGate = nil
+        deleteGate.signal()
+        await waitUntil(model: model) { !model.profiles.contains(where: { $0.id == inactiveID }) }
+        XCTAssertEqual(model.configuration.left.sensitivity, 9)
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
     private func twoProfileDocument() throws -> (
         ConfigurationProfileDocument,
         ConfigurationProfile,

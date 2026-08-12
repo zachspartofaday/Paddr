@@ -52,7 +52,7 @@ struct ProfileBarView: View {
                     .lineLimit(1)
             }
         }
-        .disabled(!model.isInitialized)
+        .disabled(!model.canManageProfiles)
         .alert("Discard unsaved changes?", isPresented: $showsDiscardConfirmation) {
             Button("Cancel", role: .cancel) {
                 if let id = pendingSelectionID {
