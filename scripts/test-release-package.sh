@@ -96,6 +96,18 @@ cp "$zip_path" "$cross_directory_match_digest/Paddr.zip"
     "$app_path" "$cross_directory_match_supplied/Paddr.zip" "$cross_directory_match_digest/Paddr.zip.sha256" \
     "$expected_version" "$expected_build"
 
+uppercase_digest_dir="$recipient_dir/uppercase-digest"
+mkdir -p "$uppercase_digest_dir"
+cp "$zip_path" "$uppercase_digest_dir/Paddr.zip"
+(
+    cd "$uppercase_digest_dir"
+    uppercase_hash=$(shasum -a 256 Paddr.zip | awk '{print $1}' | tr '[:lower:]' '[:upper:]')
+    printf '%s  %s\n' "$uppercase_hash" "Paddr.zip" > Paddr.zip.sha256
+)
+"$script_dir/verify-release.sh" \
+    "$app_path" "$uppercase_digest_dir/Paddr.zip" "$uppercase_digest_dir/Paddr.zip.sha256" \
+    "$expected_version" "$expected_build"
+
 nonexecutable_dir="$recipient_dir/nonexecutable"
 nonexecutable_stage="$recipient_dir/nonexecutable-stage"
 mkdir -p "$nonexecutable_dir" "$nonexecutable_stage"
