@@ -9,7 +9,7 @@ public final class PaddrMenuModel {
         didSet {
             guard !isPublishingConfiguration else { return }
             draftRevision &+= 1
-            preservingCurrentSessionStatusAuthority {
+            preservingCurrentOperationalStatusAuthority {
                 advanceStatusGeneration()
             }
         }
@@ -51,6 +51,7 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var receiverStateGeneration: UInt64 = 0
     @ObservationIgnored private var lifecycleTask: Task<Void, Never>?
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
+    @ObservationIgnored private var reconnectStatusGeneration: UInt64?
     @ObservationIgnored private var permissionRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var terminationTask: Task<Void, Never>?
     @ObservationIgnored private var terminationState = TerminationState.idle
@@ -107,7 +108,7 @@ public final class PaddrMenuModel {
             statusDidChange?()
             return
         }
-        preservingCurrentSessionStatusAuthority {
+        preservingCurrentOperationalStatusAuthority {
             advanceStatusGeneration()
         }
         let initiatingStatusGeneration = currentStatusGeneration
@@ -228,7 +229,7 @@ public final class PaddrMenuModel {
         guard terminationState == .idle else { return }
         accessibilityTrusted = dependencies.accessibilityTrusted(true)
         if accessibilityTrusted {
-            preservingCurrentSessionStatusAuthority {
+            preservingCurrentOperationalStatusAuthority {
                 publishStatus(operationalStatus)
             }
         } else {
@@ -279,6 +280,7 @@ public final class PaddrMenuModel {
         activationCommitPending = false
         statusRefreshTask = nil
         reconnectTask = nil
+        reconnectStatusGeneration = nil
         permissionRefreshTask = nil
         sessionID = nil
         controllerConnected = false
@@ -331,6 +333,7 @@ public final class PaddrMenuModel {
         let operation = lifecycleEpoch
         reconnectTask?.cancel()
         reconnectTask = nil
+        reconnectStatusGeneration = nil
         sessionID = nil
         controllerConnected = false
         isRunning = false
@@ -353,6 +356,7 @@ public final class PaddrMenuModel {
         guard isCurrent(operation), isEnabled else { return }
         reconnectTask?.cancel()
         reconnectTask = nil
+        reconnectStatusGeneration = nil
         sessionID = nil
         controllerConnected = false
         isRunning = false
@@ -468,6 +472,7 @@ public final class PaddrMenuModel {
 
     private func scheduleReconnect(operation: UInt64, statusGeneration: UInt64) {
         reconnectTask?.cancel()
+        reconnectStatusGeneration = statusGeneration
         reconnectTask = Task { [weak self] in
             guard let self else { return }
             while self.isCurrent(operation), self.isEnabled, !self.isRunning {
@@ -479,10 +484,12 @@ public final class PaddrMenuModel {
                 self.receiverStateGeneration &+= 1
                 self.receiverDescription = receiverDescription
                 if receiverDescription != nil {
+                    let reconnectStatusGeneration = self.reconnectStatusGeneration ?? statusGeneration
                     self.reconnectTask = nil
+                    self.reconnectStatusGeneration = nil
                     self.startLifecycle(
                         commitDraft: false,
-                        statusGeneration: statusGeneration
+                        statusGeneration: reconnectStatusGeneration
                     )
                     return
                 }
@@ -642,13 +649,18 @@ public final class PaddrMenuModel {
         return sessionStatusGeneration
     }
 
-    private func preservingCurrentSessionStatusAuthority(_ operation: () -> Void) {
+    private func preservingCurrentOperationalStatusAuthority(_ operation: () -> Void) {
         let identifier = sessionID
         let sessionHadStatusAuthority = identifier != nil
             && sessionStatusGeneration == currentStatusGeneration
+        let reconnectHadStatusAuthority = reconnectTask != nil
+            && reconnectStatusGeneration == currentStatusGeneration
         operation()
         if sessionHadStatusAuthority, sessionID == identifier {
             sessionStatusGeneration = currentStatusGeneration
+        }
+        if reconnectHadStatusAuthority, reconnectTask != nil {
+            reconnectStatusGeneration = currentStatusGeneration
         }
     }
 
@@ -724,6 +736,7 @@ public final class PaddrMenuModel {
         statusRefreshTask = nil
         lifecycleTask = nil
         reconnectTask = nil
+        reconnectStatusGeneration = nil
         permissionRefreshTask = nil
         terminationTask = nil
         let completions = terminationCompletions

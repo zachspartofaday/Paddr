@@ -459,6 +459,40 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(startCount, 1)
     }
 
+    func testDisconnectedDraftEditKeepsReconnectLifecycleStatusAuthoritative() async {
+        let state = readyState(receiver: nil)
+        let sleeper = ManualSleeper()
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(
+            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+        )
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.status == .waitingForController }
+
+        model.configuration.left.sensitivity = 3
+        state.receiver = "Fake puck"
+        sleeper.wake()
+        await waitUntil(model: model) { await session.startCount == 1 }
+        XCTAssertFalse(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .connecting)
+
+        await session.send(.controllerConnected)
+        await waitUntil(model: model) { model.controllerConnected }
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .waitingForNeutral)
+
+        await session.send(.outputArmed)
+        await waitUntil(model: model) { model.isRunning }
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertTrue(model.isRunning)
+        XCTAssertEqual(model.status, .active)
+        model.isEnabled = false
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+    }
+
     func testReconnectDoesNotAdoptNewerUnrelatedStatusAuthority() async {
         let state = readyState(receiver: nil)
         let sleeper = ManualSleeper()
