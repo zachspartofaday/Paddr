@@ -59,11 +59,16 @@ struct ButtonZoneConfigurationView: View {
 
     private var inspector: some View {
         VStack(alignment: .leading, spacing: PaddrStyle.insetHeaderContentSpacing) {
+            Text(LocalizedStringResource("Zone settings"))
+                .paddrTypography(.callout)
+                .bold()
+                .frame(minHeight: PaddrStyle.insetHeaderHeight)
+                .accessibilityAddTraits(.isHeader)
+
             HStack(spacing: PaddrStyle.settingsControlSpacing) {
-                Text(LocalizedStringResource("Zone settings"))
+                Text(LocalizedStringResource("Mode"))
                     .paddrTypography(.callout)
                     .bold()
-                    .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: PaddrStyle.settingsControlSpacing)
                 areaLayoutPicker
             }
