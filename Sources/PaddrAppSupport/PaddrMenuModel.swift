@@ -536,8 +536,7 @@ public final class PaddrMenuModel {
             if shouldRestart {
                 await dependencies.session.stop()
                 guard configurationEpoch == operation,
-                      terminationState == .idle,
-                      isEnabled else {
+                      terminationState == .idle else {
                     clearConfigurationTask(operation: operation)
                     return
                 }

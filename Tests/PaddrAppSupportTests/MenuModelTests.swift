@@ -1785,6 +1785,205 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(startedConfiguration, second.configuration)
     }
 
+    func testEnabledProfileSelectionPersistsWhenOutputIsDisabledDuringStop() async throws {
+        let state = readyState(receiver: "Fake")
+        let (document, _, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let session = GatedSession(blockedStops: [2])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await session.waitForStop(2)
+        model.isEnabled = false
+        await session.waitForStop(3)
+        await session.releaseStop(2)
+        for _ in 0..<1_000 where state.saveCompletionCount == 0 {
+            await Task.yield()
+        }
+
+        let startCount = await session.startCount
+        XCTAssertEqual(state.saveCompletionCount, 1)
+        XCTAssertEqual(startCount, 1)
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .off)
+        XCTAssertEqual(model.activeProfileID, second.id)
+        XCTAssertEqual(model.configuration, second.configuration)
+        XCTAssertEqual(model.savedConfiguration, second.configuration)
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, second.id)
+    }
+
+    func testEnabledActiveProfileDeletionPersistsWhenOutputIsDisabledDuringStop() async throws {
+        let state = readyState(receiver: "Fake")
+        let (document, first, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let session = GatedSession(blockedStops: [2])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+
+        XCTAssertTrue(model.deleteProfile(id: first.id, confirmed: true))
+        await session.waitForStop(2)
+        model.isEnabled = false
+        await session.waitForStop(3)
+        await session.releaseStop(2)
+        for _ in 0..<1_000 where state.saveCompletionCount == 0 {
+            await Task.yield()
+        }
+
+        let startCount = await session.startCount
+        XCTAssertEqual(state.saveCompletionCount, 1)
+        XCTAssertEqual(startCount, 1)
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .off)
+        XCTAssertFalse(model.profiles.contains(where: { $0.id == first.id }))
+        XCTAssertEqual(model.activeProfileID, .default)
+        XCTAssertEqual(model.configuration, .default)
+        XCTAssertEqual(model.savedConfiguration, .default)
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, .default)
+    }
+
+    func testEnabledProfileRepairPersistsWhenOutputIsDisabledDuringStop() async {
+        let state = readyState(receiver: "Fake")
+        state.loadedProfileDocument = .default
+        state.loadDiagnostic = "Missing active profile; Default is active."
+        let session = GatedSession(blockedStops: [1])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.isEnabled = true
+        model.saveAndApply()
+        await session.waitForStop(1)
+        model.isEnabled = false
+        await session.waitForStop(2)
+        await session.releaseStop(1)
+        for _ in 0..<1_000 where state.saveCompletionCount == 0 {
+            await Task.yield()
+        }
+
+        let startCount = await session.startCount
+        XCTAssertEqual(state.saveCompletionCount, 1)
+        XCTAssertEqual(startCount, 0)
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .off)
+        XCTAssertFalse(model.needsInitialSave)
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertEqual(model.activeProfileID, .default)
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, .default)
+    }
+
+    func testProfileSelectionReenabledDuringStopRestartsExactlyOnceAfterPersistence() async throws {
+        let state = readyState(receiver: "Fake")
+        let (document, _, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let session = GatedSession(blockedStops: [2])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await session.waitForStop(2)
+        model.isEnabled = false
+        await session.waitForStop(3)
+        model.isEnabled = true
+        await session.releaseStop(2)
+        await waitUntil(model: model) { model.isRunning && state.saveCompletionCount == 1 }
+
+        let startCount = await session.startCount
+        let stopCount = await session.stopCount
+        XCTAssertEqual(startCount, 2)
+        XCTAssertEqual(stopCount, 3)
+        XCTAssertTrue(model.isEnabled)
+        XCTAssertTrue(model.isRunning)
+        XCTAssertEqual(model.status, .active)
+        XCTAssertEqual(model.activeProfileID, second.id)
+        XCTAssertEqual(model.savedConfiguration, second.configuration)
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, second.id)
+    }
+
+    func testProfileSelectionReenabledAfterSaveRestartsExactlyOnce() async throws {
+        let state = readyState(receiver: "Fake")
+        let (document, _, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let session = GatedSession(blockedStops: [2])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await session.waitForStop(2)
+        model.isEnabled = false
+        await session.waitForStop(3)
+        await session.releaseStop(2)
+        await waitUntil { state.saveCallCount == 1 }
+        saveGate.signal()
+        await waitUntil(model: model) { model.activeProfileID == second.id }
+
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+
+        let startCount = await session.startCount
+        let stopCount = await session.stopCount
+        XCTAssertEqual(startCount, 2)
+        XCTAssertEqual(stopCount, 4)
+        XCTAssertTrue(model.isEnabled)
+        XCTAssertTrue(model.isRunning)
+        XCTAssertEqual(model.status, .active)
+        XCTAssertEqual(model.savedConfiguration, second.configuration)
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, second.id)
+    }
+
+    func testTerminationDuringProfileSelectionPreventsStalePersistenceAndRestart() async throws {
+        let state = readyState(receiver: "Fake")
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let session = GatedSession(blockedStops: [2])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await session.waitForStop(2)
+        var didComplete = false
+        XCTAssertTrue(model.stopForTermination { didComplete = true })
+        await session.waitForStop(3)
+        await session.releaseStop(2)
+        await waitUntil(model: model) { didComplete }
+
+        let startCount = await session.startCount
+        XCTAssertEqual(state.saveCallCount, 0)
+        XCTAssertEqual(startCount, 1)
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .releasingOutputs)
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertEqual(model.configuration, first.configuration)
+        XCTAssertNil(state.savedProfileDocument)
+    }
+
     func testEnabledProfileSelectionRejectsOldSessionEventsAndReestablishesLivenessAuthority() async throws {
         let state = readyState(receiver: "Fake puck")
         let (document, _, second) = try twoProfileDocument()
