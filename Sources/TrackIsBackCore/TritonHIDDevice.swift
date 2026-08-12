@@ -138,7 +138,7 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
     public static func open() throws -> TritonHIDDevice {
         #if canImport(IOKit)
         guard let result = selectedDevice() else {
-            throw TrackIsBackError.device("No Steam Controller 2 puck interface was found. Connect through the puck and grant Input Monitoring.")
+            throw TrackIsBackError.device("No Steam Controller 2 puck interface was found. Connect through the puck.")
         }
         return try TritonHIDDevice(manager: result.manager, device: result.device, summary: result.summary)
         #else
@@ -187,28 +187,6 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
         return callbackState.isRemoved ? .deviceRemoved : .stopped
         #else
         throw TrackIsBackError.device("IOHID is unavailable on this platform.")
-        #endif
-    }
-
-    public static func inputMonitoringStatus() -> String {
-        #if canImport(IOKit)
-        switch IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) {
-        case kIOHIDAccessTypeGranted: return "granted"
-        case kIOHIDAccessTypeDenied: return "denied"
-        default: return "unknown"
-        }
-        #else
-        return "unsupported"
-        #endif
-    }
-
-    public static func requestInputMonitoring() -> Bool {
-        #if canImport(IOKit)
-        if IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted { return true }
-        _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
-        return IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
-        #else
-        return false
         #endif
     }
 

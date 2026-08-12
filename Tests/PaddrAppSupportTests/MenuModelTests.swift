@@ -79,20 +79,20 @@ final class MenuModelTests: XCTestCase {
         let sleeper = ManualSleeper()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, sleeper: sleeper))
 
-        model.requestInputMonitoring()
-        model.openInputMonitoringSettings()
-        XCTAssertEqual(model.status, .inputMonitoringSettings)
+        model.requestAccessibility()
+        model.openAccessibilitySettings()
+        XCTAssertEqual(model.status, .accessibilitySettings)
 
         loadGate.signal()
         await waitUntil(model: model) { model.isInitialized }
 
         XCTAssertEqual(model.savedConfiguration, .default)
         XCTAssertTrue(model.needsInitialSave)
-        guard model.status == .inputMonitoringSettings else {
+        guard model.status == .accessibilitySettings else {
             return XCTFail("Expected newer permission guidance to survive load failure")
         }
 
-        state.inputGranted = true
+        state.accessibilityGranted = true
         sleeper.wake()
         await waitUntil(model: model) { model.status == .off }
     }
@@ -140,10 +140,9 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.status, .defaultsRestored)
     }
 
-    func testMissingPermissionTurnsOutputBackOffWithFailure() async {
+    func testMissingAccessibilityTurnsOutputBackOffWithFailure() async {
         let state = ModelDependencyState()
-        state.inputGranted = false
-        state.accessibilityGranted = true
+        state.accessibilityGranted = false
         state.controller = "Fake"
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
         await waitUntil(model: model) { model.isInitialized }
@@ -153,6 +152,27 @@ final class MenuModelTests: XCTestCase {
 
         XCTAssertFalse(model.isRunning)
         guard case .failure = model.status else { return XCTFail("Expected a permission failure") }
+    }
+
+    func testAccessibilityGrantAloneStartsSession() async {
+        let state = ModelDependencyState()
+        state.accessibilityGranted = true
+        state.controller = "Fake"
+        let session = ScriptedSession(events: [.connected("Fake puck")])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        XCTAssertTrue(model.hasSystemAccess)
+
+        model.isEnabled = true
+        for _ in 0..<1_000 {
+            if model.isRunning || !model.isEnabled { break }
+            await Task.yield()
+        }
+
+        let startCount = await session.startCount
+        XCTAssertTrue(model.isEnabled)
+        XCTAssertEqual(startCount, 1)
+        XCTAssertTrue(model.isRunning)
     }
 
     func testDisconnectedEnableStaysOnAndWaits() async {
@@ -296,9 +316,9 @@ final class MenuModelTests: XCTestCase {
         await session.send(.connected("Fake puck"))
         await waitUntil(model: model) { model.status == .active }
 
-        state.inputGranted = false
-        model.openInputMonitoringSettings()
-        XCTAssertEqual(model.status, .inputMonitoringSettings)
+        state.accessibilityGranted = false
+        model.openAccessibilitySettings()
+        XCTAssertEqual(model.status, .accessibilitySettings)
         await session.send(.failed("Puck disconnected"))
         await waitUntil(model: model) { !model.isEnabled && !model.isRunning }
 
@@ -412,9 +432,9 @@ final class MenuModelTests: XCTestCase {
 
         model.saveAndApply()
         await waitUntil { state.saveCallCount == 1 }
-        model.requestInputMonitoring()
-        model.openInputMonitoringSettings()
-        XCTAssertEqual(model.status, .inputMonitoringSettings)
+        model.requestAccessibility()
+        model.openAccessibilitySettings()
+        XCTAssertEqual(model.status, .accessibilitySettings)
 
         state.saveGate = nil
         saveGate.signal()
@@ -423,64 +443,54 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 3)
         XCTAssertEqual(model.savedConfiguration.left.sensitivity, 3)
         XCTAssertFalse(model.hasUnsavedChanges)
-        guard model.status == .inputMonitoringSettings else {
+        guard model.status == .accessibilitySettings else {
             return XCTFail("Expected newer permission guidance to survive save completion")
         }
 
-        state.inputGranted = true
+        state.accessibilityGranted = true
         sleeper.wake()
         await waitUntil(model: model) { model.status == .off }
     }
 
-    func testAlreadyGrantedPermissionRequestsReturnToOperationalStatus() async {
+    func testAlreadyGrantedAccessibilityRequestReturnsToOperationalStatus() async {
         let state = readyState(controller: nil)
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
         await waitUntil(model: model) { model.isInitialized }
-
-        model.requestInputMonitoring()
-        XCTAssertEqual(model.status, .off)
 
         model.requestAccessibility()
         XCTAssertEqual(model.status, .off)
     }
 
-    func testUnknownInputMonitoringRequestInvokesPromptDependency() async {
+    func testAccessibilityRequestInvokesPromptDependency() async {
         let state = ModelDependencyState()
-        state.inputStatusWhenNotGranted = .unknown
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
         await waitUntil(model: model) { model.isInitialized }
 
-        model.requestInputMonitoring()
+        model.requestAccessibility()
 
-        XCTAssertEqual(state.requestInputMonitoringCallCount, 1)
+        XCTAssertEqual(state.accessibilityPromptValues.last, true)
         XCTAssertEqual(state.openedPrivacySettingsAnchors, [])
-        XCTAssertEqual(model.status, .requestingInputMonitoring)
+        XCTAssertEqual(model.status, .requestingAccessibility)
     }
 
-    func testDeniedInputMonitoringRequestFallsBackToSettingsWhenRequestDoesNotGrant() async {
+    func testAccessibilitySettingsFallbackOpensSettingsWhenRequestDoesNotGrant() async {
         let state = ModelDependencyState()
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
         await waitUntil(model: model) { model.isInitialized }
 
-        model.requestInputMonitoring()
+        model.requestAccessibility()
+        model.openAccessibilitySettings()
 
-        XCTAssertEqual(state.requestInputMonitoringCallCount, 1)
-        XCTAssertEqual(state.openedPrivacySettingsAnchors, ["Privacy_ListenEvent"])
-        XCTAssertEqual(model.status, .inputMonitoringSettings)
+        XCTAssertEqual(state.accessibilityPromptValues.last, true)
+        XCTAssertEqual(state.openedPrivacySettingsAnchors, ["Privacy_Accessibility"])
+        XCTAssertEqual(model.status, .accessibilitySettings)
     }
 
-    func testDelayedPermissionRefreshClearsRequestingStatuses() async {
+    func testDelayedPermissionRefreshClearsRequestingAccessibilityStatus() async {
         let state = ModelDependencyState()
-        state.inputStatusWhenNotGranted = .unknown
         let sleeper = ManualSleeper()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, sleeper: sleeper))
         await waitUntil(model: model) { model.isInitialized }
-
-        model.requestInputMonitoring()
-        XCTAssertEqual(model.status, .requestingInputMonitoring)
-        state.inputGranted = true
-        sleeper.wake()
-        await waitUntil(model: model) { model.status == .off }
 
         model.requestAccessibility()
         XCTAssertEqual(model.status, .requestingAccessibility)
@@ -500,10 +510,10 @@ final class MenuModelTests: XCTestCase {
 
         model.isEnabled = true
         await waitUntil(model: model) { await session.startCount == 1 }
-        state.inputGranted = false
-        model.requestInputMonitoring()
-        model.openInputMonitoringSettings()
-        XCTAssertEqual(model.status, .inputMonitoringSettings)
+        state.accessibilityGranted = false
+        model.requestAccessibility()
+        model.openAccessibilitySettings()
+        XCTAssertEqual(model.status, .accessibilitySettings)
 
         await session.send(.connected("Fake puck"))
         await waitUntil(model: model) { model.isRunning }
@@ -511,11 +521,11 @@ final class MenuModelTests: XCTestCase {
         XCTAssertTrue(model.isEnabled)
         XCTAssertTrue(model.isRunning)
         XCTAssertEqual(model.controllerDescription, "Fake puck")
-        guard model.status == .inputMonitoringSettings else {
+        guard model.status == .accessibilitySettings else {
             return XCTFail("Expected permission guidance to survive the deferred session event")
         }
 
-        state.inputGranted = true
+        state.accessibilityGranted = true
         sleeper.wake()
         await waitUntil(model: model) { model.status == .active }
     }
@@ -960,7 +970,6 @@ final class MenuModelTests: XCTestCase {
 
     private func readyState(controller: String?) -> ModelDependencyState {
         let state = ModelDependencyState()
-        state.inputGranted = true
         state.accessibilityGranted = true
         state.controller = controller
         return state
@@ -994,14 +1003,10 @@ final class MenuModelTests: XCTestCase {
                 state.probeGate?.wait()
                 return state.controller
             },
-            inputMonitoringStatus: {
-                state.inputGranted ? .granted : state.inputStatusWhenNotGranted
+            accessibilityTrusted: { prompt in
+                state.accessibilityPromptValues.append(prompt)
+                return state.accessibilityGranted
             },
-            requestInputMonitoring: {
-                state.requestInputMonitoringCallCount += 1
-                return state.inputGranted
-            },
-            accessibilityTrusted: { _ in state.accessibilityGranted },
             openPrivacySettings: { state.openedPrivacySettingsAnchors.append($0) },
             sleep: { _ in
                 guard let sleeper else { throw CancellationError() }
@@ -1167,11 +1172,9 @@ private final class ModelDependencyState: Sendable {
         var loadedConfiguration = TrackIsBackConfiguration.default
         var savedConfiguration: TrackIsBackConfiguration?
         var controller: String?
-        var inputGranted = false
-        var inputStatusWhenNotGranted = InputMonitoringStatus.denied
-        var requestInputMonitoringCallCount = 0
         var openedPrivacySettingsAnchors: [String] = []
         var accessibilityGranted = false
+        var accessibilityPromptValues: [Bool] = []
         var loadFailure: String?
         var loadGate: DispatchSemaphore?
         var loadRanOnMainThread: Bool?
@@ -1196,18 +1199,6 @@ private final class ModelDependencyState: Sendable {
         get { state.withLock { $0.controller } }
         set { state.withLock { $0.controller = newValue } }
     }
-    var inputGranted: Bool {
-        get { state.withLock { $0.inputGranted } }
-        set { state.withLock { $0.inputGranted = newValue } }
-    }
-    var inputStatusWhenNotGranted: InputMonitoringStatus {
-        get { state.withLock { $0.inputStatusWhenNotGranted } }
-        set { state.withLock { $0.inputStatusWhenNotGranted = newValue } }
-    }
-    var requestInputMonitoringCallCount: Int {
-        get { state.withLock { $0.requestInputMonitoringCallCount } }
-        set { state.withLock { $0.requestInputMonitoringCallCount = newValue } }
-    }
     var openedPrivacySettingsAnchors: [String] {
         get { state.withLock { $0.openedPrivacySettingsAnchors } }
         set { state.withLock { $0.openedPrivacySettingsAnchors = newValue } }
@@ -1215,6 +1206,10 @@ private final class ModelDependencyState: Sendable {
     var accessibilityGranted: Bool {
         get { state.withLock { $0.accessibilityGranted } }
         set { state.withLock { $0.accessibilityGranted = newValue } }
+    }
+    var accessibilityPromptValues: [Bool] {
+        get { state.withLock { $0.accessibilityPromptValues } }
+        set { state.withLock { $0.accessibilityPromptValues = newValue } }
     }
     var loadFailure: String? {
         get { state.withLock { $0.loadFailure } }

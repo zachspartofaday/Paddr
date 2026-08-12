@@ -222,8 +222,6 @@ private func printConfiguration(_ configuration: TrackIsBackConfiguration) throw
 }
 
 private func run(_ options: CLIOptions) throws {
-    let inputStatus = TritonHIDDevice.inputMonitoringStatus()
-    print("Input Monitoring: \(inputStatus)")
     print("Accessibility: \(Permissions.accessibilityTrusted(prompt: false) ? "granted" : "needed for live output")")
     guard let deviceSummary = TritonHIDDevice.probe() else {
         throw TrackIsBackError.device("No Steam Controller 2 puck interface was found.")
@@ -236,9 +234,6 @@ private func run(_ options: CLIOptions) throws {
     if options.dryRun {
         print("Dry run complete: HID was not opened and no CGEvents were posted.")
         return
-    }
-    guard TritonHIDDevice.requestInputMonitoring() else {
-        throw TrackIsBackError.permission("Input Monitoring is required. Grant it to this launch host in System Settings, then rerun.")
     }
     if !options.observeOnly, !Permissions.accessibilityTrusted(prompt: true) {
         throw TrackIsBackError.permission("Accessibility is required for mouse, scroll, and keyboard output. Grant it, then rerun.")

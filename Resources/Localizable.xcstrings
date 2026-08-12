@@ -247,16 +247,6 @@
         }
       }
     },
-    "Complete the Input Monitoring prompt, then return to Paddr.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Complete the Input Monitoring prompt, then return to Paddr."
-          }
-        }
-      }
-    },
     "Configuration saved.": {
       "localizations": {
         "en": {
@@ -380,16 +370,6 @@
         }
       }
     },
-    "Enable Paddr in Input Monitoring, then return to the app.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enable Paddr in Input Monitoring, then return to the app."
-          }
-        }
-      }
-    },
     "Escape": {
       "localizations": {
         "en": {
@@ -427,26 +407,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Idle"
-          }
-        }
-      }
-    },
-    "Input Monitoring": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Input Monitoring"
-          }
-        }
-      }
-    },
-    "Input Monitoring is required before Paddr can read the trackpads.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Input Monitoring is required before Paddr can read the trackpads."
           }
         }
       }
@@ -761,12 +721,12 @@
         }
       }
     },
-    "Reads controller trackpad reports.": {
+    "Reads trackpad reports and sends mapped mouse and keyboard input.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Reads controller trackpad reports."
+            "value": "Reads trackpad reports and sends mapped mouse and keyboard input."
           }
         }
       }
@@ -948,16 +908,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Selected area"
-          }
-        }
-      }
-    },
-    "Sends mapped mouse and keyboard input.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sends mapped mouse and keyboard input."
           }
         }
       }

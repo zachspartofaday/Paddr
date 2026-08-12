@@ -27,8 +27,6 @@ final class MenuDependencyTests: XCTestCase {
                 state.probeRanOnMainThread = Thread.isMainThread
                 return "Fake puck"
             },
-            inputMonitoringStatus: { .granted },
-            requestInputMonitoring: { true },
             accessibilityTrusted: { _ in true },
             openPrivacySettings: { _ in },
             sleep: { _ in }

@@ -5,8 +5,6 @@ import TrackIsBackCore
 public struct MenuDependencies: Sendable {
     public var session: any TrackpadSessionControlling
     private let background: BackgroundMenuDependencies
-    public var inputMonitoringStatus: @Sendable () -> InputMonitoringStatus
-    public var requestInputMonitoring: @Sendable () -> Bool
     public var accessibilityTrusted: @Sendable (_ prompt: Bool) -> Bool
     public var openPrivacySettings: @MainActor @Sendable (_ anchor: String) -> Void
     public var sleep: @Sendable (Duration) async throws -> Void
@@ -16,8 +14,6 @@ public struct MenuDependencies: Sendable {
         loadConfiguration: @escaping @Sendable () throws -> TrackIsBackConfiguration,
         saveConfiguration: @escaping @Sendable (TrackIsBackConfiguration) throws -> Void,
         probeController: @escaping @Sendable () -> String?,
-        inputMonitoringStatus: @escaping @Sendable () -> InputMonitoringStatus,
-        requestInputMonitoring: @escaping @Sendable () -> Bool,
         accessibilityTrusted: @escaping @Sendable (_ prompt: Bool) -> Bool,
         openPrivacySettings: @escaping @MainActor @Sendable (_ anchor: String) -> Void,
         sleep: @escaping @Sendable (Duration) async throws -> Void
@@ -28,8 +24,6 @@ public struct MenuDependencies: Sendable {
             saveConfiguration: saveConfiguration,
             probeController: probeController
         )
-        self.inputMonitoringStatus = inputMonitoringStatus
-        self.requestInputMonitoring = requestInputMonitoring
         self.accessibilityTrusted = accessibilityTrusted
         self.openPrivacySettings = openPrivacySettings
         self.sleep = sleep
@@ -52,10 +46,6 @@ public struct MenuDependencies: Sendable {
         loadConfiguration: { try ConfigurationStore.load() },
         saveConfiguration: { try ConfigurationStore.save($0) },
         probeController: { TritonHIDDevice.probe()?.description },
-        inputMonitoringStatus: {
-            InputMonitoringStatus(rawValue: TritonHIDDevice.inputMonitoringStatus()) ?? .unknown
-        },
-        requestInputMonitoring: TritonHIDDevice.requestInputMonitoring,
         accessibilityTrusted: Permissions.accessibilityTrusted,
         openPrivacySettings: { anchor in
             guard let url = URL(

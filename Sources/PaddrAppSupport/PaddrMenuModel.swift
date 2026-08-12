@@ -23,7 +23,6 @@ public final class PaddrMenuModel {
     }
     public private(set) var isRunning = false
     public private(set) var controllerDescription: String?
-    public private(set) var inputMonitoringStatus: InputMonitoringStatus = .unknown
     public private(set) var accessibilityTrusted = false
     public private(set) var status: MenuStatus = .off
     public private(set) var reportCount = 0
@@ -56,7 +55,7 @@ public final class PaddrMenuModel {
 
     public var hasUnsavedChanges: Bool { needsInitialSave || configuration != savedConfiguration }
     public var controllerConnected: Bool { controllerDescription != nil }
-    public var hasSystemAccess: Bool { inputMonitoringStatus == .granted && accessibilityTrusted }
+    public var hasSystemAccess: Bool { accessibilityTrusted }
 
     public init(dependencies: MenuDependencies = .live) {
         self.dependencies = dependencies
@@ -162,7 +161,6 @@ public final class PaddrMenuModel {
         if controllerStateGeneration == initiatingControllerStateGeneration {
             self.controllerDescription = controllerDescription
         }
-        inputMonitoringStatus = dependencies.inputMonitoringStatus()
         accessibilityTrusted = dependencies.accessibilityTrusted(false)
         let resultingStatusGeneration = withStatusPublicationGeneration(statusGeneration) {
             reconcileCompletedPermissionRequest()
@@ -210,32 +208,11 @@ public final class PaddrMenuModel {
         publishStatus(.defaultsRestored)
     }
 
-    public func requestInputMonitoring() {
-        guard terminationState == .idle else { return }
-        let accessGranted = dependencies.requestInputMonitoring()
-        inputMonitoringStatus = accessGranted ? .granted : dependencies.inputMonitoringStatus()
-        guard inputMonitoringStatus != .denied else {
-            openInputMonitoringSettings()
-            schedulePermissionRefresh()
-            return
-        }
-        publishStatus(
-            inputMonitoringStatus == .granted ? operationalStatus : .requestingInputMonitoring
-        )
-        schedulePermissionRefresh()
-    }
-
     public func requestAccessibility() {
         guard terminationState == .idle else { return }
         accessibilityTrusted = dependencies.accessibilityTrusted(true)
         publishStatus(accessibilityTrusted ? operationalStatus : .requestingAccessibility)
         schedulePermissionRefresh()
-    }
-
-    public func openInputMonitoringSettings() {
-        guard terminationState == .idle else { return }
-        dependencies.openPrivacySettings("Privacy_ListenEvent")
-        publishStatus(.inputMonitoringSettings)
     }
 
     public func openAccessibilitySettings() {
@@ -369,14 +346,6 @@ public final class PaddrMenuModel {
         statusGeneration = await refreshStatusNow(statusGeneration: statusGeneration)
         guard isCurrent(operation), isEnabled else { return }
 
-        guard inputMonitoringStatus == .granted else {
-            failEnable(
-                .inputMonitoringRequired,
-                operation: operation,
-                statusGeneration: statusGeneration
-            )
-            return
-        }
         guard accessibilityTrusted else {
             failEnable(
                 .accessibilityRequired,
@@ -513,9 +482,6 @@ public final class PaddrMenuModel {
 
     private func reconcileCompletedPermissionRequest() {
         switch status {
-        case .requestingInputMonitoring where inputMonitoringStatus == .granted,
-             .inputMonitoringSettings where inputMonitoringStatus == .granted:
-            publishStatus(operationalStatus)
         case .requestingAccessibility where accessibilityTrusted,
              .accessibilitySettings where accessibilityTrusted:
             publishStatus(operationalStatus)

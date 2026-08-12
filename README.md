@@ -27,15 +27,14 @@ Paddr does not send controller feature reports or alter lizard mode, firmware, I
 Requirements:
 
 - macOS 27 Beta 5 with `SteamControllerHIDServicePlugin.plugin`;
-- Steam Controller 2 connected through the puck;
-- Input Monitoring permission to read trackpad reports; and
-- Accessibility permission to emit mouse and keyboard events.
+- Steam Controller 2 connected through the puck; and
+- Accessibility permission to read trackpad reports and emit mapped mouse and keyboard events.
 
 Puck mode is the only confirmed connection. Bluetooth and direct USB remain unvalidated.
 
 1. Download `Paddr.zip` from [Releases](https://github.com/zachspartofaday/Paddr/releases).
 2. Move `Paddr.app` to Applications and launch it.
-3. Grant Input Monitoring and Accessibility when prompted.
+3. Grant Accessibility when prompted.
 4. Configure each trackpad and choose **Save & Apply**, or turn output on to save and activate the draft.
 
 Closing the configuration window leaves Paddr in the menu bar with quick actions for output, configuration, and quitting. The window remains ordinarily resizable but does not support full screen.
@@ -126,7 +125,6 @@ scripts/paddr.sh --left-mode dpad --left-layout grid-nine \
 
 ## Known issues
 
-- The Input Monitoring Request button may not produce a system permission prompt (macOS declines to re-prompt after a prior denial). Resolution: open System Settings → Privacy & Security → Input Monitoring, click the + button, and add Paddr manually.
 - Games with dynamic glyphs / control-icon indicators may switch back and forth between controller button icons and keyboard binds.
 
 ## Contributing
