@@ -13,7 +13,6 @@ struct ConfigurationView: View {
             VStack(spacing: 0) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: PaddrStyle.sectionSpacing) {
-                        AppHeaderView(model: model)
                         if !model.hasSystemAccess { SystemAccessView(model: model) }
                         ViewThatFits(in: .horizontal) {
                             HStack(alignment: .top, spacing: PaddrStyle.sectionSpacing) {

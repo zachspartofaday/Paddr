@@ -511,6 +511,16 @@
         }
       }
     },
+    "Mode": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mode"
+          }
+        }
+      }
+    },
     "More": {
       "localizations": {
         "en": {

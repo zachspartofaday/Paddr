@@ -444,8 +444,34 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.status, .off)
     }
 
+    func testUnknownInputMonitoringRequestInvokesPromptDependency() async {
+        let state = ModelDependencyState()
+        state.inputStatusWhenNotGranted = .unknown
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.requestInputMonitoring()
+
+        XCTAssertEqual(state.requestInputMonitoringCallCount, 1)
+        XCTAssertEqual(state.openedPrivacySettingsAnchors, [])
+        XCTAssertEqual(model.status, .requestingInputMonitoring)
+    }
+
+    func testDeniedInputMonitoringRequestFallsBackToSettingsWhenRequestDoesNotGrant() async {
+        let state = ModelDependencyState()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.requestInputMonitoring()
+
+        XCTAssertEqual(state.requestInputMonitoringCallCount, 1)
+        XCTAssertEqual(state.openedPrivacySettingsAnchors, ["Privacy_ListenEvent"])
+        XCTAssertEqual(model.status, .inputMonitoringSettings)
+    }
+
     func testDelayedPermissionRefreshClearsRequestingStatuses() async {
         let state = ModelDependencyState()
+        state.inputStatusWhenNotGranted = .unknown
         let sleeper = ManualSleeper()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, sleeper: sleeper))
         await waitUntil(model: model) { model.isInitialized }
@@ -968,10 +994,15 @@ final class MenuModelTests: XCTestCase {
                 state.probeGate?.wait()
                 return state.controller
             },
-            inputMonitoringStatus: { state.inputGranted ? .granted : .denied },
-            requestInputMonitoring: { state.inputGranted },
+            inputMonitoringStatus: {
+                state.inputGranted ? .granted : state.inputStatusWhenNotGranted
+            },
+            requestInputMonitoring: {
+                state.requestInputMonitoringCallCount += 1
+                return state.inputGranted
+            },
             accessibilityTrusted: { _ in state.accessibilityGranted },
-            openPrivacySettings: { _ in },
+            openPrivacySettings: { state.openedPrivacySettingsAnchors.append($0) },
             sleep: { _ in
                 guard let sleeper else { throw CancellationError() }
                 try await sleeper.sleep()
@@ -1137,6 +1168,9 @@ private final class ModelDependencyState: Sendable {
         var savedConfiguration: TrackIsBackConfiguration?
         var controller: String?
         var inputGranted = false
+        var inputStatusWhenNotGranted = InputMonitoringStatus.denied
+        var requestInputMonitoringCallCount = 0
+        var openedPrivacySettingsAnchors: [String] = []
         var accessibilityGranted = false
         var loadFailure: String?
         var loadGate: DispatchSemaphore?
@@ -1165,6 +1199,18 @@ private final class ModelDependencyState: Sendable {
     var inputGranted: Bool {
         get { state.withLock { $0.inputGranted } }
         set { state.withLock { $0.inputGranted = newValue } }
+    }
+    var inputStatusWhenNotGranted: InputMonitoringStatus {
+        get { state.withLock { $0.inputStatusWhenNotGranted } }
+        set { state.withLock { $0.inputStatusWhenNotGranted = newValue } }
+    }
+    var requestInputMonitoringCallCount: Int {
+        get { state.withLock { $0.requestInputMonitoringCallCount } }
+        set { state.withLock { $0.requestInputMonitoringCallCount = newValue } }
+    }
+    var openedPrivacySettingsAnchors: [String] {
+        get { state.withLock { $0.openedPrivacySettingsAnchors } }
+        set { state.withLock { $0.openedPrivacySettingsAnchors = newValue } }
     }
     var accessibilityGranted: Bool {
         get { state.withLock { $0.accessibilityGranted } }

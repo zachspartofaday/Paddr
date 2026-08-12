@@ -42,6 +42,11 @@ public enum MenuFailure: Equatable, Sendable {
     }
 }
 
+public enum MenuStatusMessageState: Equatable, Sendable {
+    case guidance
+    case failure
+}
+
 public enum MenuStatus: Equatable, Sendable {
     case off
     case waitingForController
@@ -75,16 +80,20 @@ public enum MenuStatus: Equatable, Sendable {
         }
     }
 
-    public var needsActionMessage: Bool {
+    public var messageState: MenuStatusMessageState? {
         switch self {
-        case .waitingForController, .connecting,
-             .requestingInputMonitoring, .requestingAccessibility, .inputMonitoringSettings,
-             .accessibilitySettings, .releasingOutputs, .failure:
-            true
-        case .off, .active, .configurationSaved, .defaultsRestored, .stopped:
-            false
+        case .defaultsRestored, .requestingInputMonitoring, .requestingAccessibility,
+             .inputMonitoringSettings, .accessibilitySettings:
+            .guidance
+        case .failure:
+            .failure
+        case .off, .waitingForController, .connecting, .active, .configurationSaved,
+             .releasingOutputs, .stopped:
+            nil
         }
     }
+
+    public var needsActionMessage: Bool { messageState != nil }
 }
 
 public enum InputMonitoringStatus: String, Equatable, Sendable {

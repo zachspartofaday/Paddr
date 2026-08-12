@@ -9,35 +9,32 @@ struct StatusCell: View {
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     var body: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: 7) {
             Image(systemName: systemImage)
                 .foregroundStyle(state.color)
                 .symbolRenderingMode(.hierarchical)
-                .frame(width: 18)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .paddrTypography(.caption)
-                    .foregroundStyle(.secondary)
-                Text(value)
-                    .paddrTypography(.callout)
-                    .bold()
-                    .foregroundStyle(state.textColor)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 4)
+            Text(title)
+                .paddrTypography(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .paddrTypography(.callout)
+                .bold()
+                .foregroundStyle(state.textColor)
+                .lineLimit(1)
         }
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, minHeight: 44)
-        .background(state.color.opacity(0.09), in: .rect(cornerRadius: 10))
+        .padding(.horizontal, 10)
+        .frame(minHeight: 32)
+        .background(state.color.opacity(0.11), in: .capsule)
         .overlay {
             if colorSchemeContrast == .increased {
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(state.color, lineWidth: 1.5)
+                Capsule().strokeBorder(state.color, lineWidth: 1.5)
             }
         }
-        .accessibilityElement(children: .combine)
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(value)
     }
 }

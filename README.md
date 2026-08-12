@@ -118,6 +118,17 @@ scripts/paddr.sh --left-mode dpad --left-layout grid-nine \
 - Broad hardware and game testing is still needed.
 - Per-game and per-app profiles are planned for a future release.
 
+## Planned features
+
+- Mouse Acceleration Settings
+- Additional Zone Layouts
+- Custom Zone Layouts
+
+## Known issues
+
+- The Input Monitoring Request button may not produce a system permission prompt (macOS declines to re-prompt after a prior denial). Resolution: open System Settings → Privacy & Security → Input Monitoring, click the + button, and add Paddr manually.
+- Games with dynamic glyphs / control-icon indicators may switch back and forth between controller button icons and keyboard binds.
+
 ## Contributing
 
 Issues and focused pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). `@zachspartofaday` is the code owner and sole merge authority.

@@ -59,6 +59,21 @@ struct ButtonZoneConfigurationView: View {
 
     private var inspector: some View {
         VStack(alignment: .leading, spacing: PaddrStyle.insetHeaderContentSpacing) {
+            Text(LocalizedStringResource("Zone settings"))
+                .paddrTypography(.callout)
+                .bold()
+                .frame(minHeight: PaddrStyle.insetHeaderHeight)
+                .accessibilityAddTraits(.isHeader)
+
+            HStack(spacing: PaddrStyle.settingsControlSpacing) {
+                Text(LocalizedStringResource("Mode"))
+                    .paddrTypography(.callout)
+                    .bold()
+                Spacer(minLength: PaddrStyle.settingsControlSpacing)
+                areaLayoutPicker
+            }
+            .frame(minHeight: PaddrStyle.insetHeaderHeight)
+
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: PaddrStyle.settingsControlSpacing) {
                     selectedAreaTitle
@@ -108,6 +123,18 @@ struct ButtonZoneConfigurationView: View {
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .accessibilityElement(children: .contain)
+    }
+
+    private var areaLayoutPicker: some View {
+        Picker("Area layout", selection: $configuration.zoneLayout) {
+            ForEach(PadZoneLayout.allCases, id: \.self) { layout in
+                Text(layout.displayName).tag(layout)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(width: 160, alignment: .trailing)
+        .help("Choose how the trackpad is divided into button areas.")
     }
 
     private var selectedAreaTitle: some View {

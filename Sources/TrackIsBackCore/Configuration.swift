@@ -18,6 +18,7 @@ public enum PadMode: String, Codable, CaseIterable, Sendable {
 
 public enum ConfigurationLimits {
     public static let sensitivity = 0.1...20.0
+    public static let scrollSensitivity = 0.0...1.0
     public static let tapMaximumMilliseconds = 1.0...5_000.0
     public static let tapMaximumMovement = 0.0...100_000.0
     public static let mouseDeadzone = 0.0...1.0
@@ -125,6 +126,7 @@ public struct GridKeyConfiguration: Codable, Equatable, Sendable {
 public struct PadConfiguration: Codable, Equatable, Sendable {
     public var mode: PadMode
     public var sensitivity: Double
+    public var scrollSensitivity: Double
     public var mouseDeadzone: Double
     public var tapKey: String?
     public var tapMaximumMilliseconds: Double
@@ -137,6 +139,7 @@ public struct PadConfiguration: Codable, Equatable, Sendable {
     public init(
         mode: PadMode,
         sensitivity: Double = 1,
+        scrollSensitivity: Double = 1,
         mouseDeadzone: Double = 0,
         tapKey: String? = nil,
         tapMaximumMilliseconds: Double = 250,
@@ -148,6 +151,7 @@ public struct PadConfiguration: Codable, Equatable, Sendable {
     ) {
         self.mode = mode
         self.sensitivity = sensitivity
+        self.scrollSensitivity = scrollSensitivity
         self.mouseDeadzone = mouseDeadzone
         self.tapKey = tapKey
         self.tapMaximumMilliseconds = tapMaximumMilliseconds
@@ -207,15 +211,18 @@ public struct PadConfiguration: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case mode, sensitivity, mouseDeadzone, tapKey, tapMaximumMilliseconds, tapMaximumMovement
-        case dpadDeadzone, zoneLayout, dpadKeys, gridKeys
+        case mode, sensitivity, scrollSensitivity, mouseDeadzone, tapKey
+        case tapMaximumMilliseconds, tapMaximumMovement, dpadDeadzone, zoneLayout, dpadKeys, gridKeys
     }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        let sensitivity = try values.decodeIfPresent(Double.self, forKey: .sensitivity) ?? 1
         self.init(
             mode: try values.decodeIfPresent(PadMode.self, forKey: .mode) ?? .disabled,
-            sensitivity: try values.decodeIfPresent(Double.self, forKey: .sensitivity) ?? 1,
+            sensitivity: sensitivity,
+            scrollSensitivity: try values.decodeIfPresent(Double.self, forKey: .scrollSensitivity)
+                ?? min(sensitivity, ConfigurationLimits.scrollSensitivity.upperBound),
             mouseDeadzone: try values.decodeIfPresent(Double.self, forKey: .mouseDeadzone) ?? 0,
             tapKey: try values.decodeIfPresent(String.self, forKey: .tapKey),
             tapMaximumMilliseconds: try values.decodeIfPresent(Double.self, forKey: .tapMaximumMilliseconds) ?? 250,
@@ -260,6 +267,10 @@ public struct TrackIsBackConfiguration: Codable, Equatable, Sendable {
     private func validate(side: PadSide, pad: inout PadConfiguration) throws {
         guard pad.sensitivity.isFinite, ConfigurationLimits.sensitivity.contains(pad.sensitivity) else {
             throw TrackIsBackError.configuration("\(side.rawValue) sensitivity must be between 0.1 and 20.")
+        }
+        guard pad.scrollSensitivity.isFinite,
+              ConfigurationLimits.scrollSensitivity.contains(pad.scrollSensitivity) else {
+            throw TrackIsBackError.configuration("\(side.rawValue) scrollSensitivity must be between 0 and 1.")
         }
         guard pad.mouseDeadzone.isFinite, ConfigurationLimits.mouseDeadzone.contains(pad.mouseDeadzone) else {
             throw TrackIsBackError.configuration("\(side.rawValue) mouseDeadzone must be between 0 and 1.")
