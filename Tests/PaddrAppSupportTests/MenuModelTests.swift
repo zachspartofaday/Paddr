@@ -774,6 +774,35 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(relaunched.hasUnsavedChanges)
     }
 
+    func testBothPadsRemainZonesAcrossSaveAndRelaunch() async {
+        let state = readyState(controller: nil)
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.left.mode = .dpad
+        model.configuration.left.zoneLayout = .horizontalTwo
+        model.configuration.left.dpadKeys.left = "q"
+        model.configuration.right.mode = .dpad
+        model.configuration.right.zoneLayout = .verticalTwo
+        model.configuration.right.dpadKeys.up = "e"
+
+        model.saveAndApply()
+        await waitUntil(model: model) { model.status == .configurationSaved }
+        let saved = try! XCTUnwrap(state.savedConfiguration)
+        XCTAssertEqual(saved.left.mode, .dpad)
+        XCTAssertEqual(saved.left.zoneLayout, .horizontalTwo)
+        XCTAssertEqual(saved.left.dpadKeys.left, "q")
+        XCTAssertEqual(saved.right.mode, .dpad)
+        XCTAssertEqual(saved.right.zoneLayout, .verticalTwo)
+        XCTAssertEqual(saved.right.dpadKeys.up, "e")
+
+        state.loadedConfiguration = saved
+        let relaunched = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: relaunched) { relaunched.isInitialized }
+        XCTAssertEqual(relaunched.configuration, saved)
+        XCTAssertEqual(relaunched.savedConfiguration, saved)
+        XCTAssertFalse(relaunched.hasUnsavedChanges)
+    }
+
     func testTerminationAwaitsSessionStop() async {
         let state = readyState(controller: "Fake")
         let session = ScriptedSession(events: [.connected("Fake puck")], keepsStreamOpen: true)
