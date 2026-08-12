@@ -345,8 +345,95 @@ final class MenuModelTests: XCTestCase {
         state.saveGate = nil
         saveGate.signal()
         await waitUntil(model: model) { await session.startCount == 2 }
+        await session.send(.waitingForController("Fake receiver"))
+        await session.send(.controllerConnected)
+        await waitUntil(model: model) { model.controllerConnected }
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .waitingForNeutral)
+
+        await session.send(.outputArmed)
+        await waitUntil(model: model) { model.isRunning }
+        XCTAssertEqual(model.status, .active)
+        model.isEnabled = false
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+    }
+
+    func testSupersededSaveCompletionDoesNotSupersedeCurrentSessionLifecycle() async {
+        let state = readyState(receiver: "Fake receiver")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 1 }
         await session.connect(receiver: "Fake receiver")
         await waitUntil(model: model) { model.status == .active }
+
+        model.configuration.left.sensitivity = 3
+        let firstSaveGate = DispatchSemaphore(value: 0)
+        state.saveGate = firstSaveGate
+        model.saveAndApply()
+        await waitUntil { state.saveCallCount == 1 }
+
+        model.configuration.left.sensitivity = 5
+        model.saveAndApply()
+        let secondSaveGate = DispatchSemaphore(value: 0)
+        state.saveGate = secondSaveGate
+        firstSaveGate.signal()
+        await waitUntil { state.saveCallCount == 2 && state.saveCompletionCount == 1 }
+
+        await session.send(.controllerLost(.init(reportCount: 4, actionCount: 2)))
+        for _ in 0..<1_000 {
+            if !model.controllerConnected { break }
+            await Task.yield()
+        }
+        XCTAssertFalse(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .waitingForController)
+        let startCountBeforeLatestCompletion = await session.startCount
+        XCTAssertEqual(startCountBeforeLatestCompletion, 1)
+
+        state.saveGate = nil
+        secondSaveGate.signal()
+        await waitUntil(model: model) {
+            await session.startCount == 2 && state.saveCompletionCount == 2
+        }
+        model.isEnabled = false
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+    }
+
+    func testDelayedSaveFailureDoesNotRestartOrHideCurrentSessionState() async {
+        let state = readyState(receiver: "Fake receiver")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.connect(receiver: "Fake receiver")
+        await waitUntil(model: model) { model.status == .active }
+
+        model.configuration.left.sensitivity = 3
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        model.saveAndApply()
+        await waitUntil { state.saveCallCount == 1 }
+
+        await session.send(.controllerLost(.init(reportCount: 4, actionCount: 2)))
+        await waitUntil(model: model) { model.status == .waitingForController }
+        state.saveFailure = "disk full"
+        state.saveGate = nil
+        let statusChangeCount = state.statusChangeCount
+        model.statusDidChange = { state.statusChangeCount += 1 }
+        saveGate.signal()
+        await waitUntil { state.statusChangeCount > statusChangeCount }
+        model.statusDidChange = nil
+
+        let startCount = await session.startCount
+        XCTAssertEqual(state.saveCompletionCount, 1)
+        XCTAssertEqual(startCount, 1)
+        XCTAssertFalse(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertEqual(model.status, .waitingForController)
         model.isEnabled = false
         await waitUntil(model: model) { !model.hasPendingLifecycleWork }
     }
@@ -370,6 +457,37 @@ final class MenuModelTests: XCTestCase {
         XCTAssertTrue(model.controllerConnected)
         let startCount = await session.startCount
         XCTAssertEqual(startCount, 1)
+    }
+
+    func testReconnectDoesNotAdoptNewerUnrelatedStatusAuthority() async {
+        let state = readyState(receiver: nil)
+        let sleeper = ManualSleeper()
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(
+            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+        )
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.status == .waitingForController }
+
+        model.configuration.left.sensitivity = 21
+        model.saveAndApply()
+        guard case .failure(.configurationInvalid) = model.status else {
+            return XCTFail("Expected the newer validation failure")
+        }
+
+        state.receiver = "Fake puck"
+        sleeper.wake()
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.send(.controllerConnected)
+        await waitUntil(model: model) { model.controllerConnected }
+
+        XCTAssertFalse(model.isRunning)
+        guard case .failure(.configurationInvalid) = model.status else {
+            return XCTFail("Expected reconnect to preserve the newer validation failure")
+        }
+        model.isEnabled = false
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
     }
 
     func testDeviceRemovalKeepsToggleOnAndReturnsToWaiting() async {
@@ -1301,6 +1419,7 @@ final class MenuModelTests: XCTestCase {
             },
             saveConfiguration: {
                 state.saveCallCount += 1
+                defer { state.saveCompletionCount += 1 }
                 state.saveGate?.wait()
                 if let failure = state.saveFailure {
                     throw TrackIsBackError.configuration(failure)
@@ -1570,6 +1689,7 @@ private final class ModelDependencyState: Sendable {
         var saveFailure: String?
         var saveGate: DispatchSemaphore?
         var saveCallCount = 0
+        var saveCompletionCount = 0
         var probeCallCount = 0
         var probeGate: DispatchSemaphore?
         var statusChangeCount = 0
@@ -1623,6 +1743,10 @@ private final class ModelDependencyState: Sendable {
     var saveCallCount: Int {
         get { state.withLock { $0.saveCallCount } }
         set { state.withLock { $0.saveCallCount = newValue } }
+    }
+    var saveCompletionCount: Int {
+        get { state.withLock { $0.saveCompletionCount } }
+        set { state.withLock { $0.saveCompletionCount = newValue } }
     }
     var probeCallCount: Int {
         get { state.withLock { $0.probeCallCount } }
