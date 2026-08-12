@@ -129,15 +129,24 @@ public enum ConfigurationProfileStore {
     }
 
     static func decodeConfiguration(from data: Data) throws -> TrackIsBackConfiguration {
+        try decodeConfigurationInput(from: data).configuration
+    }
+
+    static func decodeConfigurationInput(
+        from data: Data
+    ) throws -> (
+        configuration: TrackIsBackConfiguration,
+        profileDocument: ConfigurationProfileDocument?
+    ) {
         if try isProfileDocument(data) {
             let document = try JSONDecoder().decode(ConfigurationProfileDocument.self, from: data)
             let validated = try document.validated()
             guard let active = validated.activeProfile else {
                 throw TrackIsBackError.configuration("The active profile does not exist.")
             }
-            return active.configuration
+            return (active.configuration, validated)
         }
-        return try decodeLegacyConfiguration(data)
+        return (try decodeLegacyConfiguration(data), nil)
     }
 
     static func isProfileDocument(_ data: Data) throws -> Bool {

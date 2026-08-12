@@ -140,8 +140,9 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
     let configuration: TrackIsBackConfiguration
     let profileDocument: ConfigurationProfileDocument?
     if let explicitConfigurationURL {
-        configuration = try ConfigurationStore.load(from: explicitConfigurationURL)
-        profileDocument = nil
+        let loaded = try ConfigurationStore.loadInput(from: explicitConfigurationURL)
+        configuration = loaded.configuration
+        profileDocument = loaded.profileDocument
     } else {
         let loaded = try ConfigurationProfileStore.load(from: profileStoreURL)
         profileDocument = loaded.document

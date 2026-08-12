@@ -11,11 +11,39 @@ public enum ConfigurationStore {
         )
     }
 
+    package static func loadInput(
+        from url: URL
+    ) throws -> (
+        configuration: TrackIsBackConfiguration,
+        profileDocument: ConfigurationProfileDocument?
+    ) {
+        try loadInput(
+            from: url,
+            fileManager: .default,
+            homeDirectory: FileManager.default.homeDirectoryForCurrentUser
+        )
+    }
+
     static func load(
         from url: URL?,
         fileManager: FileManager,
         homeDirectory: URL
     ) throws -> TrackIsBackConfiguration {
+        try loadInput(
+            from: url,
+            fileManager: fileManager,
+            homeDirectory: homeDirectory
+        ).configuration
+    }
+
+    private static func loadInput(
+        from url: URL?,
+        fileManager: FileManager,
+        homeDirectory: URL
+    ) throws -> (
+        configuration: TrackIsBackConfiguration,
+        profileDocument: ConfigurationProfileDocument?
+    ) {
         let isExplicitURL = url != nil
         let candidate = url ?? defaultCandidateURL(
             fileManager: fileManager,
@@ -27,7 +55,7 @@ public enum ConfigurationStore {
                     "Configuration file does not exist at \(candidate.path)."
                 )
             }
-            return .default
+            return (.default, nil)
         }
         do {
             let values = try candidate.resourceValues(forKeys: [.isRegularFileKey])
@@ -37,7 +65,7 @@ public enum ConfigurationStore {
                 )
             }
             let data = try Data(contentsOf: candidate)
-            return try ConfigurationProfileStore.decodeConfiguration(from: data)
+            return try ConfigurationProfileStore.decodeConfigurationInput(from: data)
         } catch let error as TrackIsBackError {
             throw error
         } catch {
