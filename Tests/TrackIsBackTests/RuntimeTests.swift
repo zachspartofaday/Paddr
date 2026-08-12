@@ -197,10 +197,10 @@ final class RuntimeTests: XCTestCase {
         let clock = ManualUptimeClock()
         let hid = ScriptedHID(clock: clock, steps: [
             .report(neutralReport(), at: 100),
-            .wake(at: 1_000_000_099),
-            .report(neutralReport(), at: 1_000_000_100),
+            .wake(at: 1_000_000_098),
+            .report(neutralReport(), at: 1_000_000_099),
+            .wake(at: 2_000_000_098),
             .wake(at: 2_000_000_099),
-            .wake(at: 2_000_000_100),
             .stop
         ])
         let events = EventRecorder()
@@ -247,6 +247,62 @@ final class RuntimeTests: XCTestCase {
         let entries = timeline.entries
         let lostIndex = try XCTUnwrap(entries.firstIndex { $0.contains("controllerLost") })
         XCTAssertLessThan(try XCTUnwrap(entries.firstIndex(of: "key space up")), lostIndex)
+    }
+
+    func testAcceptedReportAfterReceiveGapCleansUpBeforeStartingFreshEpoch() throws {
+        let clock = ManualUptimeClock()
+        let timeline = TimelineRecorder()
+        let output = RecordingOutput { action in timeline.append(action.description) }
+        let events = EventRecorder { event in timeline.append(String(describing: event)) }
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .report(heldLeftReport(), at: 10),
+            .report(heldLeftReport(), at: 1_000_000_011),
+            .wake(at: 1_000_000_011),
+            .report(neutralReport(), at: 1_100_000_000),
+            .report(heldLeftReport(), at: 1_200_000_000),
+            .stop
+        ])
+        var configuration = TrackIsBackConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+
+        _ = try run(
+            configuration: configuration,
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: events
+        )
+
+        let space = try KeyCatalog.resolve("space")
+        XCTAssertEqual(output.actions, [
+            .key(space, isPressed: true),
+            .key(space, isPressed: false),
+            .key(space, isPressed: true),
+            .key(space, isPressed: false)
+        ])
+        XCTAssertEqual(events.events.filter { if case .controllerLost = $0 { true } else { false } }.count, 1)
+        XCTAssertTrue(events.events.contains(.controllerLost(.init(reportCount: 2, actionCount: 1))))
+        XCTAssertEqual(events.events.filter { $0 == .controllerConnected }.count, 2)
+        XCTAssertEqual(events.events.filter { $0 == .outputArmed }.count, 2)
+
+        let entries = timeline.entries
+        let releaseIndex = try XCTUnwrap(entries.firstIndex(of: "key space up"))
+        let lostIndex = try XCTUnwrap(entries.firstIndex { $0.contains("controllerLost") })
+        let reconnectIndex = try XCTUnwrap(
+            entries.indices.dropFirst(lostIndex + 1).first { entries[$0].contains("controllerConnected") }
+        )
+        let rearmIndex = try XCTUnwrap(
+            entries.indices.dropFirst(reconnectIndex + 1).first { entries[$0].contains("outputArmed") }
+        )
+        let freshPressIndex = try XCTUnwrap(
+            entries.indices.dropFirst(rearmIndex + 1).first { entries[$0] == "key space down" }
+        )
+        XCTAssertLessThan(releaseIndex, lostIndex)
+        XCTAssertLessThan(lostIndex, reconnectIndex)
+        XCTAssertLessThan(reconnectIndex, rearmIndex)
+        XCTAssertLessThan(rearmIndex, freshPressIndex)
     }
 
     func testLossReleasesDistinctKeyAndMouseBeforePublishingLost() throws {

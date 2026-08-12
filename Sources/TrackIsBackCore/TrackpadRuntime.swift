@@ -143,6 +143,15 @@ public enum TrackpadRuntime {
             }
         }
 
+        func loseControllerIfDeadlineReached(at uptime: UInt64) throws {
+            guard let lastAcceptedReportUptime,
+                  uptime >= lastAcceptedReportUptime,
+                  uptime - lastAcceptedReportUptime >= controllerLossDeadlineNanoseconds
+            else { return }
+            try cleanupControllerEpoch()
+            onEvent?(.controllerLost(summary()))
+        }
+
         onEvent?(.waitingForController(device.summaryDescription))
         let streamOutcome: Result<TrackpadStreamTermination, any Error>
         do {
@@ -151,18 +160,13 @@ public enum TrackpadRuntime {
                     stopToken.shouldContinue && (deadline.map { dependencies.wallNow() < $0 } ?? true)
                 },
                 onWake: {
-                    guard let lastAcceptedReportUptime else { return }
-                    let now = dependencies.uptimeNanoseconds()
-                    guard now >= lastAcceptedReportUptime,
-                          now - lastAcceptedReportUptime >= controllerLossDeadlineNanoseconds
-                    else { return }
-                    try cleanupControllerEpoch()
-                    onEvent?(.controllerLost(summary()))
+                    try loseControllerIfDeadlineReached(at: dependencies.uptimeNanoseconds())
                 },
                 onReport: { bytes, timestamp in
                     guard let pads = TritonParser.parseTrackpads(bytes, timestampNanoseconds: timestamp) else {
                         return
                     }
+                    try loseControllerIfDeadlineReached(at: timestamp)
                     lastAcceptedReportUptime = timestamp
                     reportCount += 1
 
