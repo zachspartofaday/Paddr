@@ -39,9 +39,6 @@ Puck mode is the only confirmed connection. Bluetooth and direct USB remain unva
 
 Closing the configuration window leaves Paddr in the menu bar with quick actions for output, configuration, and quitting. The window remains ordinarily resizable but does not support full screen.
 
-> [!IMPORTANT]
-> The current downloadable beta is ad-hoc signed and unnotarized. macOS may request permissions again after updates and may show additional Gatekeeper warnings. A Developer ID-signed and notarized release is planned.
-
 ## Button Zones
 
 Choose **Zones** independently for either trackpad:
@@ -65,28 +62,6 @@ open dist/Paddr.app
 ```
 
 Paddr builds for arm64 and retains macOS 26.0 as its deployment target in case Apple back-deploys controller support.
-
-### Signing and notarization
-
-Local builds are ad-hoc signed unless a Developer ID Application identity is supplied:
-
-```bash
-SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
-scripts/build-app.sh
-```
-
-Create and verify a clean signed ZIP with:
-
-```bash
-EXPECTED_VERSION=0.6.1 \
-EXPECTED_BUILD=10 \
-SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
-scripts/package-release.sh
-```
-
-Notarization requires an active Apple Developer Program membership, a Developer ID Application certificate, hardened runtime, and credentials for `notarytool`. The current scripts sign and verify packages but intentionally do not submit, staple, or publish them.
-
-Apple's documentation: [Developer ID certificates](https://developer.apple.com/help/account/certificates/create-developer-id-certificates) and [Notarizing macOS software](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution).
 
 ## CLI
 
