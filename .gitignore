@@ -5,3 +5,5 @@ dist/
 .swiftpm/
 .DS_Store
 *.xcuserstate
+docs/audits/
+docs/kickoffs/
