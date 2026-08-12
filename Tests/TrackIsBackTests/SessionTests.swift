@@ -139,6 +139,44 @@ final class SessionTests: XCTestCase {
         await stop.value
     }
 
+    func testControllerStateSurvivesProgressPressureAndTerminalFinishesStream() async {
+        let runtime = ProgressPressureRuntime()
+        let session = TrackpadSession(runtime: runtime.run)
+        let stream = await session.start(configuration: configuration(sensitivity: 1))
+        await runtime.waitUntilProduced()
+
+        var iterator = stream.makeAsyncIterator()
+        var bufferedEvents: [TrackpadSessionEvent] = []
+        for _ in 0..<32 {
+            guard let event = await iterator.next() else {
+                return XCTFail("Expected the bounded session buffer to remain open")
+            }
+            bufferedEvents.append(event)
+        }
+
+        let connectedIndex = bufferedEvents.firstIndex(of: .controllerConnected)
+        let armedIndex = bufferedEvents.lastIndex(of: .outputArmed)
+        XCTAssertNotNil(connectedIndex)
+        XCTAssertNotNil(armedIndex)
+        if let connectedIndex, let armedIndex {
+            XCTAssertLessThan(connectedIndex, armedIndex)
+        }
+        XCTAssertEqual(
+            bufferedEvents.compactMap { event -> TrackpadRunSummary? in
+                guard case let .progress(summary) = event else { return nil }
+                return summary
+            }.last,
+            .init(reportCount: 80, actionCount: 8)
+        )
+        XCTAssertLessThanOrEqual(bufferedEvents.count, 32)
+
+        runtime.release()
+        var suffix: [TrackpadSessionEvent] = []
+        while let event = await iterator.next() { suffix.append(event) }
+        XCTAssertEqual(suffix, [.stopped(.init(reportCount: 80, actionCount: 8))])
+        await session.stop()
+    }
+
     func testEventGateRejectsEnqueueFromSupersededGeneration() {
         let gate = SessionEventGate()
         var delivered: [String] = []
@@ -166,6 +204,53 @@ final class SessionTests: XCTestCase {
 
     private func waitForEpoch(_ epoch: UInt64, session: TrackpadSession) async {
         await session.waitForRequestEpochForTesting(epoch)
+    }
+}
+
+private final class ProgressPressureRuntime: Sendable {
+    private let produced: AsyncStream<Void>
+    private let producedContinuation: AsyncStream<Void>.Continuation
+    private let releaseGate = DispatchSemaphore(value: 0)
+
+    init() {
+        (produced, producedContinuation) = AsyncStream<Void>.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
+    }
+
+    func run(
+        configuration: TrackIsBackConfiguration,
+        observeOnly: Bool,
+        stopToken: TrackpadStopToken,
+        event: @escaping @Sendable (TrackpadSessionEvent) -> Void
+    ) throws -> TrackpadRunResult {
+        event(.waitingForController("pressure-test"))
+        event(.controllerConnected)
+        event(.outputArmed)
+        for reportCount in 1...40 {
+            event(.progress(.init(reportCount: reportCount, actionCount: reportCount / 10)))
+        }
+        event(.controllerLost(.init(reportCount: 40, actionCount: 4)))
+        event(.controllerConnected)
+        event(.outputArmed)
+        for reportCount in 41...80 {
+            event(.progress(.init(reportCount: reportCount, actionCount: reportCount / 10)))
+        }
+        producedContinuation.yield(())
+        releaseGate.wait()
+        return TrackpadRunResult(
+            summary: .init(reportCount: 80, actionCount: 8),
+            termination: .stopped
+        )
+    }
+
+    func waitUntilProduced() async {
+        var iterator = produced.makeAsyncIterator()
+        _ = await iterator.next()
+    }
+
+    func release() {
+        releaseGate.signal()
     }
 }
 

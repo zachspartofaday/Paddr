@@ -230,6 +230,27 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.status, .active)
     }
 
+    func testProgressPressurePreservesReconnectedActiveStateAndLatestCounters() async {
+        let state = readyState(receiver: "Fake receiver")
+        let session = ProgressPressureSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.isEnabled = true
+        await waitUntil(model: model) {
+            model.reportCount == 80 && model.actionCount == 8
+        }
+
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertTrue(model.isRunning)
+        XCTAssertEqual(model.status, .active)
+        XCTAssertEqual(model.reportCount, 80)
+        XCTAssertEqual(model.actionCount, 8)
+
+        model.isEnabled = false
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+    }
+
     func testControllerLossKeepsReceiverStreamAndWaitsForFreshEvidence() async {
         let state = readyState(receiver: "Fake receiver")
         let session = ManualEventSession()
@@ -1175,6 +1196,78 @@ final class MenuModelTests: XCTestCase {
         for await _ in changes {
             if await condition() { return }
         }
+    }
+}
+
+private actor ProgressPressureSession: TrackpadSessionControlling {
+    private let runtime: MenuProgressPressureRuntime
+    private let session: TrackpadSession
+
+    init() {
+        let runtime = MenuProgressPressureRuntime()
+        self.runtime = runtime
+        session = TrackpadSession(runtime: runtime.run)
+    }
+
+    func start(
+        configuration: TrackIsBackConfiguration,
+        observeOnly: Bool
+    ) async -> AsyncStream<TrackpadSessionEvent> {
+        let stream = await session.start(configuration: configuration, observeOnly: observeOnly)
+        await runtime.waitUntilProduced()
+        return stream
+    }
+
+    func stop() async {
+        runtime.release()
+        await session.stop()
+    }
+}
+
+private final class MenuProgressPressureRuntime: Sendable {
+    private let produced: AsyncStream<Void>
+    private let producedContinuation: AsyncStream<Void>.Continuation
+    private let releaseGate = DispatchSemaphore(value: 0)
+
+    init() {
+        (produced, producedContinuation) = AsyncStream<Void>.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
+    }
+
+    func run(
+        configuration: TrackIsBackConfiguration,
+        observeOnly: Bool,
+        stopToken: TrackpadStopToken,
+        event: @escaping @Sendable (TrackpadSessionEvent) -> Void
+    ) throws -> TrackpadRunResult {
+        event(.waitingForController("pressure-test"))
+        event(.controllerConnected)
+        event(.outputArmed)
+        for reportCount in 1...40 {
+            event(.progress(.init(reportCount: reportCount, actionCount: reportCount / 10)))
+        }
+        event(.controllerLost(.init(reportCount: 40, actionCount: 4)))
+        event(.controllerConnected)
+        event(.outputArmed)
+        for reportCount in 41...80 {
+            event(.progress(.init(reportCount: reportCount, actionCount: reportCount / 10)))
+        }
+        producedContinuation.yield(())
+        releaseGate.wait()
+        return TrackpadRunResult(
+            summary: .init(reportCount: 80, actionCount: 8),
+            termination: .stopped
+        )
+    }
+
+    func waitUntilProduced() async {
+        var iterator = produced.makeAsyncIterator()
+        _ = await iterator.next()
+    }
+
+    func release() {
+        releaseGate.signal()
     }
 }
 

@@ -282,7 +282,8 @@ public actor TrackpadSession: TrackpadSessionControlling {
         let (stream, continuation) = AsyncStream<TrackpadSessionEvent>.makeStream(
             bufferingPolicy: .bufferingNewest(32)
         )
-        continuation.yield(.connecting)
+        let eventBuffer = SessionEventBuffer(continuation: continuation)
+        eventBuffer.yield(.connecting)
         let runtime = self.runtime
         let eventGate = self.eventGate
 
@@ -294,7 +295,7 @@ public actor TrackpadSession: TrackpadSessionControlling {
                     token,
                     { event in
                         eventGate.enqueue(ifCurrent: request) {
-                            continuation.yield(event)
+                            eventBuffer.yield(event)
                         }
                     }
                 )
@@ -303,21 +304,21 @@ public actor TrackpadSession: TrackpadSessionControlling {
                 switch outcome {
                 case let .success(result):
                     switch result.termination {
-                    case .stopped: continuation.yield(.stopped(result.summary))
-                    case .deviceRemoved: continuation.yield(.receiverRemoved(result.summary))
+                    case .stopped: eventBuffer.yield(.stopped(result.summary))
+                    case .deviceRemoved: eventBuffer.yield(.receiverRemoved(result.summary))
                     }
                 case let .failure(error as TrackIsBackError):
                     if case .device = error {
-                        continuation.yield(.receiverUnavailable(error.description))
+                        eventBuffer.yield(.receiverUnavailable(error.description))
                     } else {
-                        continuation.yield(.failed(error.description))
+                        eventBuffer.yield(.failed(error.description))
                     }
                 case let .failure(error):
-                    continuation.yield(.failed(String(describing: error)))
+                    eventBuffer.yield(.failed(String(describing: error)))
                 }
-                continuation.finish()
+                eventBuffer.finish()
             }
-            if !delivered { continuation.finish() }
+            if !delivered { eventBuffer.finish() }
         }
         activeWorker = WorkerRecord(id: request, stopToken: token, task: task)
         continuation.onTermination = { @Sendable [weak token] _ in token?.requestStop() }
@@ -375,6 +376,61 @@ public actor TrackpadSession: TrackpadSessionControlling {
             stopToken: stopToken,
             onEvent: onEvent
         )
+    }
+}
+
+private final class SessionEventBuffer: Sendable {
+    private let continuation: AsyncStream<TrackpadSessionEvent>.Continuation
+    private let controllerSnapshot = Mutex<[TrackpadSessionEvent]>([.connecting])
+
+    init(continuation: AsyncStream<TrackpadSessionEvent>.Continuation) {
+        self.continuation = continuation
+    }
+
+    func yield(_ event: TrackpadSessionEvent) {
+        let recoveryEvents = controllerSnapshot.withLock { snapshot in
+            switch event {
+            case .connecting:
+                snapshot = [.connecting]
+            case let .waitingForController(description):
+                snapshot = [.waitingForController(description)]
+            case .controllerConnected:
+                snapshot = [.controllerConnected]
+            case .outputArmed:
+                snapshot = [.controllerConnected, .outputArmed]
+            case let .controllerLost(summary):
+                snapshot = [.controllerLost(summary)]
+            case .progress:
+                break
+            case .stopped, .receiverRemoved, .receiverUnavailable, .failed:
+                snapshot = []
+            }
+            return snapshot
+        }
+
+        guard case let .dropped(droppedEvent) = continuation.yield(event),
+              droppedEvent.isControllerState,
+              !recoveryEvents.isEmpty
+        else { return }
+        for recoveryEvent in recoveryEvents {
+            continuation.yield(recoveryEvent)
+        }
+    }
+
+    func finish() {
+        continuation.finish()
+    }
+}
+
+private extension TrackpadSessionEvent {
+    var isControllerState: Bool {
+        switch self {
+        case .connecting, .waitingForController, .controllerConnected, .outputArmed,
+             .controllerLost:
+            true
+        case .progress, .stopped, .receiverRemoved, .receiverUnavailable, .failed:
+            false
+        }
     }
 }
 
