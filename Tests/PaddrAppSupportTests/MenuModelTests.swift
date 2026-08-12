@@ -307,6 +307,50 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.status, .active)
     }
 
+    func testSaveAndApplyKeepsCurrentSessionStatusAuthoritativeWhileSaveIsPending() async {
+        let state = readyState(receiver: "Fake receiver")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.connect(receiver: "Fake receiver")
+        await waitUntil(model: model) { model.status == .active }
+
+        model.configuration.left.sensitivity = 3
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        model.saveAndApply()
+        await waitUntil { state.saveCallCount == 1 }
+
+        await session.send(.controllerLost(.init(reportCount: 4, actionCount: 2)))
+        await waitUntil(model: model) { !model.controllerConnected }
+        XCTAssertFalse(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .waitingForController)
+
+        await session.send(.controllerConnected)
+        await waitUntil(model: model) { model.controllerConnected }
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .waitingForNeutral)
+
+        await session.send(.outputArmed)
+        await waitUntil(model: model) { model.isRunning }
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertTrue(model.isRunning)
+        XCTAssertEqual(model.status, .active)
+        XCTAssertEqual(state.saveCallCount, 1)
+
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) { await session.startCount == 2 }
+        await session.connect(receiver: "Fake receiver")
+        await waitUntil(model: model) { model.status == .active }
+        model.isEnabled = false
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+    }
+
     func testReconnectStartsSessionAndBecomesActive() async {
         let state = readyState(receiver: nil)
         let sleeper = ManualSleeper()
@@ -614,6 +658,38 @@ final class MenuModelTests: XCTestCase {
 
         model.requestAccessibility()
         XCTAssertEqual(model.status, .off)
+    }
+
+    func testAlreadyGrantedAccessibilityRequestKeepsCurrentSessionStatusAuthoritative() async {
+        let state = readyState(receiver: "Fake receiver")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.connect(receiver: "Fake receiver")
+        await waitUntil(model: model) { model.status == .active }
+
+        model.requestAccessibility()
+        XCTAssertEqual(model.status, .active)
+
+        await session.send(.controllerLost(.init(reportCount: 4, actionCount: 2)))
+        await waitUntil(model: model) { !model.controllerConnected }
+        XCTAssertFalse(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .waitingForController)
+
+        await session.send(.controllerConnected)
+        await waitUntil(model: model) { model.controllerConnected }
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .waitingForNeutral)
+
+        await session.send(.outputArmed)
+        await waitUntil(model: model) { model.isRunning }
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertTrue(model.isRunning)
+        XCTAssertEqual(model.status, .active)
     }
 
     func testAccessibilityRequestInvokesPromptDependency() async {

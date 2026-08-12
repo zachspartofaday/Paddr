@@ -9,11 +9,8 @@ public final class PaddrMenuModel {
         didSet {
             guard !isPublishingConfiguration else { return }
             draftRevision &+= 1
-            let sessionHadStatusAuthority = sessionID != nil
-                && sessionStatusGeneration == currentStatusGeneration
-            advanceStatusGeneration()
-            if sessionHadStatusAuthority {
-                sessionStatusGeneration = currentStatusGeneration
+            preservingCurrentSessionStatusAuthority {
+                advanceStatusGeneration()
             }
         }
     }
@@ -110,7 +107,9 @@ public final class PaddrMenuModel {
             statusDidChange?()
             return
         }
-        advanceStatusGeneration()
+        preservingCurrentSessionStatusAuthority {
+            advanceStatusGeneration()
+        }
         let initiatingStatusGeneration = currentStatusGeneration
 
         configurationEpoch &+= 1
@@ -217,7 +216,13 @@ public final class PaddrMenuModel {
     public func requestAccessibility() {
         guard terminationState == .idle else { return }
         accessibilityTrusted = dependencies.accessibilityTrusted(true)
-        publishStatus(accessibilityTrusted ? operationalStatus : .requestingAccessibility)
+        if accessibilityTrusted {
+            preservingCurrentSessionStatusAuthority {
+                publishStatus(operationalStatus)
+            }
+        } else {
+            publishStatus(.requestingAccessibility)
+        }
         schedulePermissionRefresh()
     }
 
@@ -605,6 +610,16 @@ public final class PaddrMenuModel {
 
     private var currentStatusGeneration: UInt64 {
         statusPublicationGeneration ?? statusGeneration
+    }
+
+    private func preservingCurrentSessionStatusAuthority(_ operation: () -> Void) {
+        let identifier = sessionID
+        let sessionHadStatusAuthority = identifier != nil
+            && sessionStatusGeneration == currentStatusGeneration
+        operation()
+        if sessionHadStatusAuthority, sessionID == identifier {
+            sessionStatusGeneration = currentStatusGeneration
+        }
     }
 
     private func advanceStatusGeneration() {
