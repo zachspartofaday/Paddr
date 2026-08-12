@@ -10,7 +10,7 @@ body:
     id: version
     attributes:
       label: Paddr version
-      placeholder: 0.6.1 (10)
+      placeholder: 0.9 (11)
     validations:
       required: true
   - type: input
