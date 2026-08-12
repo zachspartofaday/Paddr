@@ -524,6 +524,99 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { !model.hasPendingLifecycleWork }
     }
 
+    func testPermissionRecoveryRestoresReconnectStatusAuthority() async {
+        let state = readyState(receiver: nil)
+        let sleeper = ManualSleeper()
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(
+            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+        )
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.status == .waitingForController }
+
+        state.accessibilityGranted = false
+        model.openAccessibilitySettings()
+        XCTAssertEqual(model.status, .accessibilitySettings)
+
+        state.accessibilityGranted = true
+        model.refreshStatus()
+        await waitUntil(model: model) { model.status == .waitingForController }
+        XCTAssertTrue(model.hasSystemAccess)
+        XCTAssertFalse(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+
+        state.receiver = "Fake puck"
+        sleeper.wake()
+        await waitUntil(model: model) { await session.startCount == 1 }
+        XCTAssertFalse(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .connecting)
+
+        await session.send(.controllerConnected)
+        await waitUntil(model: model) { model.controllerConnected }
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .waitingForNeutral)
+
+        await session.send(.outputArmed)
+        await waitUntil(model: model) { model.isRunning }
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertTrue(model.isRunning)
+        XCTAssertEqual(model.status, .active)
+        model.isEnabled = false
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+    }
+
+    func testUntrustedAndSupersededPermissionRefreshCannotGrantReconnectAuthority() async {
+        let state = readyState(receiver: nil)
+        let sleeper = ManualSleeper()
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(
+            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+        )
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.status == .waitingForController }
+
+        state.accessibilityGranted = false
+        model.openAccessibilitySettings()
+        model.refreshStatus()
+        await waitUntil(model: model) { !model.hasSystemAccess }
+        XCTAssertEqual(model.status, .accessibilitySettings)
+
+        let probeCount = state.probeCallCount
+        let probeGate = DispatchSemaphore(value: 0)
+        state.probeGate = probeGate
+        model.refreshStatus()
+        await waitUntil { state.probeCallCount > probeCount }
+        model.openAccessibilitySettings()
+        state.accessibilityGranted = true
+
+        let statusChangeCount = state.statusChangeCount
+        model.statusDidChange = { state.statusChangeCount += 1 }
+        state.probeGate = nil
+        probeGate.signal()
+        await waitUntil { state.statusChangeCount > statusChangeCount }
+        model.statusDidChange = nil
+        XCTAssertTrue(model.hasSystemAccess)
+        XCTAssertEqual(model.status, .accessibilitySettings)
+
+        state.receiver = "Fake puck"
+        sleeper.wake()
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.send(.controllerConnected)
+        await waitUntil(model: model) { model.controllerConnected }
+        await session.send(.outputArmed)
+        await waitUntil(model: model) { model.isRunning }
+
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertTrue(model.isRunning)
+        XCTAssertEqual(model.status, .accessibilitySettings)
+        model.isEnabled = false
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+    }
+
     func testDeviceRemovalKeepsToggleOnAndReturnsToWaiting() async {
         let state = readyState(receiver: "Fake")
         let session = ScriptedSession(events: [

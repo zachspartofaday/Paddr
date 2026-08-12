@@ -518,13 +518,18 @@ public final class PaddrMenuModel {
         case .requestingAccessibility where accessibilityTrusted,
              .accessibilitySettings where accessibilityTrusted:
             let identifier = sessionID
+            let priorSessionStatusGeneration = identifier == nil ? nil : sessionStatusGeneration
+            let priorReconnectStatusGeneration = reconnectTask == nil
+                ? nil
+                : reconnectStatusGeneration
             let priorStatusGeneration = currentStatusGeneration
             publishStatus(operationalStatus)
-            if identifier != nil,
-               sessionID == identifier,
-               currentStatusGeneration != priorStatusGeneration {
-                sessionStatusGeneration = currentStatusGeneration
-            }
+            guard currentStatusGeneration != priorStatusGeneration else { return }
+            synchronizeOperationalStatusOwners(
+                sessionID: identifier,
+                sessionStatusGeneration: priorSessionStatusGeneration,
+                reconnectStatusGeneration: priorReconnectStatusGeneration
+            )
         default:
             break
         }
@@ -651,15 +656,36 @@ public final class PaddrMenuModel {
 
     private func preservingCurrentOperationalStatusAuthority(_ operation: () -> Void) {
         let identifier = sessionID
-        let sessionHadStatusAuthority = identifier != nil
+        let priorSessionStatusGeneration = identifier != nil
             && sessionStatusGeneration == currentStatusGeneration
-        let reconnectHadStatusAuthority = reconnectTask != nil
+            ? sessionStatusGeneration
+            : nil
+        let priorReconnectStatusGeneration = reconnectTask != nil
             && reconnectStatusGeneration == currentStatusGeneration
+            ? reconnectStatusGeneration
+            : nil
         operation()
-        if sessionHadStatusAuthority, sessionID == identifier {
+        synchronizeOperationalStatusOwners(
+            sessionID: identifier,
+            sessionStatusGeneration: priorSessionStatusGeneration,
+            reconnectStatusGeneration: priorReconnectStatusGeneration
+        )
+    }
+
+    private func synchronizeOperationalStatusOwners(
+        sessionID identifier: UUID?,
+        sessionStatusGeneration priorSessionStatusGeneration: UInt64?,
+        reconnectStatusGeneration priorReconnectStatusGeneration: UInt64?
+    ) {
+        if let identifier,
+           let priorSessionStatusGeneration,
+           sessionID == identifier,
+           sessionStatusGeneration == priorSessionStatusGeneration {
             sessionStatusGeneration = currentStatusGeneration
         }
-        if reconnectHadStatusAuthority, reconnectTask != nil {
+        if reconnectTask != nil,
+           let priorReconnectStatusGeneration,
+           reconnectStatusGeneration == priorReconnectStatusGeneration {
             reconnectStatusGeneration = currentStatusGeneration
         }
     }
