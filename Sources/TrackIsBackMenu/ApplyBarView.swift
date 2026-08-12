@@ -124,10 +124,7 @@ struct ApplyBarView: View {
 
                 Button("Save & Apply", systemImage: "checkmark", action: model.saveAndApply)
                     .paddrActionButton(prominent: true)
-                    .disabled(
-                        !model.canEditActiveProfile
-                            || (!model.hasUnsavedChanges && !model.isEnabled)
-                    )
+                    .disabled(!model.canSaveAndApply)
                     .keyboardShortcut("s", modifiers: .command)
             }
         }

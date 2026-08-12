@@ -84,6 +84,11 @@ public final class PaddrMenuModel {
         profiles.first { $0.id == activeProfileID } ?? .default
     }
     public var canEditActiveProfile: Bool { activeProfileID != .default }
+    public var canSaveAndApply: Bool {
+        !storageWriteBlocked
+            && (canEditActiveProfile || needsInitialSave)
+            && (hasUnsavedChanges || isEnabled)
+    }
     public var canSelectProfileFromMenu: Bool { !hasUnsavedChanges && configurationTask == nil }
 
     public init(dependencies: MenuDependencies = .live) {
@@ -122,7 +127,8 @@ public final class PaddrMenuModel {
     }
 
     public func saveAndApply() {
-        guard terminationState == .idle else { return }
+        guard terminationState == .idle,
+              !isInitialized || canEditActiveProfile || needsInitialSave else { return }
         let draft = configuration
         let initiatingDraftRevision = draftRevision
         let validated: TrackIsBackConfiguration
@@ -131,6 +137,17 @@ public final class PaddrMenuModel {
         } catch {
             publishStatus(.failure(.configurationInvalid(diagnostic: String(describing: error))))
             statusDidChange?()
+            return
+        }
+        if !storageWriteBlocked,
+           needsInitialSave,
+           activeProfileID == .default,
+           validated == .default {
+            beginProfileDocumentSave(
+                profileDocument,
+                replacingActiveConfiguration: isEnabled,
+                clearsInitialSave: true
+            )
             return
         }
         preservingCurrentOperationalStatusAuthority {
@@ -435,7 +452,8 @@ public final class PaddrMenuModel {
 
     private func beginProfileDocumentSave(
         _ document: ConfigurationProfileDocument,
-        replacingActiveConfiguration: Bool
+        replacingActiveConfiguration: Bool,
+        clearsInitialSave: Bool = false
     ) {
         guard terminationState == .idle, configurationTask == nil else { return }
         guard !storageWriteBlocked else {
@@ -501,8 +519,8 @@ public final class PaddrMenuModel {
                     let selected = document.activeProfile?.configuration ?? .default
                     publishConfiguration(selected)
                     savedConfiguration = selected
-                    needsInitialSave = false
                 }
+                if replacingActiveConfiguration || clearsInitialSave { needsInitialSave = false }
                 if shouldRestart {
                     withStatusPublicationGeneration(operationStatusGeneration) {
                         publishStatus(.configurationSaved)

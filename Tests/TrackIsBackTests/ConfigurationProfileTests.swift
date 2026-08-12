@@ -61,6 +61,51 @@ final class ConfigurationProfileTests: XCTestCase {
         XCTAssertNil(document.profile(matching: "Original"))
     }
 
+    func testUUIDTextCaseHasOneCanonicalIdentityAcrossDecodeValidationLookupAndEncoding() throws {
+        let lowercase = "a0000000-0000-0000-0000-000000000012"
+        let uppercase = lowercase.uppercased()
+        let decodedUppercase = try JSONDecoder().decode(
+            ConfigurationProfileID.self,
+            from: Data("\"\(uppercase)\"".utf8)
+        )
+
+        XCTAssertEqual(decodedUppercase, id(lowercase))
+        XCTAssertEqual(decodedUppercase.rawValue, lowercase)
+
+        var document = ConfigurationProfileDocument.default
+        let profile = try document.createProfile(named: "Original", id: id(lowercase))
+        XCTAssertEqual(document.profile(matching: uppercase), profile)
+        XCTAssertThrowsError(
+            try document.createProfile(named: "Collision", id: id(uppercase))
+        )
+
+        let encoded = try XCTUnwrap(
+            String(data: ConfigurationProfileStore.encoded(document), encoding: .utf8)
+        )
+        XCTAssertTrue(encoded.contains(lowercase))
+        XCTAssertFalse(encoded.contains(uppercase))
+    }
+
+    func testUUIDTextCaseCollisionInImportedDocumentIsRejectedAsDuplicate() throws {
+        let lowercase = "a0000000-0000-0000-0000-000000000013"
+        let uppercase = lowercase.uppercased()
+        let replacedID = "b0000000-0000-0000-0000-000000000013"
+        var source = ConfigurationProfileDocument.default
+        _ = try source.createProfile(named: "First", id: id(lowercase))
+        _ = try source.createProfile(named: "Second", id: id(replacedID))
+        let importedJSON = try XCTUnwrap(String(data: rawEncoded(source), encoding: .utf8))
+            .replacingOccurrences(of: replacedID, with: uppercase)
+        let imported = try JSONDecoder().decode(
+            ConfigurationProfileDocument.self,
+            from: Data(importedJSON.utf8)
+        )
+
+        XCTAssertEqual(imported.userProfiles[0].id, imported.userProfiles[1].id)
+        XCTAssertThrowsError(try imported.validated()) { error in
+            XCTAssertTrue(String(describing: error).contains("IDs must be unique"))
+        }
+    }
+
     func testNamesAreTrimmedNonemptyAndCaseInsensitivelyUnique() throws {
         var document = ConfigurationProfileDocument.default
         let profile = try document.createProfile(

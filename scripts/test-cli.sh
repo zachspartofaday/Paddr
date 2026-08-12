@@ -103,6 +103,17 @@ if ! grep -Fq "*$(printf '\t')CLI configuration$(printf '\t')$profile_id" "$stdo
     exit 1
 fi
 
+profile_id_upper=$(printf '%s' "$profile_id" | tr '[:lower:]' '[:upper:]')
+"$cli_path" --profile-store "$profile_store" --select-profile Default \
+    >"$stdout_path" 2>"$stderr_path"
+"$cli_path" --profile-store "$profile_store" --select-profile "$profile_id_upper" \
+    >"$stdout_path" 2>"$stderr_path"
+"$cli_path" --profile-store "$profile_store" --list-profiles >"$stdout_path" 2>"$stderr_path"
+if ! grep -Fq "*$(printf '\t')CLI configuration$(printf '\t')$profile_id" "$stdout_path"; then
+    echo "Stable-ID selection did not treat UUID text case as one identity." >&2
+    exit 1
+fi
+
 selection_stderr="$test_dir/selection-stderr"
 set +e
 "$cli_path" --profile-store "$profile_store" --select-profile Missing \

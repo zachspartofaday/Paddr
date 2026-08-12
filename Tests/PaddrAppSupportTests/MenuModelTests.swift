@@ -1537,20 +1537,53 @@ final class MenuModelTests: XCTestCase {
         )
         state.loadedProfileDocument = document
         state.loadDiagnostic = "Missing active profile; Default is active."
-        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        let session = ScriptedSession(events: [])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
 
         XCTAssertEqual(model.activeProfileID, .default)
         XCTAssertEqual(model.profiles.first(where: { $0.id == recoverable.id }), recoverable)
         XCTAssertTrue(model.needsInitialSave)
+        XCTAssertTrue(model.canSaveAndApply)
+        XCTAssertFalse(model.canEditActiveProfile)
         guard case let .failure(.configurationLoad(diagnostic)) = model.status else {
             return XCTFail("Expected the preserved repair diagnostic")
         }
         XCTAssertEqual(diagnostic, state.loadDiagnostic)
+        XCTAssertFalse(model.renameActiveProfile(to: "Mutable Default"))
+        XCTAssertFalse(model.deleteProfile(id: .default, confirmed: true))
 
         model.saveAndApply()
         await waitUntil(model: model) { model.status == .configurationSaved }
         XCTAssertEqual(state.savedProfileDocument?.userProfiles, [recoverable])
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, .default)
+        XCTAssertFalse(model.needsInitialSave)
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertFalse(model.canSaveAndApply)
+        let startCount = await session.startCount
+        XCTAssertEqual(startCount, 0)
+    }
+
+    func testEnabledMissingActiveProfileRepairSerializesStopSaveStartAndRearms() async {
+        let state = readyState(receiver: "Fake puck")
+        state.loadedProfileDocument = .default
+        state.loadDiagnostic = "Missing active profile; Default is active."
+        let recorder = OperationRecorder()
+        state.operationRecorder = recorder
+        let session = RecordingSession(recorder: recorder)
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.isEnabled = true
+        XCTAssertTrue(model.canSaveAndApply)
+        model.saveAndApply()
+        await waitUntil(model: model) { model.isRunning && !model.needsInitialSave }
+
+        XCTAssertEqual(recorder.values, ["stop", "save", "start"])
+        let maximumWorkerCount = await session.maximumWorkerCount
+        XCTAssertEqual(maximumWorkerCount, 1)
+        XCTAssertEqual(model.status, .active)
+        XCTAssertTrue(model.controllerConnected)
         XCTAssertEqual(state.savedProfileDocument?.activeProfileID, .default)
     }
 

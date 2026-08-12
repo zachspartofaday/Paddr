@@ -8,7 +8,11 @@ public struct ConfigurationProfileID: RawRepresentable, Codable, Hashable, Senda
     )
 
     public init(rawValue: String) {
-        self.rawValue = rawValue
+        if let uuid = UUID(uuidString: rawValue) {
+            self.rawValue = uuid.uuidString.lowercased()
+        } else {
+            self.rawValue = rawValue
+        }
     }
 
     public static func make() -> ConfigurationProfileID {
@@ -19,7 +23,7 @@ public struct ConfigurationProfileID: RawRepresentable, Codable, Hashable, Senda
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
-        rawValue = try container.decode(String.self)
+        self.init(rawValue: try container.decode(String.self))
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -86,8 +90,9 @@ public struct ConfigurationProfileDocument: Codable, Equatable, Sendable {
     }
 
     public func profile(matching identifierOrName: String) -> ConfigurationProfile? {
-        if let exactID = profiles.first(where: { $0.id.rawValue == identifierOrName }) {
-            return exactID
+        if UUID(uuidString: identifierOrName) != nil {
+            let identifier = ConfigurationProfileID(rawValue: identifierOrName)
+            if let exactID = profile(id: identifier) { return exactID }
         }
         let key = Self.nameKey(identifierOrName)
         return profiles.first { Self.nameKey($0.name) == key }
