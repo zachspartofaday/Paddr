@@ -41,11 +41,13 @@ public final class PaddrMenuModel {
     public private(set) var activeProfileID: ConfigurationProfileID = .default
     public var isEnabled = false {
         didSet {
-            guard !isRejectingPreInitializationEnabled, isEnabled != oldValue else { return }
-            guard isInitialized else {
-                isRejectingPreInitializationEnabled = true
+            guard !isRejectingEnabledChange, isEnabled != oldValue else { return }
+            guard isInitialized,
+                  isEnabled == false || !profileDocumentSaveInProgress || replacesActiveConfiguration
+            else {
+                isRejectingEnabledChange = true
                 isEnabled = oldValue
-                isRejectingPreInitializationEnabled = false
+                isRejectingEnabledChange = false
                 return
             }
             if statusPublicationGeneration == nil { advanceStatusGeneration() }
@@ -78,8 +80,9 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var allowsAuthoritativeStatusPublication = false
     @ObservationIgnored private var isPublishingConfiguration = false
     @ObservationIgnored private var isRejectingConfigurationEdit = false
-    @ObservationIgnored private var isRejectingPreInitializationEnabled = false
+    @ObservationIgnored private var isRejectingEnabledChange = false
     private var profileOperationInProgress = false
+    @ObservationIgnored private var profileDocumentSaveInProgress = false
     private var replacesActiveConfiguration = false
     @ObservationIgnored private var activationCommitPending = false
     @ObservationIgnored private var statusRefreshTask: Task<Void, Never>?
@@ -103,9 +106,13 @@ public final class PaddrMenuModel {
         isInitialized && !replacesActiveConfiguration && activeProfileID != .default
     }
     public var canManageProfiles: Bool { isInitialized && !profileOperationInProgress }
+    public var canToggleOutput: Bool {
+        isInitialized && (!profileDocumentSaveInProgress || replacesActiveConfiguration || isEnabled)
+    }
     public var canSaveAndApply: Bool {
         isInitialized
             && !storageWriteBlocked
+            && !profileDocumentSaveInProgress
             && !replacesActiveConfiguration
             && (canEditActiveProfile || needsInitialSave)
             && (hasUnsavedChanges || isEnabled)
@@ -152,6 +159,7 @@ public final class PaddrMenuModel {
     public func saveAndApply() {
         guard terminationState == .idle,
               isInitialized,
+              !profileDocumentSaveInProgress,
               !replacesActiveConfiguration,
               canEditActiveProfile || needsInitialSave else { return }
         let draft = configuration
@@ -500,6 +508,7 @@ public final class PaddrMenuModel {
         configurationEpoch &+= 1
         let operation = configurationEpoch
         profileOperationInProgress = true
+        profileDocumentSaveInProgress = true
         replacesActiveConfiguration = replacingActiveConfiguration
         let shouldRestart = replacingActiveConfiguration && isEnabled
         let operationStatusGeneration: UInt64
@@ -1125,6 +1134,7 @@ public final class PaddrMenuModel {
         guard configurationEpoch == operation else { return }
         configurationTask = nil
         profileOperationInProgress = false
+        profileDocumentSaveInProgress = false
         replacesActiveConfiguration = false
     }
 
@@ -1140,6 +1150,7 @@ public final class PaddrMenuModel {
         initializationTask = nil
         configurationTask = nil
         profileOperationInProgress = false
+        profileDocumentSaveInProgress = false
         replacesActiveConfiguration = false
         activationCommitPending = false
         statusRefreshTask = nil

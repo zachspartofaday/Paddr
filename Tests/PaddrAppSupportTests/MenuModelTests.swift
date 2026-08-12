@@ -2178,6 +2178,145 @@ final class MenuModelTests: XCTestCase {
         XCTAssertTrue(model.hasUnsavedChanges)
     }
 
+    func testPendingRenameBlocksPersistenceSupersessionWhilePadEditingRemainsAvailable() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let session = ScriptedSession(events: [])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
+        await waitUntil { state.saveCallCount == 1 }
+        model.configuration.left.sensitivity = 8
+
+        XCTAssertTrue(model.canEditActiveProfile)
+        XCTAssertFalse(model.canSaveAndApply)
+        model.saveAndApply()
+        model.isEnabled = true
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .operationInProgress
+        )
+        XCTAssertEqual(state.saveCallCount, 1)
+
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) { model.canManageProfiles }
+
+        XCTAssertEqual(state.saveCallCount, 1)
+        XCTAssertEqual(state.savedProfileDocument?.profile(id: first.id)?.name, "Renamed")
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
+            first.configuration.left.sensitivity
+        )
+        XCTAssertEqual(model.configuration.left.sensitivity, 8)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertTrue(model.canSaveAndApply)
+        let startCount = await session.startCount
+        XCTAssertEqual(startCount, 0)
+
+        model.saveAndApply()
+        await waitUntil(model: model) { !model.hasUnsavedChanges }
+        XCTAssertEqual(state.saveCallCount, 2)
+        XCTAssertEqual(state.savedProfileDocument?.profile(id: first.id)?.name, "Renamed")
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
+            8
+        )
+    }
+
+    func testPendingInactiveDeleteCannotBeRestoredBySaveAndApply() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertTrue(model.deleteProfile(id: second.id, confirmed: true))
+        await waitUntil { state.saveCallCount == 1 }
+        model.configuration.right.sensitivity = 9
+
+        XCTAssertFalse(model.canSaveAndApply)
+        model.saveAndApply()
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .configurationWindow),
+            .operationInProgress
+        )
+        XCTAssertEqual(state.saveCallCount, 1)
+
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) { model.canManageProfiles }
+
+        XCTAssertEqual(state.saveCallCount, 1)
+        XCTAssertNil(state.savedProfileDocument?.profile(id: second.id))
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.right.sensitivity,
+            first.configuration.right.sensitivity
+        )
+        XCTAssertEqual(model.configuration.right.sensitivity, 9)
+        XCTAssertTrue(model.hasUnsavedChanges)
+
+        model.saveAndApply()
+        await waitUntil(model: model) { !model.hasUnsavedChanges }
+        XCTAssertEqual(state.saveCallCount, 2)
+        XCTAssertNil(state.savedProfileDocument?.profile(id: second.id))
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.right.sensitivity,
+            9
+        )
+    }
+
+    func testFailedDocumentOnlySavePreservesDraftAndCanRetryMetadataBeforeApplying() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        state.saveFailure = "simulated metadata save failure"
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.configuration.left.sensitivity = 9
+        XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
+        await waitUntil(model: model) {
+            if case .failure(.configurationSave) = model.status {
+                return model.canManageProfiles
+            }
+            return false
+        }
+
+        XCTAssertEqual(state.saveCompletionCount, 1)
+        XCTAssertEqual(model.activeProfile.name, first.name)
+        XCTAssertEqual(model.configuration.left.sensitivity, 9)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertNil(state.savedProfileDocument)
+        guard case let .failure(.configurationSave(diagnostic)) = model.status else {
+            return XCTFail("Expected the metadata save failure, got \(model.status)")
+        }
+        XCTAssertTrue(diagnostic.contains("simulated metadata save failure"))
+
+        state.saveFailure = nil
+        XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
+        await waitUntil(model: model) { model.activeProfile.name == "Renamed" }
+        XCTAssertEqual(state.saveCompletionCount, 2)
+        XCTAssertEqual(model.configuration.left.sensitivity, 9)
+        XCTAssertTrue(model.hasUnsavedChanges)
+
+        model.saveAndApply()
+        await waitUntil(model: model) { !model.hasUnsavedChanges }
+        XCTAssertEqual(state.saveCompletionCount, 3)
+        XCTAssertEqual(state.savedProfileDocument?.profile(id: first.id)?.name, "Renamed")
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
+            9
+        )
+    }
+
     private func twoProfileDocument() throws -> (
         ConfigurationProfileDocument,
         ConfigurationProfile,

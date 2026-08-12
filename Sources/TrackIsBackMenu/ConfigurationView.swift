@@ -92,7 +92,7 @@ struct ConfigurationView: View {
 
                 Toggle("Trackpad output", isOn: $model.isEnabled)
                     .labelsHidden()
-                    .disabled(!model.isInitialized)
+                    .disabled(!model.canToggleOutput)
                     .toggleStyle(.switch)
                     .accessibilityValue(
                         model.isEnabled
