@@ -48,8 +48,9 @@ public final class PaddrMenuModel {
         self.dependencies = dependencies
         configuration = .default
         savedConfiguration = .default
+        let initialDraft = configuration
         initializationTask = Task { [weak self] in
-            await self?.initialize()
+            await self?.initialize(replacing: initialDraft)
         }
     }
 
@@ -72,9 +73,10 @@ public final class PaddrMenuModel {
 
     public func saveAndApply() {
         guard terminationState == .idle else { return }
+        let draft = configuration
         let validated: TrackIsBackConfiguration
         do {
-            validated = try configuration.validated()
+            validated = try draft.validated()
         } catch {
             status = .failure(.configurationInvalid(diagnostic: String(describing: error)))
             statusDidChange?()
@@ -88,17 +90,17 @@ public final class PaddrMenuModel {
             await priorTask?.value
             guard let self else { return }
             await initializationTask?.value
-            await saveAndApply(validated, operation: operation)
+            await saveAndApply(validated, replacing: draft, operation: operation)
         }
     }
 
-    private func initialize() async {
+    private func initialize(replacing initialDraft: TrackIsBackConfiguration) async {
         do {
             let loaded = try await dependencies.loadConfiguration()
-            configuration = loaded
+            if configuration == initialDraft { configuration = loaded }
             savedConfiguration = loaded
         } catch {
-            configuration = .default
+            if configuration == initialDraft { configuration = .default }
             savedConfiguration = .default
             needsInitialSave = true
             status = .failure(.configurationLoad(diagnostic: String(describing: error)))
@@ -123,12 +125,13 @@ public final class PaddrMenuModel {
 
     private func saveAndApply(
         _ validated: TrackIsBackConfiguration,
+        replacing draft: TrackIsBackConfiguration,
         operation: UInt64
     ) async {
         do {
             try await dependencies.saveConfiguration(validated)
             guard terminationState == .idle else { return }
-            configuration = validated
+            if configuration == draft { configuration = validated }
             savedConfiguration = validated
             needsInitialSave = false
             status = .configurationSaved
@@ -306,36 +309,41 @@ public final class PaddrMenuModel {
     }
 
     private func commitConfigurationForActivation(operation: UInt64) async -> Bool {
-        let validated: TrackIsBackConfiguration
-        do {
-            validated = try configuration.validated()
-        } catch {
-            failEnable(
-                .configurationInvalid(diagnostic: String(describing: error)),
-                operation: operation
-            )
-            return false
-        }
+        while isCurrent(operation), isEnabled {
+            let draft = configuration
+            let validated: TrackIsBackConfiguration
+            do {
+                validated = try draft.validated()
+            } catch {
+                failEnable(
+                    .configurationInvalid(diagnostic: String(describing: error)),
+                    operation: operation
+                )
+                return false
+            }
 
-        guard needsInitialSave || validated != savedConfiguration else {
-            configuration = validated
-            return true
-        }
+            guard needsInitialSave || validated != savedConfiguration else {
+                configuration = validated
+                return true
+            }
 
-        do {
-            try await dependencies.saveConfiguration(validated)
-            guard isCurrent(operation), isEnabled else { return false }
-            configuration = validated
-            savedConfiguration = validated
-            needsInitialSave = false
-            return true
-        } catch {
-            failEnable(
-                .configurationSave(diagnostic: String(describing: error)),
-                operation: operation
-            )
-            return false
+            do {
+                try await dependencies.saveConfiguration(validated)
+                guard isCurrent(operation), isEnabled else { return false }
+                savedConfiguration = validated
+                needsInitialSave = false
+                guard configuration == draft else { continue }
+                configuration = validated
+                return true
+            } catch {
+                failEnable(
+                    .configurationSave(diagnostic: String(describing: error)),
+                    operation: operation
+                )
+                return false
+            }
         }
+        return false
     }
 
     private func failEnable(_ failure: MenuFailure, operation: UInt64) {

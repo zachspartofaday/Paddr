@@ -25,6 +25,29 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(state.loadRanOnMainThread, false)
     }
 
+    func testEditAndEnableBeforeInitializationPreservesAndActivatesNewerDraft() async {
+        let state = readyState(controller: "Fake")
+        var stored = TrackIsBackConfiguration.default
+        stored.left.sensitivity = 4
+        state.loadedConfiguration = stored
+        let loadGate = DispatchSemaphore(value: 0)
+        state.loadGate = loadGate
+        let session = ScriptedSession(events: [.connected("Fake puck")])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+
+        model.configuration.left.sensitivity = 7
+        model.isEnabled = true
+        loadGate.signal()
+        await waitUntil(model: model) { await session.startCount == 1 }
+
+        let startedSensitivity = await session.startedConfigurations.first?.left.sensitivity
+        XCTAssertEqual(model.configuration.left.sensitivity, 7)
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 7)
+        XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 7)
+        XCTAssertEqual(startedSensitivity, 7)
+        XCTAssertFalse(model.hasUnsavedChanges)
+    }
+
     func testMissingPermissionTurnsOutputBackOffWithFailure() async {
         let state = ModelDependencyState()
         state.inputGranted = false
@@ -105,6 +128,27 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.status, .configurationSaved)
     }
 
+    func testSaveCompletionPreservesNewerDraft() async {
+        let state = readyState(controller: nil)
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.left.sensitivity = 3
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+
+        model.saveAndApply()
+        await waitUntil { state.saveCallCount == 1 }
+        model.configuration.left.sensitivity = 5
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) { model.status == .configurationSaved }
+
+        XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 3)
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 3)
+        XCTAssertEqual(model.configuration.left.sensitivity, 5)
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
     func testAlreadyGrantedPermissionRequestsReturnToOperationalStatus() async {
         let state = readyState(controller: nil)
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
@@ -149,6 +193,31 @@ final class MenuModelTests: XCTestCase {
         let startedSensitivity = await session.startedConfigurations.first?.left.sensitivity
         XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 7)
         XCTAssertEqual(startedSensitivity, 7)
+        XCTAssertFalse(model.hasUnsavedChanges)
+    }
+
+    func testEnableSavePersistsNewerDraftBeforeStarting() async {
+        let state = readyState(controller: "Fake")
+        let session = ScriptedSession(events: [.connected("Fake puck")])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.left.sensitivity = 3
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+
+        model.isEnabled = true
+        await waitUntil { state.saveCallCount == 1 }
+        model.configuration.left.sensitivity = 5
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) { await session.startCount == 1 }
+
+        let startedSensitivity = await session.startedConfigurations.first?.left.sensitivity
+        XCTAssertEqual(state.saveCallCount, 2)
+        XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 5)
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 5)
+        XCTAssertEqual(model.configuration.left.sensitivity, 5)
+        XCTAssertEqual(startedSensitivity, 5)
         XCTAssertFalse(model.hasUnsavedChanges)
     }
 
@@ -517,6 +586,8 @@ final class MenuModelTests: XCTestCase {
                 return state.loadedConfiguration
             },
             saveConfiguration: {
+                state.saveCallCount += 1
+                state.saveGate?.wait()
                 if let failure = state.saveFailure {
                     throw TrackIsBackError.configuration(failure)
                 }
@@ -532,6 +603,10 @@ final class MenuModelTests: XCTestCase {
                 try await sleeper.sleep()
             }
         )
+    }
+
+    private func waitUntil(_ condition: @escaping @Sendable () -> Bool) async {
+        while !condition() { await Task.yield() }
     }
 
     private func waitUntil(
@@ -669,6 +744,8 @@ private final class ModelDependencyState: Sendable {
         var loadGate: DispatchSemaphore?
         var loadRanOnMainThread: Bool?
         var saveFailure: String?
+        var saveGate: DispatchSemaphore?
+        var saveCallCount = 0
     }
     private let state = Mutex(State())
 
@@ -707,6 +784,14 @@ private final class ModelDependencyState: Sendable {
     var saveFailure: String? {
         get { state.withLock { $0.saveFailure } }
         set { state.withLock { $0.saveFailure = newValue } }
+    }
+    var saveGate: DispatchSemaphore? {
+        get { state.withLock { $0.saveGate } }
+        set { state.withLock { $0.saveGate = newValue } }
+    }
+    var saveCallCount: Int {
+        get { state.withLock { $0.saveCallCount } }
+        set { state.withLock { $0.saveCallCount = newValue } }
     }
 }
 
