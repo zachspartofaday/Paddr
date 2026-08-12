@@ -7,6 +7,7 @@ import CoreGraphics
 final class ConfigurationBoundaryTests: XCTestCase {
     func testDefaultConfigurationPathUsesCurrentProductName() {
         XCTAssertTrue(ConfigurationStore.defaultURL.path.hasSuffix("/.config/Paddr/config.json"))
+        XCTAssertEqual(ConfigurationStore.defaultURL, ConfigurationProfileStore.defaultURL)
     }
 
     func testPuckPadsConfigurationIsTheFirstLegacyMigrationCandidate() throws {

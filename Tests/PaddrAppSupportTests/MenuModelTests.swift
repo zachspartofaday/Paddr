@@ -1757,6 +1757,42 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(state.savedProfileDocument?.activeProfileID, .default)
     }
 
+    func testCreateAndRenameRejectUUIDShapedNamesWithoutPersisting() async throws {
+        let createState = readyState(receiver: nil)
+        createState.loadedProfileDocument = .default
+        let createModel = PaddrMenuModel(dependencies: dependencies(state: createState))
+        await waitUntil(model: createModel) { createModel.isInitialized }
+
+        XCTAssertFalse(
+            createModel.createProfile(named: " A0000000-0000-0000-0000-000000000040 ")
+        )
+        XCTAssertEqual(createModel.profiles, [.default])
+        XCTAssertEqual(createState.saveCallCount, 0)
+        guard case let .failure(.configurationInvalid(createDiagnostic)) = createModel.status else {
+            return XCTFail("Expected UUID-shaped create name to publish a validation error")
+        }
+        XCTAssertTrue(createDiagnostic.contains("cannot be UUIDs"))
+
+        let renameState = readyState(receiver: nil)
+        var document = ConfigurationProfileDocument.default
+        let profile = try document.createProfile(
+            named: "Normal name",
+            id: ConfigurationProfileID(rawValue: "b0000000-0000-0000-0000-000000000040")
+        )
+        try document.activateProfile(id: profile.id)
+        renameState.loadedProfileDocument = document
+        let renameModel = PaddrMenuModel(dependencies: dependencies(state: renameState))
+        await waitUntil(model: renameModel) { renameModel.isInitialized }
+
+        XCTAssertFalse(renameModel.renameActiveProfile(to: profile.id.rawValue.uppercased()))
+        XCTAssertEqual(renameModel.activeProfile.name, "Normal name")
+        XCTAssertEqual(renameState.saveCallCount, 0)
+        guard case let .failure(.configurationInvalid(renameDiagnostic)) = renameModel.status else {
+            return XCTFail("Expected UUID-shaped rename to publish a validation error")
+        }
+        XCTAssertTrue(renameDiagnostic.contains("cannot be UUIDs"))
+    }
+
     func testEnabledProfileSelectionSerializesStopSaveStartWithoutWorkerOverlap() async throws {
         let state = readyState(receiver: "Fake")
         let (document, _, second) = try twoProfileDocument()

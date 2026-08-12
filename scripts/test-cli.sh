@@ -103,6 +103,29 @@ if ! grep -Fq "*$(printf '\t')CLI configuration$(printf '\t')$profile_id" "$stdo
     exit 1
 fi
 
+uuid_name_store="$test_dir/uuid-name-store.json"
+sed 's/"name" : "CLI configuration"/"name" : "00000000-0000-0000-0000-000000000001"/' \
+    "$profile_store" >"$uuid_name_store"
+if ! grep -Fq '"name" : "00000000-0000-0000-0000-000000000001"' "$uuid_name_store"; then
+    echo "UUID-shaped name fixture was not created." >&2
+    exit 1
+fi
+cp "$uuid_name_store" "$uuid_name_store.before"
+set +e
+"$cli_path" --profile-store "$uuid_name_store" --list-profiles \
+    >"$stdout_path" 2>"$stderr_path"
+uuid_name_status=$?
+set -e
+if [ "$uuid_name_status" -ne 2 ] \
+    || ! grep -Fq 'Profile names cannot be UUIDs' "$stderr_path"; then
+    echo "UUID-shaped imported profile name was not rejected clearly." >&2
+    exit 1
+fi
+if ! cmp -s "$uuid_name_store" "$uuid_name_store.before"; then
+    echo "UUID-shaped imported profile rejection modified the source document." >&2
+    exit 1
+fi
+
 profile_id_upper=$(printf '%s' "$profile_id" | tr '[:lower:]' '[:upper:]')
 "$cli_path" --profile-store "$profile_store" --select-profile Default \
     >"$stdout_path" 2>"$stderr_path"
@@ -165,4 +188,4 @@ if [ "$repeated_config_status" -ne 2 ] \
     exit 1
 fi
 
-printf '%s\n' "Verified strict loading, canonical profiles, list/select, duplicate path rejection, and CLI mapping configuration."
+printf '%s\n' "Verified strict loading, canonical profiles, UUID-name rejection, list/select, duplicate path rejection, and CLI mapping configuration."

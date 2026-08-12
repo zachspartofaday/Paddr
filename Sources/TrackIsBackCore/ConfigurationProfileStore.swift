@@ -1,7 +1,10 @@
 import Foundation
 
 public enum ConfigurationProfileStore {
-    public static var defaultURL: URL { ConfigurationStore.defaultURL }
+    public static var defaultURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/Paddr/config.json")
+    }
 
     public static func load(from url: URL? = nil) throws -> ConfigurationProfileLoadResult {
         try load(
@@ -137,7 +140,7 @@ public enum ConfigurationProfileStore {
         return try decodeLegacyConfiguration(data)
     }
 
-    private static func isProfileDocument(_ data: Data) throws -> Bool {
+    static func isProfileDocument(_ data: Data) throws -> Bool {
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw TrackIsBackError.configuration("Configuration JSON must contain an object.")
         }

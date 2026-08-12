@@ -1,10 +1,7 @@
 import Foundation
 
 public enum ConfigurationStore {
-    public static var defaultURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/Paddr/config.json")
-    }
+    public static var defaultURL: URL { ConfigurationProfileStore.defaultURL }
 
     public static func load(from url: URL? = nil) throws -> TrackIsBackConfiguration {
         try load(
@@ -55,7 +52,19 @@ public enum ConfigurationStore {
     }
 
     public static func save(_ configuration: TrackIsBackConfiguration, to url: URL? = nil) throws {
-        let destination = url ?? defaultURL
+        guard let destination = url else {
+            throw TrackIsBackError.configuration(
+                "Legacy raw configuration saves require an explicit destination. The default path is owned by the profile store."
+            )
+        }
+        if FileManager.default.fileExists(atPath: destination.path) {
+            let existing = try Data(contentsOf: destination)
+            if (try? ConfigurationProfileStore.isProfileDocument(existing)) == true {
+                throw TrackIsBackError.configuration(
+                    "Legacy raw configuration cannot replace a profile document at \(destination.path)."
+                )
+            }
+        }
         try FileManager.default.createDirectory(
             at: destination.deletingLastPathComponent(),
             withIntermediateDirectories: true

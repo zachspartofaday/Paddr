@@ -129,6 +129,58 @@ final class ConfigurationProfileTests: XCTestCase {
         XCTAssertThrowsError(try document.renameProfile(id: profile.id, to: "default"))
     }
 
+    func testUUIDShapedNamesAreRejectedForCreateAndRenameAfterNormalization() throws {
+        let lowercaseUUID = "a0000000-0000-0000-0000-000000000030"
+        let proposedNames = [
+            lowercaseUUID,
+            lowercaseUUID.uppercased(),
+            " \n\(lowercaseUUID.uppercased())\t "
+        ]
+
+        for proposedName in proposedNames {
+            var createDocument = ConfigurationProfileDocument.default
+            XCTAssertThrowsError(
+                try createDocument.createProfile(
+                    named: proposedName,
+                    id: id("b0000000-0000-0000-0000-000000000030")
+                )
+            ) { error in
+                XCTAssertTrue(String(describing: error).contains("cannot be UUIDs"))
+            }
+            XCTAssertTrue(createDocument.userProfiles.isEmpty)
+
+            var renameDocument = ConfigurationProfileDocument.default
+            let profile = try renameDocument.createProfile(
+                named: "Normal name",
+                id: id("b0000000-0000-0000-0000-000000000031")
+            )
+            XCTAssertThrowsError(
+                try renameDocument.renameProfile(id: profile.id, to: proposedName)
+            ) { error in
+                XCTAssertTrue(String(describing: error).contains("cannot be UUIDs"))
+            }
+            XCTAssertEqual(renameDocument.profile(id: profile.id)?.name, "Normal name")
+        }
+    }
+
+    func testImportedDocumentRejectsUUIDShapedNameBeforeSelection() throws {
+        let profileID = id("b0000000-0000-0000-0000-000000000032")
+        let document = ConfigurationProfileDocument(
+            activeProfileID: profileID,
+            userProfiles: [
+                ConfigurationProfile(
+                    id: profileID,
+                    name: " A0000000-0000-0000-0000-000000000033 ",
+                    configuration: .default
+                )
+            ]
+        )
+
+        XCTAssertThrowsError(try document.validated()) { error in
+            XCTAssertTrue(String(describing: error).contains("cannot be UUIDs"))
+        }
+    }
+
     func testDuplicateUsesDeterministicCopySuffixes() throws {
         let sourceID = id("00000000-0000-0000-0000-000000000016")
         var document = ConfigurationProfileDocument.default
@@ -237,6 +289,52 @@ final class ConfigurationProfileTests: XCTestCase {
             XCTAssertTrue(String(describing: error).contains(fixture.url.path))
         }
         XCTAssertEqual(try Data(contentsOf: fixture.url), original)
+    }
+
+    func testLegacySaveWithoutExplicitDestinationFailsClosed() {
+        XCTAssertThrowsError(try ConfigurationStore.save(.default)) { error in
+            let message = String(describing: error)
+            XCTAssertTrue(message.contains("explicit destination"))
+            XCTAssertTrue(message.contains("profile store"))
+        }
+    }
+
+    func testLegacySaveCannotReplaceCanonicalProfileDocument() throws {
+        let fixture = try temporaryStore()
+        defer { try? FileManager.default.removeItem(at: fixture.home) }
+        var document = ConfigurationProfileDocument.default
+        _ = try document.createProfile(
+            named: "First",
+            id: id("00000000-0000-0000-0000-000000000034")
+        )
+        let active = try document.createProfile(
+            named: "Second",
+            id: id("00000000-0000-0000-0000-000000000035")
+        )
+        try document.activateProfile(id: active.id)
+        let original = try ConfigurationProfileStore.encoded(document)
+        try original.write(to: fixture.url)
+
+        XCTAssertThrowsError(try ConfigurationStore.save(.default, to: fixture.url)) { error in
+            XCTAssertTrue(String(describing: error).contains("profile document"))
+        }
+        XCTAssertEqual(try Data(contentsOf: fixture.url), original)
+        let reloaded = try ConfigurationProfileStore.load(from: fixture.url)
+        XCTAssertEqual(reloaded.document, document)
+        XCTAssertEqual(reloaded.document.userProfiles.count, 2)
+        XCTAssertEqual(reloaded.document.activeProfileID, active.id)
+    }
+
+    func testExplicitLegacySaveToNewPathStillRoundTripsRawConfiguration() throws {
+        let fixture = try temporaryStore()
+        defer { try? FileManager.default.removeItem(at: fixture.home) }
+        let legacyURL = fixture.home.appendingPathComponent("legacy.json")
+        var configuration = TrackIsBackConfiguration.default
+        configuration.left.sensitivity = 3.5
+
+        try ConfigurationStore.save(configuration, to: legacyURL)
+
+        XCTAssertEqual(try ConfigurationStore.load(from: legacyURL), configuration)
     }
 
     func testAtomicSaveFailurePreservesExistingCanonicalDocument() throws {

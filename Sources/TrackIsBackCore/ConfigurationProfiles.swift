@@ -256,6 +256,11 @@ public struct ConfigurationProfileDocument: Codable, Equatable, Sendable {
         guard !name.isEmpty else {
             throw TrackIsBackError.configuration("Profile names cannot be empty.")
         }
+        guard UUID(uuidString: name) == nil else {
+            throw TrackIsBackError.configuration(
+                "Profile names cannot be UUIDs; choose a descriptive name."
+            )
+        }
         return name
     }
 
