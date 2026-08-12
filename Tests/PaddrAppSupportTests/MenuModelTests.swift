@@ -206,6 +206,76 @@ final class MenuModelTests: XCTestCase {
         XCTAssertNil(model.controllerDescription)
     }
 
+    func testDeviceRemovalPublishesAfterNoOpStatusRefresh() async {
+        let state = readyState(controller: "Fake")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.send(.connected("Fake puck"))
+        await waitUntil(model: model) { model.status == .active }
+        let probeCount = state.probeCallCount
+
+        model.refreshStatus()
+        await waitUntil { state.probeCallCount > probeCount }
+        await session.send(.deviceRemoved(.init(reportCount: 4, actionCount: 2)))
+        await waitUntil(model: model) { !model.isRunning && model.controllerDescription == nil }
+
+        XCTAssertEqual(model.status, .waitingForController)
+        XCTAssertTrue(model.isEnabled)
+    }
+
+    func testSessionFailurePublishesAfterPermissionGuidance() async {
+        let state = readyState(controller: "Fake")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.send(.connected("Fake puck"))
+        await waitUntil(model: model) { model.status == .active }
+
+        state.inputGranted = false
+        model.openInputMonitoringSettings()
+        XCTAssertEqual(model.status, .inputMonitoringSettings)
+        await session.send(.failed("Puck disconnected"))
+        await waitUntil(model: model) { !model.isEnabled && !model.isRunning }
+
+        guard case let .failure(.output(diagnostic)) = model.status else {
+            return XCTFail("Expected the terminal session failure")
+        }
+        XCTAssertEqual(diagnostic, "Puck disconnected")
+    }
+
+    func testReconnectPublishesTransitionsAfterStatusRefreshes() async {
+        let state = readyState(controller: "Fake")
+        let sleeper = ManualSleeper()
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(
+            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+        )
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.send(.connected("Fake puck"))
+        await waitUntil(model: model) { model.status == .active }
+        let probeCount = state.probeCallCount
+
+        model.refreshStatus()
+        await waitUntil { state.probeCallCount > probeCount }
+        await session.send(.deviceRemoved(.init(reportCount: 0, actionCount: 0)))
+        await waitUntil(model: model) { !model.isRunning && model.controllerDescription == nil }
+        XCTAssertEqual(model.status, .waitingForController)
+        sleeper.wake()
+        await waitUntil(model: model) { await session.startCount == 2 }
+
+        XCTAssertEqual(model.status, .connecting)
+        await session.send(.connected("Reconnected puck"))
+        await waitUntil(model: model) { model.status == .active }
+        XCTAssertEqual(model.controllerDescription, "Reconnected puck")
+    }
+
     func testSaveAndApplyPersistsValidatedConfiguration() async {
         let state = readyState(controller: nil)
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
@@ -833,7 +903,10 @@ final class MenuModelTests: XCTestCase {
                 }
                 state.savedConfiguration = $0
             },
-            probeController: { state.controller },
+            probeController: {
+                state.probeCallCount += 1
+                return state.controller
+            },
             inputMonitoringStatus: { state.inputGranted ? .granted : .denied },
             requestInputMonitoring: { state.inputGranted },
             accessibilityTrusted: { _ in state.accessibilityGranted },
@@ -1010,6 +1083,7 @@ private final class ModelDependencyState: Sendable {
         var saveFailure: String?
         var saveGate: DispatchSemaphore?
         var saveCallCount = 0
+        var probeCallCount = 0
     }
     private let state = Mutex(State())
 
@@ -1056,6 +1130,10 @@ private final class ModelDependencyState: Sendable {
     var saveCallCount: Int {
         get { state.withLock { $0.saveCallCount } }
         set { state.withLock { $0.saveCallCount = newValue } }
+    }
+    var probeCallCount: Int {
+        get { state.withLock { $0.probeCallCount } }
+        set { state.withLock { $0.probeCallCount = newValue } }
     }
 }
 
