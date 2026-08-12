@@ -71,6 +71,32 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.status, .releasingOutputs)
     }
 
+    func testInitializationFailurePreservesNewerPermissionGuidanceAndReconcilesIt() async {
+        let state = ModelDependencyState()
+        state.loadFailure = "Unreadable configuration"
+        let loadGate = DispatchSemaphore(value: 0)
+        state.loadGate = loadGate
+        let sleeper = ManualSleeper()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, sleeper: sleeper))
+
+        model.requestInputMonitoring()
+        model.openInputMonitoringSettings()
+        XCTAssertEqual(model.status, .inputMonitoringSettings)
+
+        loadGate.signal()
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertEqual(model.savedConfiguration, .default)
+        XCTAssertTrue(model.needsInitialSave)
+        guard model.status == .inputMonitoringSettings else {
+            return XCTFail("Expected newer permission guidance to survive load failure")
+        }
+
+        state.inputGranted = true
+        sleeper.wake()
+        await waitUntil(model: model) { model.status == .off }
+    }
+
     func testEditAndEnableBeforeInitializationPreservesAndActivatesNewerDraft() async {
         let state = readyState(controller: "Fake")
         var stored = TrackIsBackConfiguration.default
@@ -244,6 +270,38 @@ final class MenuModelTests: XCTestCase {
         }
     }
 
+    func testSaveCompletionPreservesNewerPermissionGuidanceAndPersistedSnapshot() async {
+        let state = ModelDependencyState()
+        state.accessibilityGranted = true
+        let sleeper = ManualSleeper()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, sleeper: sleeper))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.left.sensitivity = 3
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+
+        model.saveAndApply()
+        await waitUntil { state.saveCallCount == 1 }
+        model.requestInputMonitoring()
+        model.openInputMonitoringSettings()
+        XCTAssertEqual(model.status, .inputMonitoringSettings)
+
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) { model.savedConfiguration.left.sensitivity == 3 }
+
+        XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 3)
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 3)
+        XCTAssertFalse(model.hasUnsavedChanges)
+        guard model.status == .inputMonitoringSettings else {
+            return XCTFail("Expected newer permission guidance to survive save completion")
+        }
+
+        state.inputGranted = true
+        sleeper.wake()
+        await waitUntil(model: model) { model.status == .off }
+    }
+
     func testAlreadyGrantedPermissionRequestsReturnToOperationalStatus() async {
         let state = readyState(controller: nil)
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
@@ -273,6 +331,37 @@ final class MenuModelTests: XCTestCase {
         state.accessibilityGranted = true
         sleeper.wake()
         await waitUntil(model: model) { model.status == .off }
+    }
+
+    func testSessionEventPreservesNewerPermissionGuidanceButRecordsRuntimeState() async {
+        let state = readyState(controller: "Fake")
+        let sleeper = ManualSleeper()
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(
+            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+        )
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 1 }
+        state.inputGranted = false
+        model.requestInputMonitoring()
+        model.openInputMonitoringSettings()
+        XCTAssertEqual(model.status, .inputMonitoringSettings)
+
+        await session.send(.connected("Fake puck"))
+        await waitUntil(model: model) { model.isRunning }
+
+        XCTAssertTrue(model.isEnabled)
+        XCTAssertTrue(model.isRunning)
+        XCTAssertEqual(model.controllerDescription, "Fake puck")
+        guard model.status == .inputMonitoringSettings else {
+            return XCTFail("Expected permission guidance to survive the deferred session event")
+        }
+
+        state.inputGranted = true
+        sleeper.wake()
+        await waitUntil(model: model) { model.status == .active }
     }
 
     func testEnableSavesDraftBeforeStarting() async {
@@ -813,6 +902,30 @@ private actor ScriptedSession: TrackpadSessionControlling {
         stopCount += 1
         continuation?.finish()
         continuation = nil
+    }
+}
+
+private actor ManualEventSession: TrackpadSessionControlling {
+    private var continuation: AsyncStream<TrackpadSessionEvent>.Continuation?
+    private(set) var startCount = 0
+
+    func start(
+        configuration: TrackIsBackConfiguration,
+        observeOnly: Bool
+    ) async -> AsyncStream<TrackpadSessionEvent> {
+        startCount += 1
+        let (stream, continuation) = AsyncStream<TrackpadSessionEvent>.makeStream()
+        self.continuation = continuation
+        return stream
+    }
+
+    func stop() async {
+        continuation?.finish()
+        continuation = nil
+    }
+
+    func send(_ event: TrackpadSessionEvent) {
+        continuation?.yield(event)
     }
 }
 
