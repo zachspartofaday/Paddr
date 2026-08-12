@@ -15,7 +15,7 @@ struct ApplyBarView: View {
             HStack(spacing: 8) {
                 statusCells
                 statusMessage
-                    .frame(width: 260, height: 32, alignment: .leading)
+                    .frame(width: 230, height: 32, alignment: .leading)
                 Spacer(minLength: 12)
                 saveState
                 actions
@@ -25,7 +25,12 @@ struct ApplyBarView: View {
                 HStack(spacing: 8) { statusCells }
                 HStack(spacing: 12) {
                     statusMessage
-                        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+                        .frame(
+                            maxWidth: .infinity,
+                            minHeight: 32,
+                            maxHeight: 32,
+                            alignment: .leading
+                        )
                     saveState
                     actions
                 }
