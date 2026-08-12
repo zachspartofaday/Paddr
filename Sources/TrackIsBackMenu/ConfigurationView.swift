@@ -44,26 +44,26 @@ struct ConfigurationView: View {
                         }
                     }
                     .padding(PaddrStyle.panelPadding)
-                    .background {
-                        GeometryReader { proxy in
-                            Color.clear.preference(
-                                key: ConfigurationContentHeightKey.self,
-                                value: proxy.size.height
-                            )
+                    .onGeometryChange(
+                        for: CGFloat.self,
+                        of: { $0.size.height },
+                        action: { measuredHeight in
+                            guard measuredHeight > 0 else { return }
+                            configurationContentHeight = measuredHeight
                         }
-                    }
+                    )
                 }
                 .scrollIndicators(.automatic)
 
                 ApplyBarView(model: model)
-                    .background {
-                        GeometryReader { proxy in
-                            Color.clear.preference(
-                                key: CommandBarHeightKey.self,
-                                value: proxy.size.height
-                            )
+                    .onGeometryChange(
+                        for: CGFloat.self,
+                        of: { $0.size.height },
+                        action: { measuredHeight in
+                            guard measuredHeight > 0 else { return }
+                            commandBarHeight = measuredHeight
                         }
-                    }
+                    )
             }
         }
         .frame(
@@ -83,14 +83,6 @@ struct ConfigurationView: View {
                 )
             }
         }
-        .onPreferenceChange(ConfigurationContentHeightKey.self) { measuredHeight in
-            guard measuredHeight > 0 else { return }
-            configurationContentHeight = measuredHeight
-        }
-        .onPreferenceChange(CommandBarHeightKey.self) { measuredHeight in
-            guard measuredHeight > 0 else { return }
-            commandBarHeight = measuredHeight
-        }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button("Refresh", systemImage: "arrow.clockwise", action: model.refreshStatus)
@@ -107,21 +99,5 @@ struct ConfigurationView: View {
                     )
             }
         }
-    }
-}
-
-private struct CommandBarHeightKey: PreferenceKey {
-    static let defaultValue = PaddrStyle.commandBarMinimumHeight
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
-}
-
-private struct ConfigurationContentHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
     }
 }

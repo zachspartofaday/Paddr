@@ -4,9 +4,7 @@ import TrackIsBackCore
 
 public struct MenuDependencies: Sendable {
     public var session: any TrackpadSessionControlling
-    public var loadConfiguration: @Sendable () throws -> TrackIsBackConfiguration
-    public var saveConfiguration: @Sendable (TrackIsBackConfiguration) throws -> Void
-    public var probeController: @Sendable () -> String?
+    private let background: BackgroundMenuDependencies
     public var inputMonitoringStatus: @Sendable () -> InputMonitoringStatus
     public var requestInputMonitoring: @Sendable () -> Bool
     public var accessibilityTrusted: @Sendable (_ prompt: Bool) -> Bool
@@ -25,14 +23,28 @@ public struct MenuDependencies: Sendable {
         sleep: @escaping @Sendable (Duration) async throws -> Void
     ) {
         self.session = session
-        self.loadConfiguration = loadConfiguration
-        self.saveConfiguration = saveConfiguration
-        self.probeController = probeController
+        background = BackgroundMenuDependencies(
+            loadConfiguration: loadConfiguration,
+            saveConfiguration: saveConfiguration,
+            probeController: probeController
+        )
         self.inputMonitoringStatus = inputMonitoringStatus
         self.requestInputMonitoring = requestInputMonitoring
         self.accessibilityTrusted = accessibilityTrusted
         self.openPrivacySettings = openPrivacySettings
         self.sleep = sleep
+    }
+
+    func loadConfiguration() async throws -> TrackIsBackConfiguration {
+        try await background.loadConfiguration()
+    }
+
+    func saveConfiguration(_ configuration: TrackIsBackConfiguration) async throws {
+        try await background.saveConfiguration(configuration)
+    }
+
+    func probeController() async -> String? {
+        await background.probeController()
     }
 
     public static let live = MenuDependencies(
@@ -53,4 +65,32 @@ public struct MenuDependencies: Sendable {
         },
         sleep: { try await Task.sleep(for: $0) }
     )
+}
+
+private actor BackgroundMenuDependencies {
+    private let load: @Sendable () throws -> TrackIsBackConfiguration
+    private let save: @Sendable (TrackIsBackConfiguration) throws -> Void
+    private let probe: @Sendable () -> String?
+
+    init(
+        loadConfiguration: @escaping @Sendable () throws -> TrackIsBackConfiguration,
+        saveConfiguration: @escaping @Sendable (TrackIsBackConfiguration) throws -> Void,
+        probeController: @escaping @Sendable () -> String?
+    ) {
+        load = loadConfiguration
+        save = saveConfiguration
+        probe = probeController
+    }
+
+    func loadConfiguration() throws -> TrackIsBackConfiguration {
+        try load()
+    }
+
+    func saveConfiguration(_ configuration: TrackIsBackConfiguration) throws {
+        try save(configuration)
+    }
+
+    func probeController() -> String? {
+        probe()
+    }
 }

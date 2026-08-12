@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -14,18 +14,21 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-source_files=$(rg --files \
+source_files=()
+while IFS= read -r -d '' source_file; do
+    source_files+=("$source_file")
+done < <(find \
     "$repo_dir/Sources/TrackIsBackCore" \
     "$repo_dir/Sources/PaddrAppSupport" \
     "$repo_dir/Sources/TrackIsBackMenu" \
-    -g '*.swift')
+    -type f -name '*.swift' -print0)
 
 xcrun xcstringstool extract \
     --modern-localizable-strings \
     --SwiftUI \
     --output-format xcstrings \
     --output-directory "$work_dir" \
-    $source_files
+    "${source_files[@]}"
 
 xcrun xcstringstool print "$work_dir/Localizable.xcstrings" | sort -u > "$work_dir/extracted-keys"
 xcrun xcstringstool print "$repo_dir/Resources/Localizable.xcstrings" | sort -u > "$work_dir/catalog-keys"

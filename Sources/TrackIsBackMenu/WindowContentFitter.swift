@@ -9,6 +9,7 @@ struct WindowContentFitter: NSViewRepresentable {
     final class Coordinator: NSObject {
         var hasAppliedFrame = false
         var targetHeight: CGFloat = 0
+        var reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         weak var window: NSWindow?
 
         func attach(to window: NSWindow) {
@@ -21,7 +22,14 @@ struct WindowContentFitter: NSViewRepresentable {
                     name: NSWindow.didChangeScreenNotification,
                     object: window
                 )
+                NSWorkspace.shared.notificationCenter.addObserver(
+                    self,
+                    selector: #selector(accessibilityDisplayOptionsDidChange(_:)),
+                    name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+                    object: nil
+                )
             }
+            reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
             applyFrame()
         }
 
@@ -31,11 +39,20 @@ struct WindowContentFitter: NSViewRepresentable {
                 name: NSWindow.didChangeScreenNotification,
                 object: window
             )
+            NSWorkspace.shared.notificationCenter.removeObserver(
+                self,
+                name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+                object: nil
+            )
             window = nil
         }
 
         @objc private func screenDidChange(_ notification: Notification) {
             applyFrame()
+        }
+
+        @objc private func accessibilityDisplayOptionsDidChange(_ notification: Notification) {
+            reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         }
 
         private func applyFrame() {
@@ -68,7 +85,7 @@ struct WindowContentFitter: NSViewRepresentable {
                 hasAppliedFrame = true
                 return
             }
-            let shouldAnimate = hasAppliedFrame && window.isVisible
+            let shouldAnimate = hasAppliedFrame && window.isVisible && !reduceMotion
             window.setFrame(fittedFrame, display: true, animate: shouldAnimate)
             hasAppliedFrame = true
         }
