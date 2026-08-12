@@ -61,7 +61,8 @@ verify_app() {
             Contents/Info.plist|Contents/MacOS|Contents/MacOS/Paddr|Contents/Resources|\
             Contents/Resources/AppIcon.icns|Contents/Resources/Assets.car|\
             Contents/Resources/en.lproj|Contents/Resources/en.lproj/Localizable.strings|\
-            Contents/_CodeSignature|Contents/_CodeSignature/CodeResources) ;;
+            Contents/_CodeSignature|Contents/_CodeSignature/CodeResources|\
+            Contents/CodeResources) ;;
             *) echo "Unexpected bundle content: $relative" >&2; exit 1 ;;
         esac
     done
