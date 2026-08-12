@@ -226,6 +226,66 @@ final class MenuModelTests: XCTestCase {
         XCTAssertTrue(model.isEnabled)
     }
 
+    func testRefreshStatusDoesNotOverwriteConnectedSessionDescription() async {
+        let state = readyState(controller: "Probe puck")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.send(.connected("Initial session puck"))
+        await waitUntil(model: model) { model.status == .active }
+
+        let probeCount = state.probeCallCount
+        let probeGate = DispatchSemaphore(value: 0)
+        state.probeGate = probeGate
+        state.controller = nil
+        model.refreshStatus()
+        await waitUntil { state.probeCallCount > probeCount }
+        await session.send(.connected("Session puck"))
+        await waitUntil(model: model) { model.controllerDescription == "Session puck" }
+
+        let statusChangeCount = state.statusChangeCount
+        model.statusDidChange = { state.statusChangeCount += 1 }
+        probeGate.signal()
+        await waitUntil { state.statusChangeCount > statusChangeCount }
+        model.statusDidChange = nil
+        state.probeGate = nil
+
+        XCTAssertEqual(model.controllerDescription, "Session puck")
+        XCTAssertTrue(model.controllerConnected)
+    }
+
+    func testRefreshStatusDoesNotRestoreRemovedControllerDescription() async {
+        let state = readyState(controller: "Probe puck")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.send(.connected("Session puck"))
+        await waitUntil(model: model) { model.status == .active }
+
+        let probeCount = state.probeCallCount
+        let probeGate = DispatchSemaphore(value: 0)
+        state.probeGate = probeGate
+        state.controller = "Probe puck"
+        model.refreshStatus()
+        await waitUntil { state.probeCallCount > probeCount }
+        await session.send(.deviceRemoved(.init(reportCount: 4, actionCount: 2)))
+        await waitUntil(model: model) { !model.isRunning && model.controllerDescription == nil }
+
+        let statusChangeCount = state.statusChangeCount
+        model.statusDidChange = { state.statusChangeCount += 1 }
+        probeGate.signal()
+        await waitUntil { state.statusChangeCount > statusChangeCount }
+        model.statusDidChange = nil
+        state.probeGate = nil
+
+        XCTAssertNil(model.controllerDescription)
+        XCTAssertFalse(model.controllerConnected)
+    }
+
     func testSessionFailurePublishesAfterPermissionGuidance() async {
         let state = readyState(controller: "Fake")
         let session = ManualEventSession()
@@ -905,6 +965,7 @@ final class MenuModelTests: XCTestCase {
             },
             probeController: {
                 state.probeCallCount += 1
+                state.probeGate?.wait()
                 return state.controller
             },
             inputMonitoringStatus: { state.inputGranted ? .granted : .denied },
@@ -1084,6 +1145,8 @@ private final class ModelDependencyState: Sendable {
         var saveGate: DispatchSemaphore?
         var saveCallCount = 0
         var probeCallCount = 0
+        var probeGate: DispatchSemaphore?
+        var statusChangeCount = 0
     }
     private let state = Mutex(State())
 
@@ -1134,6 +1197,14 @@ private final class ModelDependencyState: Sendable {
     var probeCallCount: Int {
         get { state.withLock { $0.probeCallCount } }
         set { state.withLock { $0.probeCallCount = newValue } }
+    }
+    var probeGate: DispatchSemaphore? {
+        get { state.withLock { $0.probeGate } }
+        set { state.withLock { $0.probeGate = newValue } }
+    }
+    var statusChangeCount: Int {
+        get { state.withLock { $0.statusChangeCount } }
+        set { state.withLock { $0.statusChangeCount = newValue } }
     }
 }
 

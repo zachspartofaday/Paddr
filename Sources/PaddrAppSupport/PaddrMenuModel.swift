@@ -45,6 +45,7 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var activationCommitPending = false
     @ObservationIgnored private var statusRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var statusRefreshEpoch: UInt64 = 0
+    @ObservationIgnored private var controllerStateGeneration: UInt64 = 0
     @ObservationIgnored private var lifecycleTask: Task<Void, Never>?
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
     @ObservationIgnored private var permissionRefreshTask: Task<Void, Never>?
@@ -152,12 +153,15 @@ public final class PaddrMenuModel {
         statusGeneration initiatingStatusGeneration: UInt64? = nil
     ) async -> UInt64 {
         let statusGeneration = initiatingStatusGeneration ?? self.statusGeneration
+        let initiatingControllerStateGeneration = controllerStateGeneration
         let controllerDescription = await dependencies.probeController()
         guard !Task.isCancelled,
               operation.map({ statusRefreshEpoch == $0 }) ?? true,
               terminationState == .idle
         else { return statusGeneration }
-        self.controllerDescription = controllerDescription
+        if controllerStateGeneration == initiatingControllerStateGeneration {
+            self.controllerDescription = controllerDescription
+        }
         inputMonitoringStatus = dependencies.inputMonitoringStatus()
         accessibilityTrusted = dependencies.accessibilityTrusted(false)
         let resultingStatusGeneration = withStatusPublicationGeneration(statusGeneration) {
@@ -472,6 +476,7 @@ public final class PaddrMenuModel {
                 guard self.isCurrent(operation), self.isEnabled, !self.isRunning else { return }
                 let controllerDescription = await self.dependencies.probeController()
                 guard self.isCurrent(operation), self.isEnabled, !self.isRunning else { return }
+                self.controllerStateGeneration &+= 1
                 self.controllerDescription = controllerDescription
                 if self.controllerConnected {
                     self.reconnectTask = nil
@@ -535,6 +540,7 @@ public final class PaddrMenuModel {
             case .connecting:
                 publishStatus(.connecting)
             case let .connected(description):
+                controllerStateGeneration &+= 1
                 controllerDescription = description
                 isRunning = true
                 publishStatus(.active)
@@ -553,6 +559,7 @@ public final class PaddrMenuModel {
                 }
             case let .deviceRemoved(summary):
                 update(summary)
+                controllerStateGeneration &+= 1
                 controllerDescription = nil
                 isRunning = false
                 sessionID = nil
@@ -561,6 +568,7 @@ public final class PaddrMenuModel {
                     scheduleReconnect(operation: lifecycleEpoch)
                 }
             case .deviceUnavailable:
+                controllerStateGeneration &+= 1
                 controllerDescription = nil
                 isRunning = false
                 sessionID = nil
