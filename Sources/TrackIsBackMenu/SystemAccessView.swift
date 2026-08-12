@@ -34,15 +34,8 @@ struct SystemAccessView: View {
 
     @ViewBuilder private var permissionControls: some View {
         PermissionTile(
-            title: LocalizedStringResource("Input Monitoring"),
-            detail: LocalizedStringResource("Reads controller trackpad reports."),
-            isGranted: model.inputMonitoringStatus == .granted,
-            requestAction: model.requestInputMonitoring,
-            settingsAction: model.openInputMonitoringSettings
-        )
-        PermissionTile(
             title: LocalizedStringResource("Accessibility"),
-            detail: LocalizedStringResource("Sends mapped mouse and keyboard input."),
+            detail: LocalizedStringResource("Reads trackpad reports and sends mapped mouse and keyboard input."),
             isGranted: model.accessibilityTrusted,
             requestAction: model.requestAccessibility,
             settingsAction: model.openAccessibilitySettings

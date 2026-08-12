@@ -1,7 +1,6 @@
 import Foundation
 
 public enum MenuFailure: Equatable, Sendable {
-    case inputMonitoringRequired
     case accessibilityRequired
     case configurationLoad(diagnostic: String)
     case configurationInvalid(diagnostic: String)
@@ -11,8 +10,6 @@ public enum MenuFailure: Equatable, Sendable {
 
     public var message: LocalizedStringResource {
         switch self {
-        case .inputMonitoringRequired:
-            LocalizedStringResource("Input Monitoring is required before Paddr can read the trackpads.")
         case .accessibilityRequired:
             LocalizedStringResource("Accessibility is required before Paddr can emit mapped input.")
         case .configurationLoad:
@@ -30,7 +27,7 @@ public enum MenuFailure: Equatable, Sendable {
 
     public var diagnostic: String? {
         switch self {
-        case .inputMonitoringRequired, .accessibilityRequired:
+        case .accessibilityRequired:
             nil
         case let .configurationLoad(diagnostic),
              let .configurationInvalid(diagnostic),
@@ -54,9 +51,7 @@ public enum MenuStatus: Equatable, Sendable {
     case active
     case configurationSaved
     case defaultsRestored
-    case requestingInputMonitoring
     case requestingAccessibility
-    case inputMonitoringSettings
     case accessibilitySettings
     case releasingOutputs
     case stopped
@@ -70,9 +65,7 @@ public enum MenuStatus: Equatable, Sendable {
         case .active: "Trackpad output is active."
         case .configurationSaved: "Configuration saved."
         case .defaultsRestored: "Defaults restored. Save to apply them."
-        case .requestingInputMonitoring: "Complete the Input Monitoring prompt, then return to Paddr."
         case .requestingAccessibility: "Complete the Accessibility prompt, then return to Paddr."
-        case .inputMonitoringSettings: "Enable Paddr in Input Monitoring, then return to the app."
         case .accessibilitySettings: "Enable Paddr in Accessibility, then return to the app."
         case .releasingOutputs: "Releasing mapped keys and mouse buttons…"
         case .stopped: "Trackpad output stopped."
@@ -82,8 +75,7 @@ public enum MenuStatus: Equatable, Sendable {
 
     public var messageState: MenuStatusMessageState? {
         switch self {
-        case .defaultsRestored, .requestingInputMonitoring, .requestingAccessibility,
-             .inputMonitoringSettings, .accessibilitySettings:
+        case .defaultsRestored, .requestingAccessibility, .accessibilitySettings:
             .guidance
         case .failure:
             .failure
@@ -94,11 +86,4 @@ public enum MenuStatus: Equatable, Sendable {
     }
 
     public var needsActionMessage: Bool { messageState != nil }
-}
-
-public enum InputMonitoringStatus: String, Equatable, Sendable {
-    case granted
-    case denied
-    case unknown
-    case unsupported
 }

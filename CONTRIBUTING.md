@@ -20,7 +20,7 @@ For controller or compatibility bugs, include:
 
 Remove controller serial numbers, local IOHID paths, private filesystem paths, signing details, and account information. Do not attach raw hardware captures unless they have been deliberately redacted.
 
-Permission behavior depends on the app's bundle identity, path, and signature. If macOS requested Input Monitoring or Accessibility again after an update, mention whether the app moved and how both builds were signed.
+Permission behavior depends on the app's bundle identity, path, and signature. If macOS requested Accessibility again after an update, mention whether the app moved and how both builds were signed.
 
 ## Quality bar
 

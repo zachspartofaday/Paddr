@@ -4,7 +4,6 @@ import XCTest
 final class MenuStatusTests: XCTestCase {
     func testMessageStateMapsEveryMenuStatusCase() {
         let failures: [MenuFailure] = [
-            .inputMonitoringRequired,
             .accessibilityRequired,
             .configurationLoad(diagnostic: "load"),
             .configurationInvalid(diagnostic: "invalid"),
@@ -18,9 +17,7 @@ final class MenuStatusTests: XCTestCase {
 
         let guidanceStatuses: [MenuStatus] = [
             .defaultsRestored,
-            .requestingInputMonitoring,
             .requestingAccessibility,
-            .inputMonitoringSettings,
             .accessibilitySettings,
         ]
         for status in guidanceStatuses {
