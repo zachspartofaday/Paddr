@@ -9,7 +9,12 @@ public final class PaddrMenuModel {
         didSet {
             guard !isPublishingConfiguration else { return }
             draftRevision &+= 1
+            let sessionHadStatusAuthority = sessionID != nil
+                && sessionStatusGeneration == currentStatusGeneration
             advanceStatusGeneration()
+            if sessionHadStatusAuthority {
+                sessionStatusGeneration = currentStatusGeneration
+            }
         }
     }
     public private(set) var savedConfiguration: TrackIsBackConfiguration
@@ -39,6 +44,7 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var configurationEpoch: UInt64 = 0
     @ObservationIgnored private var draftRevision: UInt64 = 0
     @ObservationIgnored private var statusGeneration: UInt64 = 0
+    @ObservationIgnored private var sessionStatusGeneration: UInt64?
     @ObservationIgnored private var statusPublicationGeneration: UInt64?
     @ObservationIgnored private var allowsAuthoritativeStatusPublication = false
     @ObservationIgnored private var isPublishingConfiguration = false
@@ -373,6 +379,7 @@ public final class PaddrMenuModel {
         statusGeneration = withStatusPublicationGeneration(statusGeneration) {
             publishStatus(.connecting)
         }
+        sessionStatusGeneration = statusGeneration
         let stream = await dependencies.session.start(configuration: savedConfiguration, observeOnly: false)
         guard isCurrent(operation), sessionID == identifier else { return }
         for await event in stream {
@@ -499,6 +506,7 @@ public final class PaddrMenuModel {
         statusGeneration: UInt64
     ) -> UInt64 {
         guard sessionID == identifier else { return statusGeneration }
+        let sessionStatusGeneration = self.sessionStatusGeneration ?? statusGeneration
         let isSessionEnding: Bool
         switch event {
         case .stopped, .receiverRemoved, .receiverUnavailable, .failed:
@@ -508,7 +516,7 @@ public final class PaddrMenuModel {
             isSessionEnding = false
         }
         let resultingStatusGeneration = withStatusPublicationGeneration(
-            statusGeneration,
+            sessionStatusGeneration,
             allowsAuthoritativePublication: isSessionEnding
         ) {
             switch event {
@@ -575,6 +583,9 @@ public final class PaddrMenuModel {
                 if isEnabled { isEnabled = false }
                 publishStatus(.failure(failure))
             }
+        }
+        if sessionID == identifier {
+            self.sessionStatusGeneration = resultingStatusGeneration
         }
         statusDidChange?()
         return resultingStatusGeneration
