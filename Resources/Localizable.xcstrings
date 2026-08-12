@@ -691,6 +691,17 @@
         }
       }
     },
+    "Pointer acceleration": {
+      "comment": "Speed-dependent pointer gain setting.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pointer acceleration"
+          }
+        }
+      }
+    },
     "Pointer settings": {
       "localizations": {
         "en": {
@@ -1234,6 +1245,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Waiting for Steam Controller 2 through the puck…"
+          }
+        }
+      }
+    },
+    "Zero is linear. Higher values increase fast-motion gain.": {
+      "comment": "Help text for the pointer acceleration slider.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zero is linear. Higher values increase fast-motion gain."
           }
         }
       }

@@ -44,6 +44,15 @@ public struct PadMapper: Sendable {
     let side: PadSide
     let configuration: PadConfiguration
 
+    // Raw pad units per second. Below the low speed the pointer stays linear;
+    // at or above the high speed the configured gain reaches its bounded maximum.
+    private static let mouseAccelerationLowSpeed = 20_000.0
+    private static let mouseAccelerationHighSpeed = 120_000.0
+    private static let mouseAccelerationMinimumGain = 1.0
+    private static let mouseAccelerationMaximumGain = 4.0
+    // A 100 ms pause starts a fresh motion sequence instead of amplifying resumed movement.
+    private static let mouseAccelerationLongGapNanoseconds: UInt64 = 100_000_000
+
     private var previous: TrackpadSample?
     private var activeZones: Set<ButtonZone> = []
     private var tapOrigin: (x: Int16, y: Int16, timestamp: UInt64)?
@@ -75,10 +84,29 @@ public struct PadMapper: Sendable {
                previous.isTouched,
                !Self.isInsideMouseDeadzone(sample, deadzone: configuration.mouseDeadzone),
                !Self.isInsideMouseDeadzone(previous, deadzone: configuration.mouseDeadzone) {
-                let dx = Double(Int(sample.x) - Int(previous.x)) / 700.0 * configuration.sensitivity
-                let dy = -Double(Int(sample.y) - Int(previous.y)) / 700.0 * configuration.sensitivity
-                if abs(dx) >= 0.05 || abs(dy) >= 0.05 {
-                    actions.append(.mouseMove(dx: dx, dy: dy))
+                if configuration.mouseAcceleration == 0 {
+                    let dx = Double(Int(sample.x) - Int(previous.x)) / 700.0 * configuration.sensitivity
+                    let dy = -Double(Int(sample.y) - Int(previous.y)) / 700.0 * configuration.sensitivity
+                    if abs(dx) >= 0.05 || abs(dy) >= 0.05 {
+                        actions.append(.mouseMove(dx: dx, dy: dy))
+                    }
+                } else {
+                    let rawDX = Double(Int(sample.x) - Int(previous.x))
+                    let rawDY = -Double(Int(sample.y) - Int(previous.y))
+                    let baseDX = rawDX / 700.0
+                    let baseDY = rawDY / 700.0
+                    let gain = Self.mouseAccelerationGain(
+                        rawDX: rawDX,
+                        rawDY: rawDY,
+                        previousTimestamp: previous.timestampNanoseconds,
+                        timestamp: sample.timestampNanoseconds,
+                        amount: configuration.mouseAcceleration
+                    )
+                    let dx = baseDX * gain * configuration.sensitivity
+                    let dy = baseDY * gain * configuration.sensitivity
+                    if abs(dx) >= 0.05 || abs(dy) >= 0.05 {
+                        actions.append(.mouseMove(dx: dx, dy: dy))
+                    }
                 }
             }
         case .scroll:
@@ -278,6 +306,34 @@ public struct PadMapper: Sendable {
             try outputAction(for: binding, isPressed: true),
             try outputAction(for: binding, isPressed: false)
         ]
+    }
+
+    private static func mouseAccelerationGain(
+        rawDX: Double,
+        rawDY: Double,
+        previousTimestamp: UInt64,
+        timestamp: UInt64,
+        amount: Double
+    ) -> Double {
+        guard timestamp > previousTimestamp else { return mouseAccelerationMinimumGain }
+        let intervalNanoseconds = timestamp - previousTimestamp
+        guard intervalNanoseconds <= mouseAccelerationLongGapNanoseconds else {
+            return mouseAccelerationMinimumGain
+        }
+
+        let intervalSeconds = Double(intervalNanoseconds) / 1_000_000_000
+        let speed = hypot(rawDX, rawDY) / intervalSeconds
+        let normalizedSpeed = min(
+            max(
+                (speed - mouseAccelerationLowSpeed)
+                    / (mouseAccelerationHighSpeed - mouseAccelerationLowSpeed),
+                0
+            ),
+            1
+        )
+        let smoothstep = normalizedSpeed * normalizedSpeed * (3 - 2 * normalizedSpeed)
+        return mouseAccelerationMinimumGain
+            + amount * (mouseAccelerationMaximumGain - mouseAccelerationMinimumGain) * smoothstep
     }
 
     private static func isInsideMouseDeadzone(_ sample: TrackpadSample, deadzone: Double) -> Bool {

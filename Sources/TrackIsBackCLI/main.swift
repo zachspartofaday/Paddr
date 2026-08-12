@@ -34,6 +34,8 @@ private func help() -> String {
       --right-mode MODE             Set the right pad mode.
       --left-sensitivity N          Left pointer sensitivity, 0.1...20.
       --right-sensitivity N         Right pointer sensitivity, 0.1...20.
+      --left-mouse-acceleration N   Left pointer acceleration, 0...1.
+      --right-mouse-acceleration N  Right pointer acceleration, 0...1.
       --left-scroll-sensitivity N   Left scroll sensitivity, 0...1.
       --right-scroll-sensitivity N  Right scroll sensitivity, 0...1.
       --left-tap ACTION|none        Tap a key, mouse-left, or mouse-right; likewise --right-tap.
@@ -144,6 +146,10 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
             let side: PadSide = argument.hasPrefix("--left") ? .left : .right
             let value = try parseDouble(nextValue(), option: argument)
             setPad(side) { $0.sensitivity = value }
+        case "--left-mouse-acceleration", "--right-mouse-acceleration":
+            let side: PadSide = argument.hasPrefix("--left") ? .left : .right
+            let value = try parseDouble(nextValue(), option: argument)
+            setPad(side) { $0.mouseAcceleration = value }
         case "--left-scroll-sensitivity", "--right-scroll-sensitivity":
             let side: PadSide = argument.hasPrefix("--left") ? .left : .right
             let value = try parseDouble(nextValue(), option: argument)
@@ -227,8 +233,8 @@ private func run(_ options: CLIOptions) throws {
         throw TrackIsBackError.device("No Steam Controller 2 puck interface was found.")
     }
     print("Selected device: \(deviceSummary.description)")
-    print("Left pad: \(options.configuration.left.mode.rawValue), pointer sensitivity \(options.configuration.left.sensitivity), scroll sensitivity \(options.configuration.left.scrollSensitivity), tap \(options.configuration.left.tapKey ?? "none")")
-    print("Right pad: \(options.configuration.right.mode.rawValue), pointer sensitivity \(options.configuration.right.sensitivity), scroll sensitivity \(options.configuration.right.scrollSensitivity), tap \(options.configuration.right.tapKey ?? "none")")
+    print("Left pad: \(options.configuration.left.mode.rawValue), pointer sensitivity \(options.configuration.left.sensitivity), pointer acceleration \(options.configuration.left.mouseAcceleration), scroll sensitivity \(options.configuration.left.scrollSensitivity), tap \(options.configuration.left.tapKey ?? "none")")
+    print("Right pad: \(options.configuration.right.mode.rawValue), pointer sensitivity \(options.configuration.right.sensitivity), pointer acceleration \(options.configuration.right.mouseAcceleration), scroll sensitivity \(options.configuration.right.scrollSensitivity), tap \(options.configuration.right.tapKey ?? "none")")
     print("Controller feature reports: unavailable by design")
 
     if options.dryRun {

@@ -94,6 +94,8 @@ final class ConfigurationBoundaryTests: XCTestCase {
         assertOldSchemaDefaults(in: loaded.right, mode: .mouse, sensitivity: 2.75)
         XCTAssertEqual(loaded.left.scrollSensitivity, 1)
         XCTAssertEqual(loaded.right.scrollSensitivity, 1)
+        XCTAssertEqual(loaded.left.mouseAcceleration, 0)
+        XCTAssertEqual(loaded.right.mouseAcceleration, 0)
     }
 
     func testOldSchemaScrollSensitivityCarriesExistingValueBelowOne() throws {
@@ -201,6 +203,21 @@ final class ConfigurationBoundaryTests: XCTestCase {
         )
     }
 
+    func testMouseAccelerationRoundTripsIndependentlyForBothPads() throws {
+        var expected = TrackIsBackConfiguration.default
+        expected.left.mouseAcceleration = 0.25
+        expected.right.mouseAcceleration = 0.75
+
+        let decoded = try JSONDecoder().decode(
+            TrackIsBackConfiguration.self,
+            from: ConfigurationStore.encoded(expected)
+        )
+
+        XCTAssertEqual(decoded.left.mouseAcceleration, 0.25)
+        XCTAssertEqual(decoded.right.mouseAcceleration, 0.75)
+        XCTAssertEqual(decoded, expected)
+    }
+
     func testEveryInclusiveConfigurationBoundaryIsAccepted() throws {
         for sensitivity in [0.1, 20] {
             for milliseconds in [1.0, 5_000] {
@@ -231,11 +248,22 @@ final class ConfigurationBoundaryTests: XCTestCase {
         }
     }
 
+    func testMouseAccelerationInclusiveBoundariesAreAccepted() {
+        for mouseAcceleration in [0.0, 1.0] {
+            let pad = PadConfiguration(mode: .mouse, mouseAcceleration: mouseAcceleration)
+            XCTAssertNoThrow(try configuration(pad).validated())
+        }
+    }
+
     func testAdjacentInvalidConfigurationValuesAreRejected() {
         assertInvalid(\.sensitivity, 0.1.nextDown)
         assertInvalid(\.sensitivity, 20.nextUp)
         assertInvalid(\.scrollSensitivity, -Double.leastNonzeroMagnitude)
         assertInvalid(\.scrollSensitivity, 1.nextUp)
+        assertInvalid(\.mouseAcceleration, -Double.leastNonzeroMagnitude)
+        assertInvalid(\.mouseAcceleration, 1.nextUp)
+        assertInvalid(\.mouseAcceleration, .nan)
+        assertInvalid(\.mouseAcceleration, .infinity)
         assertInvalid(\.tapMaximumMilliseconds, 1.nextDown)
         assertInvalid(\.tapMaximumMilliseconds, 5_000.nextUp)
         assertInvalid(\.tapMaximumMovement, -Double.leastNonzeroMagnitude)
@@ -274,6 +302,7 @@ final class ConfigurationBoundaryTests: XCTestCase {
     ) {
         XCTAssertEqual(pad.mode, mode, file: file, line: line)
         XCTAssertEqual(pad.sensitivity, sensitivity, file: file, line: line)
+        XCTAssertEqual(pad.mouseAcceleration, 0, file: file, line: line)
         XCTAssertEqual(pad.mouseDeadzone, 0, file: file, line: line)
         XCTAssertNil(pad.tapKey, file: file, line: line)
         XCTAssertEqual(pad.tapMaximumMilliseconds, 250, file: file, line: line)
