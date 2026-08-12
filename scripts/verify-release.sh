@@ -78,10 +78,11 @@ digest_hash=$(printf '%s\n' "$digest_line" | awk '{print $1}')
 digest_name=$(printf '%s\n' "$digest_line" | awk '{print $2}')
 printf '%s\n' "$digest_hash" | grep -Eq '^[0-9a-fA-F]{64}$'
 test "$digest_name" = "Paddr.zip"
-(
-    cd "$(dirname -- "$digest_path")"
-    shasum -a 256 -c "$(basename -- "$digest_path")"
-)
+computed_hash=$(shasum -a 256 "$zip_path" | awk '{print $1}')
+if test "$computed_hash" != "$digest_hash"; then
+    echo "Archive digest does not match digest file." >&2
+    exit 1
+fi
 
 archive_listing=$(unzip -Z1 "$zip_path")
 test -n "$archive_listing"

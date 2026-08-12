@@ -67,6 +67,35 @@ if "$script_dir/verify-release.sh" \
     exit 1
 fi
 
+cross_directory_supplied="$recipient_dir/cross-directory-supplied"
+cross_directory_digest="$recipient_dir/cross-directory-digest"
+mkdir -p "$cross_directory_supplied" "$cross_directory_digest"
+cp "$zip_path" "$cross_directory_supplied/Paddr.zip"
+cp "$tampered_dir/Paddr.zip" "$cross_directory_digest/Paddr.zip"
+(
+    cd "$cross_directory_digest"
+    shasum -a 256 Paddr.zip > Paddr.zip.sha256
+)
+if "$script_dir/verify-release.sh" \
+    "$app_path" "$cross_directory_supplied/Paddr.zip" "$cross_directory_digest/Paddr.zip.sha256" \
+    "$expected_version" "$expected_build" >/dev/null 2>&1; then
+    echo "Release verification accepted an archive with a mismatched digest." >&2
+    exit 1
+fi
+
+cross_directory_match_supplied="$recipient_dir/cross-directory-match-supplied"
+cross_directory_match_digest="$recipient_dir/cross-directory-match-digest"
+mkdir -p "$cross_directory_match_supplied" "$cross_directory_match_digest"
+cp "$zip_path" "$cross_directory_match_supplied/Paddr.zip"
+cp "$zip_path" "$cross_directory_match_digest/Paddr.zip"
+(
+    cd "$cross_directory_match_digest"
+    shasum -a 256 Paddr.zip > Paddr.zip.sha256
+)
+"$script_dir/verify-release.sh" \
+    "$app_path" "$cross_directory_match_supplied/Paddr.zip" "$cross_directory_match_digest/Paddr.zip.sha256" \
+    "$expected_version" "$expected_build"
+
 nonexecutable_dir="$recipient_dir/nonexecutable"
 nonexecutable_stage="$recipient_dir/nonexecutable-stage"
 mkdir -p "$nonexecutable_dir" "$nonexecutable_stage"
