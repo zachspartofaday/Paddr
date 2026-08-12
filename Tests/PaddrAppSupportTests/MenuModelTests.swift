@@ -25,6 +25,52 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(state.loadRanOnMainThread, false)
     }
 
+    func testInitializationFailurePreservesNewerValidationFailureStatus() async {
+        let state = readyState(controller: nil)
+        state.loadFailure = "Unreadable configuration"
+        let loadGate = DispatchSemaphore(value: 0)
+        state.loadGate = loadGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+
+        model.configuration.left.sensitivity = 21
+        model.saveAndApply()
+        guard case .failure(.configurationInvalid) = model.status else {
+            return XCTFail("Expected the newer validation failure")
+        }
+
+        loadGate.signal()
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertEqual(model.configuration.left.sensitivity, 21)
+        XCTAssertEqual(model.savedConfiguration, .default)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertTrue(model.needsInitialSave)
+        guard case .failure(.configurationInvalid) = model.status else {
+            return XCTFail("Expected the newer validation failure to remain published")
+        }
+    }
+
+    func testInitializationFailureDoesNotReplaceTerminationStatus() async {
+        let state = readyState(controller: nil)
+        state.loadFailure = "Unreadable configuration"
+        let loadGate = DispatchSemaphore(value: 0)
+        state.loadGate = loadGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+
+        model.isEnabled = true
+        var didComplete = false
+        XCTAssertTrue(model.stopForTermination { didComplete = true })
+        XCTAssertEqual(model.status, .releasingOutputs)
+
+        loadGate.signal()
+        await waitUntil(model: model) { didComplete }
+
+        XCTAssertEqual(model.savedConfiguration, .default)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertTrue(model.needsInitialSave)
+        XCTAssertEqual(model.status, .releasingOutputs)
+    }
+
     func testEditAndEnableBeforeInitializationPreservesAndActivatesNewerDraft() async {
         let state = readyState(controller: "Fake")
         var stored = TrackIsBackConfiguration.default
@@ -161,12 +207,41 @@ final class MenuModelTests: XCTestCase {
         model.configuration.left.sensitivity = 5
         state.saveGate = nil
         saveGate.signal()
-        await waitUntil(model: model) { model.status == .configurationSaved }
+        await waitUntil(model: model) { model.savedConfiguration.left.sensitivity == 3 }
 
         XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 3)
         XCTAssertEqual(model.savedConfiguration.left.sensitivity, 3)
         XCTAssertEqual(model.configuration.left.sensitivity, 5)
         XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
+    func testOlderSaveCompletionPreservesNewerValidationFailureStatus() async {
+        let state = readyState(controller: nil)
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.left.sensitivity = 3
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+
+        model.saveAndApply()
+        await waitUntil { state.saveCallCount == 1 }
+        model.configuration.left.sensitivity = 21
+        model.saveAndApply()
+        guard case .failure(.configurationInvalid) = model.status else {
+            return XCTFail("Expected the newer validation failure")
+        }
+
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) { model.savedConfiguration.left.sensitivity == 3 }
+
+        XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 3)
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 3)
+        XCTAssertEqual(model.configuration.left.sensitivity, 21)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        guard case .failure(.configurationInvalid) = model.status else {
+            return XCTFail("Expected the newer validation failure to remain published")
+        }
     }
 
     func testAlreadyGrantedPermissionRequestsReturnToOperationalStatus() async {

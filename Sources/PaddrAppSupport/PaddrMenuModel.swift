@@ -35,6 +35,7 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var initializationTask: Task<Void, Never>?
     @ObservationIgnored private var configurationTask: Task<Void, Never>?
     @ObservationIgnored private var configurationEpoch: UInt64 = 0
+    @ObservationIgnored private var saveAttemptEpoch: UInt64 = 0
     @ObservationIgnored private var draftRevision: UInt64 = 0
     @ObservationIgnored private var isPublishingConfiguration = false
     @ObservationIgnored private var activationCommitPending = false
@@ -81,6 +82,8 @@ public final class PaddrMenuModel {
 
     public func saveAndApply() {
         guard terminationState == .idle else { return }
+        saveAttemptEpoch &+= 1
+        let attempt = saveAttemptEpoch
         let draft = configuration
         let initiatingDraftRevision = draftRevision
         let validated: TrackIsBackConfiguration
@@ -102,6 +105,7 @@ public final class PaddrMenuModel {
             await saveAndApply(
                 validated,
                 replacingRevision: initiatingDraftRevision,
+                attempt: attempt,
                 operation: operation
             )
         }
@@ -116,7 +120,9 @@ public final class PaddrMenuModel {
             if draftRevision == initialDraftRevision { publishConfiguration(.default) }
             savedConfiguration = .default
             needsInitialSave = true
-            status = .failure(.configurationLoad(diagnostic: String(describing: error)))
+            if draftRevision == initialDraftRevision, terminationState == .idle {
+                status = .failure(.configurationLoad(diagnostic: String(describing: error)))
+            }
         }
         isInitialized = true
         await refreshStatusNow()
@@ -139,6 +145,7 @@ public final class PaddrMenuModel {
     private func saveAndApply(
         _ validated: TrackIsBackConfiguration,
         replacingRevision initiatingDraftRevision: UInt64,
+        attempt: UInt64,
         operation: UInt64
     ) async {
         do {
@@ -147,11 +154,15 @@ public final class PaddrMenuModel {
             if draftRevision == initiatingDraftRevision { publishConfiguration(validated) }
             savedConfiguration = validated
             needsInitialSave = false
-            status = .configurationSaved
+            if saveAttemptEpoch == attempt, draftRevision == initiatingDraftRevision {
+                status = .configurationSaved
+            }
             if isEnabled { startLifecycle(commitDraft: false) }
         } catch {
             guard terminationState == .idle else { return }
-            status = .failure(.configurationSave(diagnostic: String(describing: error)))
+            if saveAttemptEpoch == attempt, draftRevision == initiatingDraftRevision {
+                status = .failure(.configurationSave(diagnostic: String(describing: error)))
+            }
         }
         clearConfigurationTask(operation: operation)
         statusDidChange?()
