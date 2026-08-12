@@ -77,11 +77,11 @@ public enum MenuStatus: Equatable, Sendable {
 
     public var messageState: MenuStatusMessageState? {
         switch self {
-        case .defaultsRestored, .requestingAccessibility, .accessibilitySettings:
+        case .waitingForNeutral, .defaultsRestored, .requestingAccessibility, .accessibilitySettings:
             .guidance
         case .failure:
             .failure
-        case .off, .waitingForController, .waitingForNeutral, .connecting, .active,
+        case .off, .waitingForController, .connecting, .active,
              .configurationSaved, .releasingOutputs, .stopped:
             nil
         }

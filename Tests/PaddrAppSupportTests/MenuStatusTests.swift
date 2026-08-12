@@ -16,6 +16,7 @@ final class MenuStatusTests: XCTestCase {
         }
 
         let guidanceStatuses: [MenuStatus] = [
+            .waitingForNeutral,
             .defaultsRestored,
             .requestingAccessibility,
             .accessibilitySettings,
@@ -27,7 +28,6 @@ final class MenuStatusTests: XCTestCase {
         let hiddenStatuses: [MenuStatus] = [
             .off,
             .waitingForController,
-            .waitingForNeutral,
             .connecting,
             .active,
             .configurationSaved,

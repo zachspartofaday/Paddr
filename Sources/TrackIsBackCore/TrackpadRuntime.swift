@@ -163,7 +163,7 @@ public enum TrackpadRuntime {
                     guard let pads = TritonParser.parseTrackpads(bytes, timestampNanoseconds: timestamp) else {
                         return
                     }
-                    lastAcceptedReportUptime = dependencies.uptimeNanoseconds()
+                    lastAcceptedReportUptime = timestamp
                     reportCount += 1
 
                     if controllerEpoch == nil {

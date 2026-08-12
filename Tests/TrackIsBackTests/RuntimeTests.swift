@@ -212,6 +212,43 @@ final class RuntimeTests: XCTestCase {
         XCTAssertEqual(events.events.last, .controllerLost(.init(reportCount: 2, actionCount: 0)))
     }
 
+    func testDelayedDrainUsesReportReceiptTimeToReleaseHeldOutputAtDeadline() throws {
+        let clock = ManualUptimeClock()
+        let timeline = TimelineRecorder()
+        let output = RecordingOutput { action in timeline.append(action.description) }
+        let events = EventRecorder { event in timeline.append(String(describing: event)) }
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .delayedReport(
+                heldLeftReport(),
+                receivedAt: 10,
+                processedAt: 1_000_000_010
+            ),
+            .wake(at: 1_000_000_010),
+            .stop
+        ])
+        var configuration = TrackIsBackConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+
+        _ = try run(
+            configuration: configuration,
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: events
+        )
+
+        let space = try KeyCatalog.resolve("space")
+        XCTAssertEqual(output.actions, [
+            .key(space, isPressed: true),
+            .key(space, isPressed: false)
+        ])
+        let entries = timeline.entries
+        let lostIndex = try XCTUnwrap(entries.firstIndex { $0.contains("controllerLost") })
+        XCTAssertLessThan(try XCTUnwrap(entries.firstIndex(of: "key space up")), lostIndex)
+    }
+
     func testLossReleasesDistinctKeyAndMouseBeforePublishingLost() throws {
         let clock = ManualUptimeClock()
         let timeline = TimelineRecorder()
@@ -469,6 +506,7 @@ private final class ManualUptimeClock: Sendable {
 private final class ScriptedHID: TrackpadHIDStreaming, Sendable {
     enum Step: Sendable {
         case report([UInt8], at: UInt64)
+        case delayedReport([UInt8], receivedAt: UInt64, processedAt: UInt64)
         case wake(at: UInt64)
         case remove
         case stop
@@ -494,6 +532,9 @@ private final class ScriptedHID: TrackpadHIDStreaming, Sendable {
             case let .report(bytes, uptime):
                 clock.set(uptime)
                 try onReport(bytes, uptime)
+            case let .delayedReport(bytes, receivedAt, processedAt):
+                clock.set(processedAt)
+                try onReport(bytes, receivedAt)
             case let .wake(uptime):
                 clock.set(uptime)
                 try onWake()
