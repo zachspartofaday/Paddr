@@ -9,7 +9,9 @@ public final class PaddrMenuModel {
         didSet {
             guard !isPublishingConfiguration else { return }
             draftRevision &+= 1
-            advanceStatusGeneration()
+            preservingCurrentOperationalStatusAuthority {
+                advanceStatusGeneration()
+            }
         }
     }
     public private(set) var savedConfiguration: TrackIsBackConfiguration
@@ -22,7 +24,8 @@ public final class PaddrMenuModel {
         }
     }
     public private(set) var isRunning = false
-    public private(set) var controllerDescription: String?
+    public private(set) var receiverDescription: String?
+    public private(set) var controllerConnected = false
     public private(set) var accessibilityTrusted = false
     public private(set) var status: MenuStatus = .off
     public private(set) var reportCount = 0
@@ -38,15 +41,17 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var configurationEpoch: UInt64 = 0
     @ObservationIgnored private var draftRevision: UInt64 = 0
     @ObservationIgnored private var statusGeneration: UInt64 = 0
+    @ObservationIgnored private var sessionStatusGeneration: UInt64?
     @ObservationIgnored private var statusPublicationGeneration: UInt64?
     @ObservationIgnored private var allowsAuthoritativeStatusPublication = false
     @ObservationIgnored private var isPublishingConfiguration = false
     @ObservationIgnored private var activationCommitPending = false
     @ObservationIgnored private var statusRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var statusRefreshEpoch: UInt64 = 0
-    @ObservationIgnored private var controllerStateGeneration: UInt64 = 0
+    @ObservationIgnored private var receiverStateGeneration: UInt64 = 0
     @ObservationIgnored private var lifecycleTask: Task<Void, Never>?
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
+    @ObservationIgnored private var reconnectStatusGeneration: UInt64?
     @ObservationIgnored private var permissionRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var terminationTask: Task<Void, Never>?
     @ObservationIgnored private var terminationState = TerminationState.idle
@@ -54,7 +59,6 @@ public final class PaddrMenuModel {
     @ObservationIgnored public var statusDidChange: (@MainActor () -> Void)?
 
     public var hasUnsavedChanges: Bool { needsInitialSave || configuration != savedConfiguration }
-    public var controllerConnected: Bool { controllerDescription != nil }
     public var hasSystemAccess: Bool { accessibilityTrusted }
 
     public init(dependencies: MenuDependencies = .live) {
@@ -104,8 +108,12 @@ public final class PaddrMenuModel {
             statusDidChange?()
             return
         }
-        advanceStatusGeneration()
+        preservingCurrentOperationalStatusAuthority {
+            advanceStatusGeneration()
+        }
         let initiatingStatusGeneration = currentStatusGeneration
+        let initiatingLifecycleEpoch = lifecycleEpoch
+        let initiatingSessionID = sessionID
 
         configurationEpoch &+= 1
         let operation = configurationEpoch
@@ -118,6 +126,8 @@ public final class PaddrMenuModel {
                 validated,
                 replacingRevision: initiatingDraftRevision,
                 statusGeneration: initiatingStatusGeneration,
+                lifecycleEpoch: initiatingLifecycleEpoch,
+                sessionID: initiatingSessionID,
                 operation: operation
             )
         }
@@ -152,14 +162,14 @@ public final class PaddrMenuModel {
         statusGeneration initiatingStatusGeneration: UInt64? = nil
     ) async -> UInt64 {
         let statusGeneration = initiatingStatusGeneration ?? self.statusGeneration
-        let initiatingControllerStateGeneration = controllerStateGeneration
-        let controllerDescription = await dependencies.probeController()
+        let initiatingReceiverStateGeneration = receiverStateGeneration
+        let receiverDescription = await dependencies.probeReceiver()
         guard !Task.isCancelled,
               operation.map({ statusRefreshEpoch == $0 }) ?? true,
               terminationState == .idle
         else { return statusGeneration }
-        if controllerStateGeneration == initiatingControllerStateGeneration {
-            self.controllerDescription = controllerDescription
+        if receiverStateGeneration == initiatingReceiverStateGeneration {
+            self.receiverDescription = receiverDescription
         }
         accessibilityTrusted = dependencies.accessibilityTrusted(false)
         let resultingStatusGeneration = withStatusPublicationGeneration(statusGeneration) {
@@ -173,6 +183,8 @@ public final class PaddrMenuModel {
         _ validated: TrackIsBackConfiguration,
         replacingRevision initiatingDraftRevision: UInt64,
         statusGeneration initiatingStatusGeneration: UInt64,
+        lifecycleEpoch initiatingLifecycleEpoch: UInt64,
+        sessionID initiatingSessionID: UUID?,
         operation: UInt64
     ) async {
         do {
@@ -186,10 +198,15 @@ public final class PaddrMenuModel {
             ) {
                 publishStatus(.configurationSaved)
             }
-            if isEnabled {
+            if isEnabled,
+               configurationEpoch == operation,
+               lifecycleEpoch == initiatingLifecycleEpoch {
                 startLifecycle(
                     commitDraft: false,
-                    statusGeneration: resultingStatusGeneration
+                    statusGeneration: statusGenerationForLifecycleReplacement(
+                        completionGeneration: resultingStatusGeneration,
+                        replacingSession: initiatingSessionID
+                    )
                 )
             }
         } catch {
@@ -211,7 +228,13 @@ public final class PaddrMenuModel {
     public func requestAccessibility() {
         guard terminationState == .idle else { return }
         accessibilityTrusted = dependencies.accessibilityTrusted(true)
-        publishStatus(accessibilityTrusted ? operationalStatus : .requestingAccessibility)
+        if accessibilityTrusted {
+            preservingCurrentOperationalStatusAuthority {
+                publishStatus(operationalStatus)
+            }
+        } else {
+            publishStatus(.requestingAccessibility)
+        }
         schedulePermissionRefresh()
     }
 
@@ -257,8 +280,10 @@ public final class PaddrMenuModel {
         activationCommitPending = false
         statusRefreshTask = nil
         reconnectTask = nil
+        reconnectStatusGeneration = nil
         permissionRefreshTask = nil
         sessionID = nil
+        controllerConnected = false
         isRunning = false
 
         terminationTask = Task { [self] in
@@ -308,7 +333,9 @@ public final class PaddrMenuModel {
         let operation = lifecycleEpoch
         reconnectTask?.cancel()
         reconnectTask = nil
+        reconnectStatusGeneration = nil
         sessionID = nil
+        controllerConnected = false
         isRunning = false
         publishStatus(.off)
         lifecycleTask?.cancel()
@@ -329,7 +356,9 @@ public final class PaddrMenuModel {
         guard isCurrent(operation), isEnabled else { return }
         reconnectTask?.cancel()
         reconnectTask = nil
+        reconnectStatusGeneration = nil
         sessionID = nil
+        controllerConnected = false
         isRunning = false
         await dependencies.session.stop()
         guard isCurrent(operation), isEnabled else { return }
@@ -354,11 +383,11 @@ public final class PaddrMenuModel {
             )
             return
         }
-        guard controllerConnected else {
+        guard receiverDescription != nil else {
             statusGeneration = withStatusPublicationGeneration(statusGeneration) {
                 publishStatus(.waitingForController)
             }
-            scheduleReconnect(operation: operation)
+            scheduleReconnect(operation: operation, statusGeneration: statusGeneration)
             statusDidChange?()
             return
         }
@@ -370,6 +399,7 @@ public final class PaddrMenuModel {
         statusGeneration = withStatusPublicationGeneration(statusGeneration) {
             publishStatus(.connecting)
         }
+        sessionStatusGeneration = statusGeneration
         let stream = await dependencies.session.start(configuration: savedConfiguration, observeOnly: false)
         guard isCurrent(operation), sessionID == identifier else { return }
         for await event in stream {
@@ -440,23 +470,26 @@ public final class PaddrMenuModel {
         statusDidChange?()
     }
 
-    private func scheduleReconnect(operation: UInt64) {
+    private func scheduleReconnect(operation: UInt64, statusGeneration: UInt64) {
         reconnectTask?.cancel()
+        reconnectStatusGeneration = statusGeneration
         reconnectTask = Task { [weak self] in
             guard let self else { return }
             while self.isCurrent(operation), self.isEnabled, !self.isRunning {
                 do { try await self.dependencies.sleep(.seconds(1)) }
                 catch { return }
                 guard self.isCurrent(operation), self.isEnabled, !self.isRunning else { return }
-                let controllerDescription = await self.dependencies.probeController()
+                let receiverDescription = await self.dependencies.probeReceiver()
                 guard self.isCurrent(operation), self.isEnabled, !self.isRunning else { return }
-                self.controllerStateGeneration &+= 1
-                self.controllerDescription = controllerDescription
-                if self.controllerConnected {
+                self.receiverStateGeneration &+= 1
+                self.receiverDescription = receiverDescription
+                if receiverDescription != nil {
+                    let reconnectStatusGeneration = self.reconnectStatusGeneration ?? statusGeneration
                     self.reconnectTask = nil
+                    self.reconnectStatusGeneration = nil
                     self.startLifecycle(
                         commitDraft: false,
-                        statusGeneration: self.currentStatusGeneration
+                        statusGeneration: reconnectStatusGeneration
                     )
                     return
                 }
@@ -476,7 +509,7 @@ public final class PaddrMenuModel {
 
     private var operationalStatus: MenuStatus {
         if isRunning { return .active }
-        if isEnabled { return controllerConnected ? .connecting : .waitingForController }
+        if isEnabled { return controllerConnected ? .waitingForNeutral : .waitingForController }
         return .off
     }
 
@@ -484,7 +517,19 @@ public final class PaddrMenuModel {
         switch status {
         case .requestingAccessibility where accessibilityTrusted,
              .accessibilitySettings where accessibilityTrusted:
+            let identifier = sessionID
+            let priorSessionStatusGeneration = identifier == nil ? nil : sessionStatusGeneration
+            let priorReconnectStatusGeneration = reconnectTask == nil
+                ? nil
+                : reconnectStatusGeneration
+            let priorStatusGeneration = currentStatusGeneration
             publishStatus(operationalStatus)
+            guard currentStatusGeneration != priorStatusGeneration else { return }
+            synchronizeOperationalStatusOwners(
+                sessionID: identifier,
+                sessionStatusGeneration: priorSessionStatusGeneration,
+                reconnectStatusGeneration: priorReconnectStatusGeneration
+            )
         default:
             break
         }
@@ -496,64 +541,93 @@ public final class PaddrMenuModel {
         statusGeneration: UInt64
     ) -> UInt64 {
         guard sessionID == identifier else { return statusGeneration }
+        let sessionStatusGeneration = self.sessionStatusGeneration ?? statusGeneration
         let isSessionEnding: Bool
         switch event {
-        case .stopped, .deviceRemoved, .deviceUnavailable, .failed:
+        case .stopped, .receiverRemoved, .receiverUnavailable, .failed:
             isSessionEnding = true
-        case .connecting, .connected, .progress:
+        case .connecting, .waitingForController, .controllerConnected, .outputArmed,
+             .progress, .controllerLost:
             isSessionEnding = false
         }
+        var shouldScheduleReconnect = false
         let resultingStatusGeneration = withStatusPublicationGeneration(
-            statusGeneration,
+            sessionStatusGeneration,
             allowsAuthoritativePublication: isSessionEnding
         ) {
             switch event {
             case .connecting:
                 publishStatus(.connecting)
-            case let .connected(description):
-                controllerStateGeneration &+= 1
-                controllerDescription = description
+            case let .waitingForController(description):
+                receiverStateGeneration &+= 1
+                receiverDescription = description
+                controllerConnected = false
+                isRunning = false
+                publishStatus(.waitingForController)
+            case .controllerConnected:
+                controllerConnected = true
+                isRunning = false
+                publishStatus(.waitingForNeutral)
+            case .outputArmed:
+                guard controllerConnected else { break }
                 isRunning = true
                 publishStatus(.active)
             case let .progress(summary):
-                reportCount = summary.reportCount
-                actionCount = summary.actionCount
+                update(summary)
+            case let .controllerLost(summary):
+                update(summary)
+                controllerConnected = false
+                isRunning = false
+                publishStatus(.waitingForController)
             case let .stopped(summary):
                 update(summary)
+                controllerConnected = false
                 isRunning = false
                 sessionID = nil
                 if isEnabled, terminationState == .idle {
                     publishStatus(.waitingForController)
-                    scheduleReconnect(operation: lifecycleEpoch)
+                    shouldScheduleReconnect = true
                 } else {
                     publishStatus(.stopped)
                 }
-            case let .deviceRemoved(summary):
+            case let .receiverRemoved(summary):
                 update(summary)
-                controllerStateGeneration &+= 1
-                controllerDescription = nil
+                receiverStateGeneration &+= 1
+                receiverDescription = nil
+                controllerConnected = false
                 isRunning = false
                 sessionID = nil
                 publishStatus(.waitingForController)
                 if isEnabled {
-                    scheduleReconnect(operation: lifecycleEpoch)
+                    shouldScheduleReconnect = true
                 }
-            case .deviceUnavailable:
-                controllerStateGeneration &+= 1
-                controllerDescription = nil
+            case .receiverUnavailable:
+                receiverStateGeneration &+= 1
+                receiverDescription = nil
+                controllerConnected = false
                 isRunning = false
                 sessionID = nil
                 publishStatus(.waitingForController)
                 if isEnabled {
-                    scheduleReconnect(operation: lifecycleEpoch)
+                    shouldScheduleReconnect = true
                 }
             case let .failed(message):
                 sessionID = nil
+                controllerConnected = false
                 isRunning = false
                 let failure = MenuFailure.output(diagnostic: message)
                 if isEnabled { isEnabled = false }
                 publishStatus(.failure(failure))
             }
+        }
+        if sessionID == identifier {
+            self.sessionStatusGeneration = resultingStatusGeneration
+        }
+        if shouldScheduleReconnect {
+            scheduleReconnect(
+                operation: lifecycleEpoch,
+                statusGeneration: resultingStatusGeneration
+            )
         }
         statusDidChange?()
         return resultingStatusGeneration
@@ -566,6 +640,54 @@ public final class PaddrMenuModel {
 
     private var currentStatusGeneration: UInt64 {
         statusPublicationGeneration ?? statusGeneration
+    }
+
+    private func statusGenerationForLifecycleReplacement(
+        completionGeneration: UInt64,
+        replacingSession identifier: UUID?
+    ) -> UInt64 {
+        guard let identifier,
+              sessionID == identifier,
+              let sessionStatusGeneration,
+              sessionStatusGeneration == currentStatusGeneration
+        else { return completionGeneration }
+        return sessionStatusGeneration
+    }
+
+    private func preservingCurrentOperationalStatusAuthority(_ operation: () -> Void) {
+        let identifier = sessionID
+        let priorSessionStatusGeneration = identifier != nil
+            && sessionStatusGeneration == currentStatusGeneration
+            ? sessionStatusGeneration
+            : nil
+        let priorReconnectStatusGeneration = reconnectTask != nil
+            && reconnectStatusGeneration == currentStatusGeneration
+            ? reconnectStatusGeneration
+            : nil
+        operation()
+        synchronizeOperationalStatusOwners(
+            sessionID: identifier,
+            sessionStatusGeneration: priorSessionStatusGeneration,
+            reconnectStatusGeneration: priorReconnectStatusGeneration
+        )
+    }
+
+    private func synchronizeOperationalStatusOwners(
+        sessionID identifier: UUID?,
+        sessionStatusGeneration priorSessionStatusGeneration: UInt64?,
+        reconnectStatusGeneration priorReconnectStatusGeneration: UInt64?
+    ) {
+        if let identifier,
+           let priorSessionStatusGeneration,
+           sessionID == identifier,
+           sessionStatusGeneration == priorSessionStatusGeneration {
+            sessionStatusGeneration = currentStatusGeneration
+        }
+        if reconnectTask != nil,
+           let priorReconnectStatusGeneration,
+           reconnectStatusGeneration == priorReconnectStatusGeneration {
+            reconnectStatusGeneration = currentStatusGeneration
+        }
     }
 
     private func advanceStatusGeneration() {
@@ -640,6 +762,7 @@ public final class PaddrMenuModel {
         statusRefreshTask = nil
         lifecycleTask = nil
         reconnectTask = nil
+        reconnectStatusGeneration = nil
         permissionRefreshTask = nil
         terminationTask = nil
         let completions = terminationCompletions

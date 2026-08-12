@@ -6,7 +6,7 @@ import TrackIsBackCore
 
 @MainActor
 final class MenuDependencyTests: XCTestCase {
-    func testConfigurationAndControllerDependenciesRunOffMainActor() async throws {
+    func testConfigurationAndReceiverDependenciesRunOffMainActor() async throws {
         let state = DependencyExecutionState()
         let storedConfiguration: TrackIsBackConfiguration = {
             var configuration = TrackIsBackConfiguration.default
@@ -23,7 +23,7 @@ final class MenuDependencyTests: XCTestCase {
                 state.saveRanOnMainThread = Thread.isMainThread
                 state.savedConfiguration = configuration
             },
-            probeController: {
+            probeReceiver: {
                 state.probeRanOnMainThread = Thread.isMainThread
                 return "Fake puck"
             },
@@ -34,11 +34,11 @@ final class MenuDependencyTests: XCTestCase {
 
         let loadedConfiguration = try await dependencies.loadConfiguration()
         try await dependencies.saveConfiguration(loadedConfiguration)
-        let controllerDescription = await dependencies.probeController()
+        let receiverDescription = await dependencies.probeReceiver()
 
         XCTAssertEqual(loadedConfiguration.left.sensitivity, 4)
         XCTAssertEqual(state.savedConfiguration, loadedConfiguration)
-        XCTAssertEqual(controllerDescription, "Fake puck")
+        XCTAssertEqual(receiverDescription, "Fake puck")
         XCTAssertEqual(state.loadRanOnMainThread, false)
         XCTAssertEqual(state.saveRanOnMainThread, false)
         XCTAssertEqual(state.probeRanOnMainThread, false)

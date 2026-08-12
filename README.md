@@ -109,7 +109,6 @@ scripts/paddr.sh --left-mode dpad --left-layout grid-nine \
 ## Known issues
 
 - Games with dynamic glyphs / control-icon indicators may switch back and forth between controller button icons and keyboard binds.
-- The "Controller Connected" status detects that the puck (receiver) is connected, not the controller itself.
 
 ## Contributing
 

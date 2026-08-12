@@ -101,7 +101,8 @@ final class SessionTests: XCTestCase {
 
         let oldEvents = await events(in: oldStream)
         XCTAssertEqual(Array(runtime.lifecycleEvents.prefix(3)), ["start:1", "finish:1", "start:2"])
-        XCTAssertFalse(oldEvents.contains(.connected("late:1")))
+        XCTAssertEqual(oldEvents.filter { $0 == .controllerConnected }.count, 1)
+        XCTAssertFalse(oldEvents.contains(.controllerLost(.init(reportCount: 1, actionCount: 1))))
         XCTAssertEqual(runtime.maximumConcurrent, 1)
 
         let stop = Task { await session.stop() }
@@ -116,8 +117,8 @@ final class SessionTests: XCTestCase {
         let oldStream = await session.start(configuration: configuration(sensitivity: 1))
         await runtime.waitForStartCount(1)
         var oldIterator = oldStream.makeAsyncIterator()
-        let initialEvents = [await oldIterator.next(), await oldIterator.next()]
-        XCTAssertEqual(initialEvents, [.connecting, .connected("worker:1")])
+        let initialEvents = [await oldIterator.next(), await oldIterator.next(), await oldIterator.next()]
+        XCTAssertEqual(initialEvents, [.connecting, .waitingForController("worker:1"), .controllerConnected])
 
         let replacementConfiguration = configuration(sensitivity: 2)
         let replacement = Task {
@@ -136,6 +137,44 @@ final class SessionTests: XCTestCase {
         await waitForEpoch(3, session: session)
         runtime.release(worker: 2)
         await stop.value
+    }
+
+    func testControllerStateSurvivesProgressPressureAndTerminalFinishesStream() async {
+        let runtime = ProgressPressureRuntime()
+        let session = TrackpadSession(runtime: runtime.run)
+        let stream = await session.start(configuration: configuration(sensitivity: 1))
+        await runtime.waitUntilProduced()
+
+        var iterator = stream.makeAsyncIterator()
+        var bufferedEvents: [TrackpadSessionEvent] = []
+        for _ in 0..<32 {
+            guard let event = await iterator.next() else {
+                return XCTFail("Expected the bounded session buffer to remain open")
+            }
+            bufferedEvents.append(event)
+        }
+
+        let connectedIndex = bufferedEvents.firstIndex(of: .controllerConnected)
+        let armedIndex = bufferedEvents.lastIndex(of: .outputArmed)
+        XCTAssertNotNil(connectedIndex)
+        XCTAssertNotNil(armedIndex)
+        if let connectedIndex, let armedIndex {
+            XCTAssertLessThan(connectedIndex, armedIndex)
+        }
+        XCTAssertEqual(
+            bufferedEvents.compactMap { event -> TrackpadRunSummary? in
+                guard case let .progress(summary) = event else { return nil }
+                return summary
+            }.last,
+            .init(reportCount: 80, actionCount: 8)
+        )
+        XCTAssertLessThanOrEqual(bufferedEvents.count, 32)
+
+        runtime.release()
+        var suffix: [TrackpadSessionEvent] = []
+        while let event = await iterator.next() { suffix.append(event) }
+        XCTAssertEqual(suffix, [.stopped(.init(reportCount: 80, actionCount: 8))])
+        await session.stop()
     }
 
     func testEventGateRejectsEnqueueFromSupersededGeneration() {
@@ -165,6 +204,53 @@ final class SessionTests: XCTestCase {
 
     private func waitForEpoch(_ epoch: UInt64, session: TrackpadSession) async {
         await session.waitForRequestEpochForTesting(epoch)
+    }
+}
+
+private final class ProgressPressureRuntime: Sendable {
+    private let produced: AsyncStream<Void>
+    private let producedContinuation: AsyncStream<Void>.Continuation
+    private let releaseGate = DispatchSemaphore(value: 0)
+
+    init() {
+        (produced, producedContinuation) = AsyncStream<Void>.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
+    }
+
+    func run(
+        configuration: TrackIsBackConfiguration,
+        observeOnly: Bool,
+        stopToken: TrackpadStopToken,
+        event: @escaping @Sendable (TrackpadSessionEvent) -> Void
+    ) throws -> TrackpadRunResult {
+        event(.waitingForController("pressure-test"))
+        event(.controllerConnected)
+        event(.outputArmed)
+        for reportCount in 1...40 {
+            event(.progress(.init(reportCount: reportCount, actionCount: reportCount / 10)))
+        }
+        event(.controllerLost(.init(reportCount: 40, actionCount: 4)))
+        event(.controllerConnected)
+        event(.outputArmed)
+        for reportCount in 41...80 {
+            event(.progress(.init(reportCount: reportCount, actionCount: reportCount / 10)))
+        }
+        producedContinuation.yield(())
+        releaseGate.wait()
+        return TrackpadRunResult(
+            summary: .init(reportCount: 80, actionCount: 8),
+            termination: .stopped
+        )
+    }
+
+    func waitUntilProduced() async {
+        var iterator = produced.makeAsyncIterator()
+        _ = await iterator.next()
+    }
+
+    func release() {
+        releaseGate.signal()
     }
 }
 
@@ -198,8 +284,7 @@ private final class GatedRuntime: Sendable {
         configuration: TrackIsBackConfiguration,
         observeOnly: Bool,
         stopToken: TrackpadStopToken,
-        connected: @escaping @Sendable (String) -> Void,
-        progress: @escaping @Sendable (TrackpadRunSummary) -> Void
+        event: @escaping @Sendable (TrackpadSessionEvent) -> Void
     ) throws -> TrackpadRunResult {
         let (id, gate) = state.withLock { state -> (Int, DispatchSemaphore) in
             state.nextID += 1
@@ -212,11 +297,13 @@ private final class GatedRuntime: Sendable {
             state.lifecycleEvents.append("start:\(id)")
             return (id, gate)
         }
-        connected("worker:\(id)")
+        event(.waitingForController("worker:\(id)"))
+        event(.controllerConnected)
         startContinuation.yield(id)
         gate.wait()
-        connected("late:\(id)")
-        progress(.init(reportCount: id, actionCount: id))
+        event(.controllerConnected)
+        event(.controllerLost(.init(reportCount: id, actionCount: id)))
+        event(.progress(.init(reportCount: id, actionCount: id)))
         state.withLock {
             $0.active -= 1
             $0.lifecycleEvents.append("finish:\(id)")

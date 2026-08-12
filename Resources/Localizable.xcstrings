@@ -772,6 +772,16 @@
         }
       }
     },
+    "Release both trackpads to activate output…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release both trackpads to activate output…"
+          }
+        }
+      }
+    },
     "Releasing mapped keys and mouse buttons…": {
       "localizations": {
         "en": {

@@ -47,6 +47,7 @@ public enum MenuStatusMessageState: Equatable, Sendable {
 public enum MenuStatus: Equatable, Sendable {
     case off
     case waitingForController
+    case waitingForNeutral
     case connecting
     case active
     case configurationSaved
@@ -61,6 +62,7 @@ public enum MenuStatus: Equatable, Sendable {
         switch self {
         case .off: "Trackpad output is off."
         case .waitingForController: "Waiting for Steam Controller 2 through the puck…"
+        case .waitingForNeutral: "Release both trackpads to activate output…"
         case .connecting: "Connecting…"
         case .active: "Trackpad output is active."
         case .configurationSaved: "Configuration saved."
@@ -75,12 +77,12 @@ public enum MenuStatus: Equatable, Sendable {
 
     public var messageState: MenuStatusMessageState? {
         switch self {
-        case .defaultsRestored, .requestingAccessibility, .accessibilitySettings:
+        case .waitingForNeutral, .defaultsRestored, .requestingAccessibility, .accessibilitySettings:
             .guidance
         case .failure:
             .failure
-        case .off, .waitingForController, .connecting, .active, .configurationSaved,
-             .releasingOutputs, .stopped:
+        case .off, .waitingForController, .connecting, .active,
+             .configurationSaved, .releasingOutputs, .stopped:
             nil
         }
     }
