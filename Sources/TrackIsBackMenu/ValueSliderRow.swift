@@ -37,7 +37,7 @@ struct ValueSliderRow: View {
                     .paddrTypography(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
-                    .frame(minWidth: 46, alignment: .trailing)
+                    .frame(width: 46, alignment: .trailing)
             }
         }
     }

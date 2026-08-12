@@ -29,7 +29,7 @@ struct TapActionPicker: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
-            .frame(width: 190, alignment: .trailing)
+            .frame(width: PaddrStyle.compactPickerWidth, alignment: .trailing)
         }
         .help("Click a mouse button or emit a keyboard key after a short touch and release.")
     }

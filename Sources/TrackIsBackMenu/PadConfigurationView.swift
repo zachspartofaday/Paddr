@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import TrackIsBackCore
 
@@ -29,29 +30,15 @@ struct PadConfigurationView: View {
         DisclosureGroup(isExpanded: $isExpanded) {
             VStack(alignment: .leading, spacing: PaddrStyle.settingsRowSpacing) {
                 HStack(spacing: 12) {
-                    Picker("Behavior", selection: $configuration.mode) {
-                        Text("Off").tag(PadMode.disabled)
-                        Text("Pointer").tag(PadMode.mouse)
-                        Text("Scroll").tag(PadMode.scroll)
-                        Text("Zones").tag(PadMode.dpad)
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .fixedSize(horizontal: true, vertical: false)
+                    PadModePicker(selection: $configuration.mode)
+                        .frame(width: PaddrStyle.behaviorPickerWidth)
 
                     Spacer(minLength: 8)
                 }
                 .frame(maxWidth: .infinity, minHeight: PaddrStyle.behaviorRowHeight)
                 .padding(.horizontal, PaddrStyle.insetHorizontalPadding)
 
-                PaddrSectionContainer(
-                    title: settingsTitle,
-                    accessory: {
-                        if configuration.mode == .dpad {
-                            areaLayoutPicker
-                        }
-                    }
-                ) {
+                PaddrSectionContainer {
                     modeSettings
                 }
             }
@@ -137,17 +124,32 @@ struct PadConfigurationView: View {
                     .frame(width: PaddrStyle.zoneMapWidth)
                 PaddrInsetDivider(axis: .vertical)
                     .padding(.horizontal, 8)
-                settings()
+                settingsSection(settings)
                     .frame(width: PaddrStyle.zoneInspectorWidth, alignment: .topLeading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             VStack(alignment: .leading, spacing: PaddrStyle.zoneSubdivisionSpacing) {
                 previewSection(title: previewTitle)
-                settings()
+                settingsSection(settings)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func settingsSection<Settings: View>(
+        @ViewBuilder _ settings: () -> Settings
+    ) -> some View {
+        VStack(alignment: .leading, spacing: PaddrStyle.insetHeaderContentSpacing) {
+            Text(settingsTitle)
+                .paddrTypography(.callout)
+                .bold()
+                .frame(minHeight: PaddrStyle.insetHeaderHeight)
+                .accessibilityAddTraits(.isHeader)
+            settings()
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .accessibilityElement(children: .contain)
     }
 
     private func previewSection(title: LocalizedStringResource) -> some View {
@@ -167,25 +169,75 @@ struct PadConfigurationView: View {
     }
 
     private var sensitivityRow: some View {
-        ValueSliderRow(
+        let isScrollMode = configuration.mode == .scroll
+        let value = isScrollMode ? configuration.scrollSensitivity : configuration.sensitivity
+        return ValueSliderRow(
             title: "Sensitivity",
             systemImage: "speedometer",
-            value: $configuration.sensitivity,
-            range: ConfigurationLimits.sensitivity,
+            value: isScrollMode ? $configuration.scrollSensitivity : $configuration.sensitivity,
+            range: isScrollMode ? ConfigurationLimits.scrollSensitivity : ConfigurationLimits.sensitivity,
             step: 0.1,
-            valueText: configuration.sensitivity.formatted(.number.precision(.fractionLength(1))) + "×"
+            valueText: value.formatted(.number.precision(.fractionLength(1))) + "×"
         )
     }
+}
 
-    private var areaLayoutPicker: some View {
-        Picker("Area layout", selection: $configuration.zoneLayout) {
-            ForEach(PadZoneLayout.allCases, id: \.self) { layout in
-                Text(layout.displayName).tag(layout)
-            }
+private struct PadModePicker: NSViewRepresentable {
+    @Binding var selection: PadMode
+
+    private static let modes: [PadMode] = [.disabled, .mouse, .scroll, .dpad]
+    private static let labels = [
+        String(localized: LocalizedStringResource("Off")),
+        String(localized: LocalizedStringResource("Pointer")),
+        String(localized: LocalizedStringResource("Scroll")),
+        String(localized: LocalizedStringResource("Zones"))
+    ]
+
+    @MainActor
+    final class Coordinator: NSObject {
+        var selection: Binding<PadMode>
+
+        init(selection: Binding<PadMode>) {
+            self.selection = selection
         }
-        .labelsHidden()
-        .pickerStyle(.menu)
-        .frame(width: 160, alignment: .trailing)
-        .help("Choose how the trackpad is divided into button areas.")
+
+        @objc func selectionChanged(_ sender: NSSegmentedControl) {
+            guard Self.validSegment(sender.selectedSegment) else { return }
+            selection.wrappedValue = PadModePicker.modes[sender.selectedSegment]
+        }
+
+        private static func validSegment(_ segment: Int) -> Bool {
+            PadModePicker.modes.indices.contains(segment)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(selection: $selection)
+    }
+
+    func makeNSView(context: Context) -> NSSegmentedControl {
+        let control = NSSegmentedControl(
+            labels: Self.labels,
+            trackingMode: .selectOne,
+            target: context.coordinator,
+            action: #selector(Coordinator.selectionChanged(_:))
+        )
+        control.segmentDistribution = .fillEqually
+        control.setAccessibilityLabel(String(localized: LocalizedStringResource("Behavior")))
+        update(control, coordinator: context.coordinator)
+        return control
+    }
+
+    func updateNSView(_ control: NSSegmentedControl, context: Context) {
+        update(control, coordinator: context.coordinator)
+    }
+
+    private func update(_ control: NSSegmentedControl, coordinator: Coordinator) {
+        coordinator.selection = $selection
+        control.selectedSegment = Self.modes.firstIndex(where: { $0.rawValue == selection.rawValue }) ?? 0
+        let segmentWidth = PaddrStyle.behaviorPickerWidth / CGFloat(Self.modes.count)
+        for segment in Self.modes.indices {
+            control.setWidth(segmentWidth, forSegment: segment)
+        }
     }
 }

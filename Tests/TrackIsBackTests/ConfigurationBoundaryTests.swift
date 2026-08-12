@@ -92,6 +92,25 @@ final class ConfigurationBoundaryTests: XCTestCase {
         let loaded = try ConfigurationStore.load(from: file)
         assertOldSchemaDefaults(in: loaded.left, mode: .scroll, sensitivity: 1)
         assertOldSchemaDefaults(in: loaded.right, mode: .mouse, sensitivity: 2.75)
+        XCTAssertEqual(loaded.left.scrollSensitivity, 1)
+        XCTAssertEqual(loaded.right.scrollSensitivity, 1)
+    }
+
+    func testOldSchemaScrollSensitivityCarriesExistingValueBelowOne() throws {
+        let configuration = try JSONDecoder().decode(
+            TrackIsBackConfiguration.self,
+            from: Data(
+                """
+                {
+                  "left": { "mode": "scroll", "sensitivity": 0.4 },
+                  "right": { "mode": "mouse", "sensitivity": 12 }
+                }
+                """.utf8
+            )
+        )
+
+        XCTAssertEqual(configuration.left.scrollSensitivity, 0.4)
+        XCTAssertEqual(configuration.right.scrollSensitivity, 1)
     }
 
     func testMissingImplicitConfigurationUsesDefaults() throws {
@@ -168,6 +187,20 @@ final class ConfigurationBoundaryTests: XCTestCase {
         XCTAssertEqual(try ConfigurationStore.load(from: file), expected)
     }
 
+    func testScrollSensitivityRoundTripsIndependently() throws {
+        var expected = TrackIsBackConfiguration.default
+        expected.left.sensitivity = 12
+        expected.left.scrollSensitivity = 0.4
+
+        XCTAssertEqual(
+            try JSONDecoder().decode(
+                TrackIsBackConfiguration.self,
+                from: ConfigurationStore.encoded(expected)
+            ),
+            expected
+        )
+    }
+
     func testEveryInclusiveConfigurationBoundaryIsAccepted() throws {
         for sensitivity in [0.1, 20] {
             for milliseconds in [1.0, 5_000] {
@@ -191,9 +224,18 @@ final class ConfigurationBoundaryTests: XCTestCase {
         XCTAssertNoThrow(try configuration(upperDeadzone).validated())
     }
 
+    func testScrollSensitivityInclusiveBoundariesAreAccepted() {
+        for scrollSensitivity in [0.0, 1.0] {
+            let pad = PadConfiguration(mode: .scroll, scrollSensitivity: scrollSensitivity)
+            XCTAssertNoThrow(try configuration(pad).validated())
+        }
+    }
+
     func testAdjacentInvalidConfigurationValuesAreRejected() {
         assertInvalid(\.sensitivity, 0.1.nextDown)
         assertInvalid(\.sensitivity, 20.nextUp)
+        assertInvalid(\.scrollSensitivity, -Double.leastNonzeroMagnitude)
+        assertInvalid(\.scrollSensitivity, 1.nextUp)
         assertInvalid(\.tapMaximumMilliseconds, 1.nextDown)
         assertInvalid(\.tapMaximumMilliseconds, 5_000.nextUp)
         assertInvalid(\.tapMaximumMovement, -Double.leastNonzeroMagnitude)

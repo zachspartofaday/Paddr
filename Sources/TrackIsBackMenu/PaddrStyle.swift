@@ -21,6 +21,15 @@ enum PaddrTextRole {
 
 enum PaddrStyle {
     static let accent = Color(red: 26.0 / 255.0, green: 159.0 / 255.0, blue: 1)
+    static let active = Color(nsColor: .systemGreen)
+
+    /// Green status text clears 4.5:1 in light appearance while retaining the
+    /// brighter adaptive system green against dark backgrounds.
+    static let activeText = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? .systemGreen
+            : NSColor(srgbRed: 0, green: 0.42, blue: 0.18, alpha: 1)
+    })
 
     /// Accent for text: the bright product accent reads at only ~2.8:1 against light
     /// backgrounds, so light appearance gets a darker variant that clears 4.5:1.
@@ -50,6 +59,7 @@ enum PaddrStyle {
     static let cardCornerRadius: CGFloat = 16
     static let cardHeaderHeight: CGFloat = 28
     static let behaviorRowHeight: CGFloat = 28
+    static let behaviorPickerWidth: CGFloat = 272
     static let insetCornerRadius: CGFloat = 12
     static let insetHorizontalPadding: CGFloat = 14
     static let insetVerticalPadding: CGFloat = 14

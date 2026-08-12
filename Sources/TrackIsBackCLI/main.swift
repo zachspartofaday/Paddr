@@ -32,8 +32,10 @@ private func help() -> String {
       --show-config                 Print the effective configuration and exit.
       --left-mode MODE              Set the left pad mode.
       --right-mode MODE             Set the right pad mode.
-      --left-sensitivity N          Left mouse/scroll sensitivity, 0.1...20.
-      --right-sensitivity N         Right mouse/scroll sensitivity, 0.1...20.
+      --left-sensitivity N          Left pointer sensitivity, 0.1...20.
+      --right-sensitivity N         Right pointer sensitivity, 0.1...20.
+      --left-scroll-sensitivity N   Left scroll sensitivity, 0...1.
+      --right-scroll-sensitivity N  Right scroll sensitivity, 0...1.
       --left-tap ACTION|none        Tap a key, mouse-left, or mouse-right; likewise --right-tap.
       --left-mouse-deadzone N       Center tap radius from 0...1; likewise --right-mouse-deadzone.
       --left-up ACTION              Left D-pad up-zone action; likewise --left-right/--left-down/--left-left.
@@ -142,6 +144,13 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
             let side: PadSide = argument.hasPrefix("--left") ? .left : .right
             let value = try parseDouble(nextValue(), option: argument)
             setPad(side) { $0.sensitivity = value }
+        case "--left-scroll-sensitivity", "--right-scroll-sensitivity":
+            let side: PadSide = argument.hasPrefix("--left") ? .left : .right
+            let value = try parseDouble(nextValue(), option: argument)
+            guard ConfigurationLimits.scrollSensitivity.contains(value) else {
+                throw TrackIsBackError.configuration("\(argument) must be between 0 and 1.")
+            }
+            setPad(side) { $0.scrollSensitivity = value }
         case "--left-mouse-deadzone", "--right-mouse-deadzone":
             let side: PadSide = argument.hasPrefix("--left") ? .left : .right
             let value = try parseDouble(nextValue(), option: argument)
@@ -220,8 +229,8 @@ private func run(_ options: CLIOptions) throws {
         throw TrackIsBackError.device("No Steam Controller 2 puck interface was found.")
     }
     print("Selected device: \(deviceSummary.description)")
-    print("Left pad: \(options.configuration.left.mode.rawValue), sensitivity \(options.configuration.left.sensitivity), tap \(options.configuration.left.tapKey ?? "none")")
-    print("Right pad: \(options.configuration.right.mode.rawValue), sensitivity \(options.configuration.right.sensitivity), tap \(options.configuration.right.tapKey ?? "none")")
+    print("Left pad: \(options.configuration.left.mode.rawValue), pointer sensitivity \(options.configuration.left.sensitivity), scroll sensitivity \(options.configuration.left.scrollSensitivity), tap \(options.configuration.left.tapKey ?? "none")")
+    print("Right pad: \(options.configuration.right.mode.rawValue), pointer sensitivity \(options.configuration.right.sensitivity), scroll sensitivity \(options.configuration.right.scrollSensitivity), tap \(options.configuration.right.tapKey ?? "none")")
     print("Controller feature reports: unavailable by design")
 
     if options.dryRun {

@@ -1,55 +1,32 @@
 import AppKit
 import SwiftUI
 
-struct PaddrSectionContainer<Accessory: View, Content: View>: View {
-    let title: LocalizedStringResource
-    @ViewBuilder let accessory: () -> Accessory
+struct PaddrSectionContainer<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
-    init(
-        title: LocalizedStringResource,
-        @ViewBuilder accessory: @escaping () -> Accessory,
-        @ViewBuilder content: @escaping () -> Content
-    ) {
-        self.title = title
-        self.accessory = accessory
-        self.content = content
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: PaddrStyle.insetHeaderContentSpacing) {
-            HStack(spacing: PaddrStyle.settingsControlSpacing) {
-                Text(title)
-                    .paddrTypography(.callout)
-                    .bold()
-                Spacer(minLength: PaddrStyle.settingsControlSpacing)
-                accessory()
+        content()
+            .padding(.horizontal, PaddrStyle.insetHorizontalPadding)
+            .padding(.vertical, PaddrStyle.insetVerticalPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                reduceTransparency
+                    ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor))
+                    : AnyShapeStyle(Color.primary.opacity(0.032)),
+                in: .rect(cornerRadius: PaddrStyle.insetCornerRadius)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: PaddrStyle.insetCornerRadius)
+                    .strokeBorder(
+                        Color(nsColor: .separatorColor).opacity(
+                            colorSchemeContrast == .increased ? 0.95 : 0.18
+                        ),
+                        lineWidth: colorSchemeContrast == .increased ? 1.5 : 1
+                    )
             }
-            .frame(minHeight: PaddrStyle.insetHeaderHeight)
-
-            content()
-        }
-        .padding(.horizontal, PaddrStyle.insetHorizontalPadding)
-        .padding(.vertical, PaddrStyle.insetVerticalPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            reduceTransparency
-                ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor))
-                : AnyShapeStyle(Color.primary.opacity(0.032)),
-            in: .rect(cornerRadius: PaddrStyle.insetCornerRadius)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: PaddrStyle.insetCornerRadius)
-                .strokeBorder(
-                    Color(nsColor: .separatorColor).opacity(
-                        colorSchemeContrast == .increased ? 0.95 : 0.18
-                    ),
-                    lineWidth: colorSchemeContrast == .increased ? 1.5 : 1
-                )
-        }
     }
 }
 
@@ -78,15 +55,6 @@ struct PaddrInsetDivider: View {
                 axis == .horizontal ? .horizontal : .vertical,
                 axis == .horizontal ? PaddrStyle.dividerInset : PaddrStyle.zoneDividerInset
             )
-    }
-}
-
-extension PaddrSectionContainer where Accessory == EmptyView {
-    init(
-        title: LocalizedStringResource,
-        @ViewBuilder content: @escaping () -> Content
-    ) {
-        self.init(title: title, accessory: { EmptyView() }, content: content)
     }
 }
 

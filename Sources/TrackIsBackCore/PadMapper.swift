@@ -83,8 +83,8 @@ public struct PadMapper: Sendable {
             }
         case .scroll:
             if sample.isTouched, let previous, previous.isTouched {
-                let dx = Double(Int(sample.x) - Int(previous.x)) / 240.0 * configuration.sensitivity
-                let dy = -Double(Int(sample.y) - Int(previous.y)) / 240.0 * configuration.sensitivity
+                let dx = Double(Int(sample.x) - Int(previous.x)) / 240.0 * configuration.scrollSensitivity
+                let dy = -Double(Int(sample.y) - Int(previous.y)) / 240.0 * configuration.scrollSensitivity
                 if abs(dx) >= 0.25 || abs(dy) >= 0.25 {
                     actions.append(.scroll(dx: dx, dy: dy))
                 }

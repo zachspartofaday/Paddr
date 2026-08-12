@@ -227,6 +227,32 @@ final class TrackIsBackTests: XCTestCase {
         XCTAssertEqual(actions, [.mouseMove(dx: 2, dy: -1)])
     }
 
+    func testMouseUsesPointerSensitivityInsteadOfScrollSensitivity() throws {
+        var mapper = PadMapper(
+            side: .right,
+            configuration: PadConfiguration(mode: .mouse, sensitivity: 2, scrollSensitivity: 0.1)
+        )
+        _ = try mapper.process(sample(touched: true, x: 0, y: 0, time: 1))
+
+        XCTAssertEqual(
+            try mapper.process(sample(touched: true, x: 700, y: 350, time: 2)),
+            [.mouseMove(dx: 2, dy: -1)]
+        )
+    }
+
+    func testScrollUsesScrollSensitivityInsteadOfPointerSensitivity() throws {
+        var mapper = PadMapper(
+            side: .left,
+            configuration: PadConfiguration(mode: .scroll, sensitivity: 20, scrollSensitivity: 0.5)
+        )
+        _ = try mapper.process(sample(touched: true, x: 0, y: 0, time: 1))
+
+        XCTAssertEqual(
+            try mapper.process(sample(touched: true, x: 240, y: 120, time: 2)),
+            [.scroll(dx: 0.5, dy: -0.25)]
+        )
+    }
+
     private func sample(touched: Bool, x: Int16 = 0, y: Int16 = 0, time: UInt64) -> TrackpadSample {
         TrackpadSample(isTouched: touched, isClicked: false, x: x, y: y, pressure: 0, timestampNanoseconds: time)
     }
