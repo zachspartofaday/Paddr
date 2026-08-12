@@ -685,6 +685,51 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.status == .active }
     }
 
+    func testPermissionReconciliationRestoresCurrentSessionStatusAuthority() async {
+        let state = readyState(receiver: "Fake")
+        let sleeper = ManualSleeper()
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(
+            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+        )
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.connect(receiver: "Fake puck")
+        await waitUntil(model: model) { model.status == .active }
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertTrue(model.isRunning)
+
+        state.accessibilityGranted = false
+        model.requestAccessibility()
+        model.openAccessibilitySettings()
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertTrue(model.isRunning)
+        XCTAssertEqual(model.status, .accessibilitySettings)
+
+        state.accessibilityGranted = true
+        sleeper.wake()
+        await waitUntil(model: model) { model.status == .active }
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertTrue(model.isRunning)
+
+        await session.send(.controllerLost(.init(reportCount: 4, actionCount: 2)))
+        await waitUntil(model: model) { !model.controllerConnected }
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .waitingForController)
+
+        await session.send(.controllerConnected)
+        await waitUntil(model: model) { model.controllerConnected }
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .waitingForNeutral)
+
+        await session.send(.outputArmed)
+        await waitUntil(model: model) { model.isRunning }
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertEqual(model.status, .active)
+    }
+
     func testEnableSavesDraftBeforeStarting() async {
         let state = readyState(receiver: "Fake")
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed])

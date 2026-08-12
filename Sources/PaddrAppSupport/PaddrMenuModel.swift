@@ -494,7 +494,14 @@ public final class PaddrMenuModel {
         switch status {
         case .requestingAccessibility where accessibilityTrusted,
              .accessibilitySettings where accessibilityTrusted:
+            let identifier = sessionID
+            let priorStatusGeneration = currentStatusGeneration
             publishStatus(operationalStatus)
+            if identifier != nil,
+               sessionID == identifier,
+               currentStatusGeneration != priorStatusGeneration {
+                sessionStatusGeneration = currentStatusGeneration
+            }
         default:
             break
         }
