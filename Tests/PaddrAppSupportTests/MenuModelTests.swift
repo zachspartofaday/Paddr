@@ -1659,6 +1659,95 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(startedConfiguration, second.configuration)
     }
 
+    func testEnabledProfileSelectionRejectsOldSessionEventsAndReestablishesLivenessAuthority() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, _, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let session = RetainedEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.send(.waitingForController("Fake puck"), to: 0)
+        await session.send(.controllerConnected, to: 0)
+        await session.send(.outputArmed, to: 0)
+        await waitUntil(model: model) { model.status == .active }
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await waitUntil { state.saveCallCount == 1 }
+
+        XCTAssertEqual(model.status, .releasingOutputs)
+        XCTAssertEqual(model.receiverDescription, "Fake puck")
+        XCTAssertFalse(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+
+        await session.waitForTermination(of: 0)
+        await session.send(.failed("stale session"), to: 0)
+        XCTAssertTrue(model.isEnabled)
+        XCTAssertEqual(model.status, .releasingOutputs)
+
+        saveGate.signal()
+        await waitUntil(model: model) { await session.startCount == 2 }
+        XCTAssertEqual(model.activeProfileID, second.id)
+        XCTAssertEqual(model.status, .connecting)
+        XCTAssertFalse(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+
+        await session.send(.waitingForController("Fake puck"), to: 1)
+        await waitUntil(model: model) { model.status == .waitingForController }
+        XCTAssertEqual(model.receiverDescription, "Fake puck")
+        XCTAssertFalse(model.controllerConnected)
+
+        model.configuration.left.sensitivity = 3
+        await session.send(.controllerConnected, to: 1)
+        await waitUntil(model: model) { model.status == .waitingForNeutral }
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+
+        await session.send(.outputArmed, to: 1)
+        await waitUntil(model: model) { model.status == .active }
+        XCTAssertTrue(model.isRunning)
+        await session.finishAll()
+    }
+
+    func testProfileRenameCompletionPreservesCurrentSessionLivenessAuthority() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, _, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.connect(receiver: "Fake puck")
+        await waitUntil(model: model) { model.status == .active }
+
+        XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
+        await waitUntil { state.saveCallCount == 1 }
+        await session.send(.controllerLost(.init(reportCount: 1, actionCount: 0)))
+        await waitUntil(model: model) { model.status == .waitingForController }
+
+        saveGate.signal()
+        await waitUntil(model: model) { model.activeProfile.name == "Renamed" }
+        XCTAssertEqual(model.status, .waitingForController)
+        XCTAssertFalse(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+
+        model.configuration.right.sensitivity = 7
+        await session.send(.controllerConnected)
+        await waitUntil(model: model) { model.status == .waitingForNeutral }
+        await session.send(.outputArmed)
+        await waitUntil(model: model) { model.status == .active }
+        XCTAssertTrue(model.isRunning)
+    }
+
     func testProfileSelectionRejectsSecondRequestWhileActivationWorkIsPending() async throws {
         let state = readyState(receiver: nil)
         let (document, first, second) = try twoProfileDocument()
@@ -1932,6 +2021,41 @@ private actor ManualEventSession: TrackpadSessionControlling {
     }
 }
 
+private actor RetainedEventSession: TrackpadSessionControlling {
+    private let terminationGate = IndexedStopGate()
+    private var continuations: [AsyncStream<TrackpadSessionEvent>.Continuation] = []
+    private(set) var startCount = 0
+
+    func start(
+        configuration: TrackIsBackConfiguration,
+        observeOnly: Bool
+    ) async -> AsyncStream<TrackpadSessionEvent> {
+        startCount += 1
+        let index = continuations.count
+        let (stream, continuation) = AsyncStream<TrackpadSessionEvent>.makeStream()
+        continuation.onTermination = { [terminationGate] _ in
+            Task { await terminationGate.release(index) }
+        }
+        continuations.append(continuation)
+        return stream
+    }
+
+    func stop() async {}
+
+    func send(_ event: TrackpadSessionEvent, to index: Int) {
+        guard continuations.indices.contains(index) else { return }
+        continuations[index].yield(event)
+    }
+
+    func waitForTermination(of index: Int) async {
+        await terminationGate.wait(for: index)
+    }
+
+    func finishAll() {
+        for continuation in continuations { continuation.finish() }
+    }
+}
+
 private actor GatedSession: TrackpadSessionControlling {
     private let blockedStops: Set<Int>
     private let gate = IndexedStopGate()
@@ -2047,7 +2171,6 @@ private final class ModelDependencyState: Sendable {
         get { state.withLock { $0.receiver } }
         set { state.withLock { $0.receiver = newValue } }
     }
-    }
     var openedPrivacySettingsAnchors: [String] {
         get { state.withLock { $0.openedPrivacySettingsAnchors } }
         set { state.withLock { $0.openedPrivacySettingsAnchors = newValue } }
@@ -2145,7 +2268,9 @@ private actor RecordingSession: TrackpadSessionControlling {
         startedConfigurations.append(configuration)
         let (stream, continuation) = AsyncStream<TrackpadSessionEvent>.makeStream()
         self.continuation = continuation
-        continuation.yield(.connected("Fake puck"))
+        continuation.yield(.waitingForController("Fake puck"))
+        continuation.yield(.controllerConnected)
+        continuation.yield(.outputArmed)
         return stream
     }
 

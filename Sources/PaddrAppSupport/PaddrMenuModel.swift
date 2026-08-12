@@ -450,14 +450,29 @@ public final class PaddrMenuModel {
         configurationEpoch &+= 1
         let operation = configurationEpoch
         let shouldRestart = replacingActiveConfiguration && isEnabled
+        let operationStatusGeneration: UInt64
         if shouldRestart {
+            advanceStatusGeneration()
+            operationStatusGeneration = withStatusPublicationGeneration(currentStatusGeneration) {
+                publishStatus(.releasingOutputs)
+            }
             lifecycleEpoch &+= 1
             lifecycleTask?.cancel()
             reconnectTask?.cancel()
             reconnectTask = nil
+            reconnectStatusGeneration = nil
+            activationCommitPending = false
             sessionID = nil
+            sessionStatusGeneration = nil
+            controllerConnected = false
             isRunning = false
+        } else {
+            preservingCurrentOperationalStatusAuthority {
+                advanceStatusGeneration()
+            }
+            operationStatusGeneration = currentStatusGeneration
         }
+        statusDidChange?()
 
         configurationTask = Task { [weak self] in
             guard let self else { return }
@@ -488,8 +503,18 @@ public final class PaddrMenuModel {
                     savedConfiguration = selected
                     needsInitialSave = false
                 }
+                if shouldRestart {
+                    withStatusPublicationGeneration(operationStatusGeneration) {
+                        publishStatus(.configurationSaved)
+                    }
+                } else {
+                    preservingCurrentOperationalStatusAuthority {
+                        withStatusPublicationGeneration(operationStatusGeneration) {
+                            publishStatus(.configurationSaved)
+                        }
+                    }
+                }
                 clearConfigurationTask(operation: operation)
-                publishStatus(.configurationSaved)
                 if shouldRestart, isEnabled {
                     startLifecycle(
                         commitDraft: false,
@@ -499,8 +524,22 @@ public final class PaddrMenuModel {
                 }
             } catch {
                 clearConfigurationTask(operation: operation)
-                if shouldRestart, isEnabled { isEnabled = false }
-                publishStatus(.failure(.configurationSave(diagnostic: String(describing: error))))
+                if shouldRestart, isEnabled {
+                    isEnabled = false
+                    withStatusPublicationGeneration(currentStatusGeneration) {
+                        publishStatus(
+                            .failure(.configurationSave(diagnostic: String(describing: error)))
+                        )
+                    }
+                } else {
+                    preservingCurrentOperationalStatusAuthority {
+                        withStatusPublicationGeneration(operationStatusGeneration) {
+                            publishStatus(
+                                .failure(.configurationSave(diagnostic: String(describing: error)))
+                            )
+                        }
+                    }
+                }
             }
             statusDidChange?()
         }
