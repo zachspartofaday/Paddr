@@ -46,6 +46,14 @@ enum PaddrStyle {
             ? .systemOrange
             : NSColor(srgbRed: 0.65, green: 0.32, blue: 0, alpha: 1)
     })
+
+    /// Error text follows the adaptive warning-token pattern instead of using the
+    /// bright system red against light backgrounds.
+    static let errorText = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? .systemRed
+            : NSColor(srgbRed: 0.68, green: 0.08, blue: 0.08, alpha: 1)
+    })
     static let defaultWindowSize = NSSize(width: 1_120, height: 600)
     static let minimumWindowSize = NSSize(width: 640, height: 360)
     static let padColumnWidth: CGFloat = 530

@@ -14,6 +14,8 @@ struct ApplyBarView: View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) {
                 statusCells
+                statusMessage
+                    .frame(width: 260, height: 32, alignment: .leading)
                 Spacer(minLength: 12)
                 saveState
                 actions
@@ -22,8 +24,9 @@ struct ApplyBarView: View {
             VStack(spacing: 8) {
                 HStack(spacing: 8) { statusCells }
                 HStack(spacing: 12) {
+                    statusMessage
+                        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
                     saveState
-                    Spacer()
                     actions
                 }
             }
@@ -36,6 +39,37 @@ struct ApplyBarView: View {
             Rectangle()
                 .fill(Color(nsColor: .separatorColor).opacity(0.42))
                 .frame(height: 1)
+        }
+        .onChange(of: model.status) { _, status in
+            guard status.messageState != nil else { return }
+            AccessibilityNotification.Announcement(String(localized: status.message)).post()
+        }
+    }
+
+    @ViewBuilder private var statusMessage: some View {
+        if let messageState = model.status.messageState {
+            Label {
+                Text(model.status.message)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            } icon: {
+                Image(
+                    systemName: messageState == .failure
+                        ? "exclamationmark.triangle.fill"
+                        : "info.circle.fill"
+                )
+                .accessibilityHidden(true)
+            }
+            .paddrTypography(.caption)
+            .foregroundStyle(
+                messageState == .failure ? PaddrStyle.errorText : PaddrStyle.warningText
+            )
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(model.status.message)
+            .help(Text(model.status.message))
+        } else {
+            Color.clear
+                .accessibilityHidden(true)
         }
     }
 
