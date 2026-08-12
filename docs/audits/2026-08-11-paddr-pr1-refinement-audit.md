@@ -61,6 +61,7 @@ Sections below are in stable-ID order; IDs never renumber.
 - **Fix direction**: attempt every held-output release independently, make mouse-up creation
   failure explicit, propagate aggregate cleanup failure, and prevent a clean removal/reconnect
   transition until cleanup has succeeded or been surfaced as a terminal failure.
+- **Disposition**: **accepted, fixed** — PR #7 (`codex/2-teardown-session`): independent per-output release attempts, explicit mouse-up creation failure, aggregated cleanup errors, no clean `.deviceRemoved` on uncertain cleanup; closes the PPA-002 partial. Pinned by held-output release and mouse-up failure tests.
 
 ### PUA-002 — Generation gate has a check-then-yield stale-event window
 
@@ -74,6 +75,7 @@ Sections below are in stable-ID order; IDs never renumber.
   rejection.
 - **Fix direction**: make generation validation and enqueue one serialized operation, or route
   tagged events through the session actor and validate the tag immediately before delivery.
+- **Disposition**: **accepted, fixed** — PR #7: generation validation and continuation enqueue serialized under one mutex operation for connection, progress, and terminal events; the menu model's second check is no longer load-bearing. Pinned by a serialized-gate test.
 
 ### PUA-003 — Synchronous filesystem and HID discovery work on the main actor
 
@@ -85,6 +87,7 @@ Sections below are in stable-ID order; IDs never renumber.
   IOKit service can stall launch, menus, and configuration interaction.
 - **Fix direction**: move configuration reads/writes and controller probing behind async
   dependencies that execute off the main actor and return Sendable snapshots.
+- **Disposition**: **accepted, fixed** — PR #9: configuration I/O and controller probing moved behind an off-main-actor dependency returning Sendable snapshots. The follow-up review chain (8 rounds) structurally closed the publication races the asyncification introduced: draft-revision-gated draft publication, carried activation commit intent, unconditional authoritative recording of persisted snapshots, a single status publisher with monotonic generation supersession (terminal session outcomes recapture authoritatively), and a controller-state generation rejecting stale probe results.
 
 ### PUA-004 — Zone-binding test is self-referential
 
@@ -95,6 +98,7 @@ Sections below are in stable-ID order; IDs never renumber.
   (`Sources/TrackIsBackCore/PadMapper.swift:238-257`), which this test never cross-checks.
 - **Fix direction**: assign all zone values before verification, assert the corresponding concrete
   `dpadKeys`/`gridKeys` fields, and drive mapper output for each zone/layout.
+- **Disposition**: **accepted, fixed** — PR #8: bindings all assigned before verification, concrete `dpadKeys`/`gridKeys` asserted, mapper output driven for all 21 zone/layout combinations; mutation-verified.
 
 ### PUA-005 — Stale-event coverage checks only late connection
 
@@ -106,6 +110,7 @@ Sections below are in stable-ID order; IDs never renumber.
   guards leaves the suite green. Compounds PUA-002.
 - **Fix direction**: make the superseded runtime emit late connection and progress callbacks plus
   a terminal result, then assert the old stream is exactly empty.
+- **Disposition**: **accepted, fixed** — PR #7 (stream-empty pin across connection, progress, and terminal branches); PR #8 verified no residue remained (mutation-verified) and added no redundant test.
 
 ### PUA-006 — Configuration migration tests do not pin every legacy path or older schema
 
@@ -117,6 +122,7 @@ Sections below are in stable-ID order; IDs never renumber.
   in `Sources/TrackIsBackCore/Configuration.swift:209-227` lack migration fixtures.
 - **Fix direction**: add isolated cases for each legacy directory, explicit precedence, and
   representative old JSON documents missing every subsequently added field.
+- **Disposition**: **accepted, fixed** — PR #8: isolated TracksBack and TrackIsBack cases, winner-elimination full-precedence loop over all four candidates, and an old-schema fixture with explicit default assertions; mutation-verified per case.
 
 ### PUA-007 — Termination test permits duplicate teardown calls
 
@@ -125,6 +131,7 @@ Sections below are in stable-ID order; IDs never renumber.
   `stopCount >= 2`; the scenario has exactly one pre-start stop and one termination stop, so an
   unintended third destructive stop would not fail the test.
 - **Fix direction**: assert `stopCount == 2` and retain the completion-order assertion.
+- **Disposition**: **accepted, fixed** — PR #7: exact `stopCount == 2` with completion-order assertion retained; an injected third stop fails.
 
 ### PUA-008 — Localization gate breaks on repository paths containing whitespace
 
@@ -133,6 +140,7 @@ Sections below are in stable-ID order; IDs never renumber.
   a scalar and expands `$source_files` unquoted, so a checkout path with spaces word-splits.
 - **Fix direction**: build the source-file argument list from NUL-delimited output via a quoted
   array or another NUL-safe invocation.
+- **Disposition**: **accepted, fixed** — PR #9: NUL-safe quoted-array file list; a spaces-path checkout fails before and passes after.
 
 ### PUA-009 — Accent color used as text fails light-appearance contrast
 
@@ -159,6 +167,7 @@ Sections below are in stable-ID order; IDs never renumber.
 - **Fix direction**: give the four-way radial layout explicit directional transitions, or rank
   axis alignment ahead of nearest-row/column distance; pin with per-direction tests (interacts
   with PUA-004's test rework).
+- **Disposition**: **accepted, fixed** — PR #6: explicit `.radialFour` directional transitions in the policy layer; 84 per-direction assertions across all five layouts.
 
 ### PUA-011 — Animated window fitting does not honor Reduce Motion
 
@@ -168,6 +177,7 @@ Sections below are in stable-ID order; IDs never renumber.
   fitter never consults the system Reduce Motion preference.
 - **Fix direction**: suppress `setFrame(..., animate:)` when Reduce Motion is enabled and observe
   preference changes.
+- **Disposition**: **accepted, fixed** — PR #9: animated frame fitting suppressed under Reduce Motion with preference-change observation.
 
 ### PUA-012 — Content sizing uses legacy GeometryReader preference probes
 
@@ -180,6 +190,7 @@ Sections below are in stable-ID order; IDs never renumber.
   `onGeometryChange` height observations, preserving the positive-height guards. Deliberately
   deferred out of this PR: the sizing plumbing was just behaviorally fixed (PUA-013) and this
   refactor deserves its own validated change.
+- **Disposition**: **accepted, fixed** — PR #9: both GeometryReader preference probes replaced with `onGeometryChange`, behavior-neutral; positive-height guards retained. Stability re-verified at runtime for toggle sampling and a synthetic slider-track sweep (one stable frame each); the sustained TCC-authorized enable→disable variant remains on the manual-gate list below.
 
 ### PUA-013 — Status-row insertion caused window refits and layout shifts during interaction
 
@@ -247,7 +258,7 @@ precedence order. These were checked and are recorded so they are not re-raised.
 - Skipped / residual risk: no light-appearance runtime session (PUA-009 light values are
   calculated, not screenshot-verified); no physical unplug/replug matrix; no assistive-technology
   matrix; notarization out of scope. Lane findings are source-level; no executable validation was
-  run inside the pinned audit worktree itself.
+  run inside the pinned audit worktree itself. After remediation (PRs #6-#9), the remaining manual gates are: physical unplug/replug matrix, assistive-technology matrix, light-appearance runtime check (PUA-009 residual), notarization, and a TCC-authorized sustained enable→disable window-stability probe (PUA-012/PUA-013 residual).
 
 ## Target shape and phased fix list
 
