@@ -212,8 +212,13 @@ public final class PaddrMenuModel {
 
     public func requestInputMonitoring() {
         guard terminationState == .idle else { return }
-        _ = dependencies.requestInputMonitoring()
-        inputMonitoringStatus = dependencies.inputMonitoringStatus()
+        let accessGranted = dependencies.requestInputMonitoring()
+        inputMonitoringStatus = accessGranted ? .granted : dependencies.inputMonitoringStatus()
+        guard inputMonitoringStatus != .denied else {
+            openInputMonitoringSettings()
+            schedulePermissionRefresh()
+            return
+        }
         publishStatus(
             inputMonitoringStatus == .granted ? operationalStatus : .requestingInputMonitoring
         )
