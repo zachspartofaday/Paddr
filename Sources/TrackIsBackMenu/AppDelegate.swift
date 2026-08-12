@@ -3,7 +3,7 @@ import PaddrAppSupport
 import SwiftUI
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     private let model = PaddrMenuModel()
     private let statusMenu = NSMenu()
     private var statusItem: NSStatusItem?
@@ -113,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func showConfigurationWindow() {
         model.refreshStatus()
+        NSApplication.shared.setActivationPolicy(.regular)
         if let window = configurationWindowController?.window {
             window.makeKeyAndOrderFront(nil)
             NSApplication.shared.activate()
@@ -133,6 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         window.standardWindowButton(.zoomButton)?.isEnabled = false
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
+        window.delegate = self
         window.contentViewController = NSHostingController(
             rootView: ConfigurationView(model: model)
         )
@@ -147,5 +149,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         configurationWindowController = controller
         controller.showWindow(nil)
         NSApplication.shared.activate()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              window === configurationWindowController?.window else {
+            return
+        }
+        NSApplication.shared.setActivationPolicy(.accessory)
     }
 }
