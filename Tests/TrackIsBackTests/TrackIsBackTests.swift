@@ -142,6 +142,25 @@ final class TrackIsBackTests: XCTestCase {
         XCTAssertEqual(validated.left.gridKeys.center, TapBindingCatalog.rightMouseButton)
     }
 
+    func testConfigurationAcceptsIndependentZoneModesForBothPads() throws {
+        var configuration = TrackIsBackConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.zoneLayout = .horizontalTwo
+        configuration.left.dpadKeys.left = "Q"
+        configuration.right.mode = .dpad
+        configuration.right.zoneLayout = .verticalTwo
+        configuration.right.dpadKeys.up = "E"
+
+        let validated = try configuration.validated()
+
+        XCTAssertEqual(validated.left.mode, .dpad)
+        XCTAssertEqual(validated.left.zoneLayout, .horizontalTwo)
+        XCTAssertEqual(validated.left.dpadKeys.left, "q")
+        XCTAssertEqual(validated.right.mode, .dpad)
+        XCTAssertEqual(validated.right.zoneLayout, .verticalTwo)
+        XCTAssertEqual(validated.right.dpadKeys.up, "e")
+    }
+
     func testCenterTouchTapEmitsConfiguredKey() throws {
         var mapper = PadMapper(
             side: .right,
