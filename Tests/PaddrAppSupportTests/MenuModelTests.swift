@@ -267,6 +267,36 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.hasUnsavedChanges)
     }
 
+    func testDisablingDuringActivationSaveRecordsPersistedSnapshotWithoutStarting() async {
+        let state = readyState(controller: "Fake")
+        var stored = TrackIsBackConfiguration.default
+        stored.left.sensitivity = 4
+        state.loadedConfiguration = stored
+        let session = ScriptedSession(events: [.connected("Fake puck")])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.configuration.left.sensitivity = 5
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+
+        model.isEnabled = true
+        await waitUntil { state.saveCallCount == 1 }
+        model.isEnabled = false
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil { state.savedConfiguration?.left.sensitivity == 5 }
+        for _ in 0..<100 {
+            if model.savedConfiguration.left.sensitivity == 5 { break }
+            await Task.yield()
+        }
+
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 5)
+        let startCount = await session.startCount
+        XCTAssertEqual(startCount, 0)
+        XCTAssertFalse(model.isRunning)
+    }
+
     func testInvalidDraftPreventsSaveAndStart() async {
         let state = readyState(controller: "Fake")
         let session = ScriptedSession(events: [])

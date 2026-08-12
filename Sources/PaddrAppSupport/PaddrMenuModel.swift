@@ -349,9 +349,9 @@ public final class PaddrMenuModel {
 
             do {
                 try await dependencies.saveConfiguration(validated)
-                guard isCurrent(operation), isEnabled else { return false }
                 savedConfiguration = validated
                 needsInitialSave = false
+                guard isCurrent(operation), isEnabled else { return false }
                 guard draftRevision == revision else { continue }
                 publishConfiguration(validated)
                 return true
