@@ -5,7 +5,11 @@ import TrackIsBackCore
 private struct CLIOptions {
     var configuration = TrackIsBackConfiguration.default
     var configurationURL: URL?
+    var profileStoreURL: URL?
+    var profileDocument: ConfigurationProfileDocument?
     var writeConfigurationURL: URL?
+    var listProfiles = false
+    var selectProfile: String?
     var durationSeconds: TimeInterval?
     var dryRun = false
     var observeOnly = false
@@ -26,10 +30,13 @@ private func help() -> String {
       disabled | mouse | scroll | dpad
 
     Main options:
-      --config PATH                 Load an existing JSON configuration file.
-                                    Without this option, use ~/.config/Paddr/config.json if present.
-      --write-config PATH           Write the effective configuration and exit.
-      --show-config                 Print the effective configuration and exit.
+      --profile-store PATH          Use a canonical profile document at PATH instead of the default.
+      --list-profiles               List profile names and stable IDs, then exit.
+      --select-profile ID|NAME      Persistently select a profile by stable ID or exact name, then exit.
+      --config PATH                 Safely load a legacy raw configuration or canonical profile document.
+                                    This compatibility input cannot be combined with profile operations.
+      --write-config PATH           Write the effective configuration as a canonical profile document.
+      --show-config                 Print the effective active configuration and exit.
       --left-mode MODE              Set the left pad mode.
       --right-mode MODE             Set the right pad mode.
       --left-sensitivity N          Left pointer sensitivity, 0.1...20.
@@ -92,8 +99,60 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
         return options
     }
     let explicitConfigurationURL = try value(after: "--config", in: args).map(url)
-    var options = CLIOptions(configuration: try ConfigurationStore.load(from: explicitConfigurationURL))
+    let profileStoreURL = try value(after: "--profile-store", in: args).map(url)
+    let selectProfile = try value(after: "--select-profile", in: args)
+    let listsProfiles = args.contains("--list-profiles")
+    guard !(listsProfiles && selectProfile != nil) else {
+        throw TrackIsBackError.configuration(
+            "--list-profiles and --select-profile are mutually exclusive."
+        )
+    }
+    let isProfileOperation = listsProfiles || selectProfile != nil
+    if isProfileOperation {
+        guard explicitConfigurationURL == nil else {
+            throw TrackIsBackError.configuration(
+                "--config cannot be combined with profile operations; use --profile-store for canonical storage."
+            )
+        }
+        var operationIndex = 0
+        while operationIndex < args.count {
+            switch args[operationIndex] {
+            case "--list-profiles":
+                operationIndex += 1
+            case "--profile-store", "--select-profile":
+                guard operationIndex + 1 < args.count else {
+                    throw TrackIsBackError.configuration(
+                        "\(args[operationIndex]) requires a value."
+                    )
+                }
+                operationIndex += 2
+            default:
+                throw TrackIsBackError.configuration(
+                    "Profile list/select operations cannot be combined with runtime or mapping options."
+                )
+            }
+        }
+    }
+
+    let configuration: TrackIsBackConfiguration
+    let profileDocument: ConfigurationProfileDocument?
+    if let explicitConfigurationURL {
+        configuration = try ConfigurationStore.load(from: explicitConfigurationURL)
+        profileDocument = nil
+    } else {
+        let loaded = try ConfigurationProfileStore.load(from: profileStoreURL)
+        profileDocument = loaded.document
+        configuration = loaded.document.activeProfile?.configuration ?? .default
+        if let diagnostic = loaded.diagnostic {
+            fputs("Warning: \(diagnostic)\n", stderr)
+        }
+    }
+    var options = CLIOptions(configuration: configuration)
     options.configurationURL = explicitConfigurationURL
+    options.profileStoreURL = profileStoreURL
+    options.profileDocument = profileDocument
+    options.listProfiles = listsProfiles
+    options.selectProfile = selectProfile
 
     func parseDouble(_ raw: String, option: String) throws -> Double {
         guard let value = Double(raw), value.isFinite else {
@@ -122,6 +181,9 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
         case "--observe-only": options.observeOnly = true
         case "--verbose": options.verbose = true
         case "--show-config": options.showConfiguration = true
+        case "--list-profiles": options.listProfiles = true
+        case "--select-profile": options.selectProfile = try nextValue()
+        case "--profile-store": options.profileStoreURL = url(try nextValue())
         case "--config": _ = try nextValue()
         case "--write-config": options.writeConfigurationURL = url(try nextValue())
         case "--duration":
@@ -227,6 +289,33 @@ private func printConfiguration(_ configuration: TrackIsBackConfiguration) throw
     FileHandle.standardOutput.write(try ConfigurationStore.encoded(configuration))
 }
 
+private func printProfiles(_ document: ConfigurationProfileDocument) {
+    for profile in document.profiles {
+        let marker = profile.id == document.activeProfileID ? "*" : " "
+        print("\(marker)\t\(profile.name)\t\(profile.id.rawValue)")
+    }
+}
+
+private func canonicalDocument(
+    for configuration: TrackIsBackConfiguration,
+    preserving source: ConfigurationProfileDocument?
+) throws -> ConfigurationProfileDocument {
+    var document = source ?? .default
+    if document.activeProfileID == .default, configuration != .default {
+        var candidate = "CLI configuration"
+        var suffix = 2
+        while document.profile(matching: candidate) != nil {
+            candidate = "CLI configuration \(suffix)"
+            suffix += 1
+        }
+        let profile = try document.createProfile(named: candidate, configuration: configuration)
+        document.activeProfileID = profile.id
+    } else {
+        try document.replaceConfiguration(for: document.activeProfileID, with: configuration)
+    }
+    return document
+}
+
 private func run(_ options: CLIOptions) throws {
     print("Accessibility: \(Permissions.accessibilityTrusted(prompt: false) ? "granted" : "needed for live output")")
     guard let deviceSummary = TritonHIDDevice.probe() else {
@@ -281,9 +370,34 @@ do {
         print(help())
         exit(0)
     }
+    if options.listProfiles {
+        guard let document = options.profileDocument else {
+            throw TrackIsBackError.configuration("Profile storage is unavailable.")
+        }
+        printProfiles(document)
+        exit(0)
+    }
+    if let selector = options.selectProfile {
+        guard var document = options.profileDocument else {
+            throw TrackIsBackError.configuration("Profile storage is unavailable.")
+        }
+        guard let profile = document.profile(matching: selector) else {
+            throw TrackIsBackError.configuration(
+                "No profile matches \(selector). Use --list-profiles to see names and stable IDs."
+            )
+        }
+        try document.activateProfile(id: profile.id)
+        try ConfigurationProfileStore.save(document, to: options.profileStoreURL)
+        print("Selected profile: \(profile.name) (\(profile.id.rawValue))")
+        exit(0)
+    }
     if let destination = options.writeConfigurationURL {
-        try ConfigurationStore.save(options.configuration, to: destination)
-        print("Wrote configuration: \(destination.path)")
+        let document = try canonicalDocument(
+            for: options.configuration,
+            preserving: options.profileDocument
+        )
+        try ConfigurationProfileStore.save(document, to: destination)
+        print("Wrote profile document: \(destination.path)")
         exit(0)
     }
     if options.showConfiguration {

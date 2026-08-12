@@ -1507,19 +1507,202 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(diagnostic, "Saved sensitivity is outside the supported range.")
     }
 
-    func testConfigurationLoadFailureCanSaveRecoveryDefaults() async {
+    func testConfigurationLoadFailureBlocksOverwriteOfRecoverableStorage() async {
         let state = readyState(receiver: nil)
         state.loadFailure = "Saved sensitivity is outside the supported range."
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
         await waitUntil(model: model) { model.isInitialized }
 
         model.saveAndApply()
-        await waitUntil(model: model) { model.status == .configurationSaved }
+        await waitUntil(model: model) {
+            guard case .failure(.configurationSave) = model.status else { return false }
+            return true
+        }
 
-        XCTAssertEqual(state.savedConfiguration, .default)
+        XCTAssertNil(state.savedConfiguration)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertTrue(model.needsInitialSave)
+        guard case let .failure(.configurationSave(diagnostic)) = model.status else {
+            return XCTFail("Expected storage overwrite protection")
+        }
+        XCTAssertTrue(diagnostic.contains("Preserve or repair"))
+    }
+
+    func testMissingActiveProfileRepairPreservesProfilesAndSurfacesDiagnostic() async throws {
+        let state = readyState(receiver: nil)
+        var document = ConfigurationProfileDocument.default
+        let recoverable = try document.createProfile(
+            named: "Recoverable",
+            id: ConfigurationProfileID(rawValue: "00000000-0000-0000-0000-000000000203")
+        )
+        state.loadedProfileDocument = document
+        state.loadDiagnostic = "Missing active profile; Default is active."
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertEqual(model.activeProfileID, .default)
+        XCTAssertEqual(model.profiles.first(where: { $0.id == recoverable.id }), recoverable)
+        XCTAssertTrue(model.needsInitialSave)
+        guard case let .failure(.configurationLoad(diagnostic)) = model.status else {
+            return XCTFail("Expected the preserved repair diagnostic")
+        }
+        XCTAssertEqual(diagnostic, state.loadDiagnostic)
+
+        model.saveAndApply()
+        await waitUntil(model: model) { model.status == .configurationSaved }
+        XCTAssertEqual(state.savedProfileDocument?.userProfiles, [recoverable])
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, .default)
+    }
+
+    func testProfileSelectionRequiresDiscardConfirmationAndCancelPreservesDraft() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.left.sensitivity = 9
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .configurationWindow),
+            .confirmationRequired(second.id)
+        )
+        XCTAssertEqual(
+            model.resolveProfileSelection(id: second.id, discardChanges: false),
+            .cancelled
+        )
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertEqual(model.configuration.left.sensitivity, 9)
+
+        XCTAssertEqual(
+            model.resolveProfileSelection(id: second.id, discardChanges: true),
+            .accepted
+        )
+        await waitUntil(model: model) { model.activeProfileID == second.id }
+        XCTAssertEqual(model.configuration, second.configuration)
         XCTAssertFalse(model.hasUnsavedChanges)
-        XCTAssertFalse(model.needsInitialSave)
-        XCTAssertEqual(model.status, .configurationSaved)
+    }
+
+    func testMenuProfileSelectionIsBlockedWhileDraftIsUnsaved() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.right.sensitivity = 8
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .blockedByUnsavedChanges
+        )
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertEqual(state.saveCallCount, 0)
+    }
+
+    func testCreateDuplicateRenameAndConfirmedDeletePersistStableProfiles() async throws {
+        let state = readyState(receiver: nil)
+        state.loadedProfileDocument = .default
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertTrue(model.createProfile(named: "  Gaming  "))
+        await waitUntil(model: model) { model.profiles.count == 2 }
+        let originalID = model.activeProfileID
+        XCTAssertEqual(model.activeProfile.name, "Gaming")
+
+        XCTAssertTrue(model.renameActiveProfile(to: "Arcade"))
+        await waitUntil(model: model) { model.activeProfile.name == "Arcade" }
+        XCTAssertEqual(model.activeProfileID, originalID)
+
+        XCTAssertTrue(model.duplicateActiveProfile())
+        await waitUntil(model: model) { model.profiles.count == 3 }
+        let duplicateID = model.activeProfileID
+        XCTAssertNotEqual(duplicateID, originalID)
+        XCTAssertEqual(model.activeProfile.name, "Arcade Copy")
+
+        XCTAssertFalse(model.deleteProfile(id: duplicateID, confirmed: false))
+        XCTAssertEqual(model.activeProfileID, duplicateID)
+        XCTAssertTrue(model.deleteProfile(id: originalID, confirmed: true))
+        await waitUntil(model: model) { model.profiles.count == 2 }
+        XCTAssertEqual(model.activeProfileID, duplicateID)
+
+        XCTAssertTrue(model.deleteProfile(id: duplicateID, confirmed: true))
+        await waitUntil(model: model) { model.activeProfileID == .default }
+        XCTAssertEqual(model.profiles, [.default])
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, .default)
+    }
+
+    func testEnabledProfileSelectionSerializesStopSaveStartWithoutWorkerOverlap() async throws {
+        let state = readyState(receiver: "Fake")
+        let (document, _, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let recorder = OperationRecorder()
+        state.operationRecorder = recorder
+        let session = RecordingSession(recorder: recorder)
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+        recorder.removeAll()
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await waitUntil(model: model) {
+            model.activeProfileID == second.id && model.isRunning
+        }
+
+        let maximumWorkerCount = await session.maximumWorkerCount
+        let startedConfiguration = await session.startedConfigurations.last
+        XCTAssertEqual(recorder.values, ["stop", "save", "start"])
+        XCTAssertEqual(maximumWorkerCount, 1)
+        XCTAssertEqual(startedConfiguration, second.configuration)
+    }
+
+    func testProfileSelectionRejectsSecondRequestWhileActivationWorkIsPending() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        XCTAssertEqual(
+            model.requestProfileSelection(id: first.id, source: .menu),
+            .operationInProgress
+        )
+        saveGate.signal()
+        await waitUntil(model: model) { model.activeProfileID == second.id }
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, second.id)
+    }
+
+    private func twoProfileDocument() throws -> (
+        ConfigurationProfileDocument,
+        ConfigurationProfile,
+        ConfigurationProfile
+    ) {
+        var firstConfiguration = TrackIsBackConfiguration.default
+        firstConfiguration.left.sensitivity = 2
+        var secondConfiguration = TrackIsBackConfiguration.default
+        secondConfiguration.right.sensitivity = 6
+        var document = ConfigurationProfileDocument.default
+        let first = try document.createProfile(
+            named: "First",
+            configuration: firstConfiguration,
+            id: ConfigurationProfileID(rawValue: "00000000-0000-0000-0000-000000000201")
+        )
+        let second = try document.createProfile(
+            named: "Second",
+            configuration: secondConfiguration,
+            id: ConfigurationProfileID(rawValue: "00000000-0000-0000-0000-000000000202")
+        )
+        document.activeProfileID = first.id
+        return (document, first, second)
     }
 
     private func readyState(receiver: String?) -> ModelDependencyState {
@@ -1536,22 +1719,39 @@ final class MenuModelTests: XCTestCase {
     ) -> MenuDependencies {
         MenuDependencies(
             session: session,
-            loadConfiguration: {
+            loadProfiles: {
                 state.loadGate?.wait()
                 state.loadRanOnMainThread = Thread.isMainThread
                 if let failure = state.loadFailure {
                     throw TrackIsBackError.configuration(failure)
                 }
-                return state.loadedConfiguration
+                if let document = state.loadedProfileDocument {
+                    return ConfigurationProfileLoadResult(
+                        document: document,
+                        diagnostic: state.loadDiagnostic
+                    )
+                }
+                var document = ConfigurationProfileDocument.default
+                let profile = try document.createProfile(
+                    named: "Loaded",
+                    configuration: state.loadedConfiguration,
+                    id: ConfigurationProfileID(
+                        rawValue: "00000000-0000-0000-0000-000000000101"
+                    )
+                )
+                document.activeProfileID = profile.id
+                return ConfigurationProfileLoadResult(document: document)
             },
-            saveConfiguration: {
+            saveProfiles: {
                 state.saveCallCount += 1
                 defer { state.saveCompletionCount += 1 }
                 state.saveGate?.wait()
                 if let failure = state.saveFailure {
                     throw TrackIsBackError.configuration(failure)
                 }
-                state.savedConfiguration = $0
+                state.operationRecorder?.record("save")
+                state.savedProfileDocument = $0
+                state.savedConfiguration = $0.activeProfile?.configuration
             },
             probeReceiver: {
                 state.probeCallCount += 1
@@ -1805,12 +2005,15 @@ private actor IndexedStopGate {
 private final class ModelDependencyState: Sendable {
     private struct State: ~Copyable {
         var loadedConfiguration = TrackIsBackConfiguration.default
+        var loadedProfileDocument: ConfigurationProfileDocument?
         var savedConfiguration: TrackIsBackConfiguration?
+        var savedProfileDocument: ConfigurationProfileDocument?
         var receiver: String?
         var openedPrivacySettingsAnchors: [String] = []
         var accessibilityGranted = false
         var accessibilityPromptValues: [Bool] = []
         var loadFailure: String?
+        var loadDiagnostic: String?
         var loadGate: DispatchSemaphore?
         var loadRanOnMainThread: Bool?
         var saveFailure: String?
@@ -1819,6 +2022,7 @@ private final class ModelDependencyState: Sendable {
         var saveCompletionCount = 0
         var probeCallCount = 0
         var probeGate: DispatchSemaphore?
+        var operationRecorder: OperationRecorder?
         var statusChangeCount = 0
     }
     private let state = Mutex(State())
@@ -1827,13 +2031,22 @@ private final class ModelDependencyState: Sendable {
         get { state.withLock { $0.loadedConfiguration } }
         set { state.withLock { $0.loadedConfiguration = newValue } }
     }
+    var loadedProfileDocument: ConfigurationProfileDocument? {
+        get { state.withLock { $0.loadedProfileDocument } }
+        set { state.withLock { $0.loadedProfileDocument = newValue } }
+    }
     var savedConfiguration: TrackIsBackConfiguration? {
         get { state.withLock { $0.savedConfiguration } }
         set { state.withLock { $0.savedConfiguration = newValue } }
     }
+    var savedProfileDocument: ConfigurationProfileDocument? {
+        get { state.withLock { $0.savedProfileDocument } }
+        set { state.withLock { $0.savedProfileDocument = newValue } }
+    }
     var receiver: String? {
         get { state.withLock { $0.receiver } }
         set { state.withLock { $0.receiver = newValue } }
+    }
     }
     var openedPrivacySettingsAnchors: [String] {
         get { state.withLock { $0.openedPrivacySettingsAnchors } }
@@ -1850,6 +2063,10 @@ private final class ModelDependencyState: Sendable {
     var loadFailure: String? {
         get { state.withLock { $0.loadFailure } }
         set { state.withLock { $0.loadFailure = newValue } }
+    }
+    var loadDiagnostic: String? {
+        get { state.withLock { $0.loadDiagnostic } }
+        set { state.withLock { $0.loadDiagnostic = newValue } }
     }
     var loadGate: DispatchSemaphore? {
         get { state.withLock { $0.loadGate } }
@@ -1883,9 +2100,60 @@ private final class ModelDependencyState: Sendable {
         get { state.withLock { $0.probeGate } }
         set { state.withLock { $0.probeGate = newValue } }
     }
+    var operationRecorder: OperationRecorder? {
+        get { state.withLock { $0.operationRecorder } }
+        set { state.withLock { $0.operationRecorder = newValue } }
+    }
     var statusChangeCount: Int {
         get { state.withLock { $0.statusChangeCount } }
         set { state.withLock { $0.statusChangeCount = newValue } }
+    }
+}
+
+private final class OperationRecorder: Sendable {
+    private let valuesState = Mutex<[String]>([])
+
+    var values: [String] { valuesState.withLock { $0 } }
+
+    func record(_ value: String) {
+        valuesState.withLock { $0.append(value) }
+    }
+
+    func removeAll() {
+        valuesState.withLock { $0.removeAll() }
+    }
+}
+
+private actor RecordingSession: TrackpadSessionControlling {
+    private let recorder: OperationRecorder
+    private var continuation: AsyncStream<TrackpadSessionEvent>.Continuation?
+    private var workerCount = 0
+    private(set) var maximumWorkerCount = 0
+    private(set) var startedConfigurations: [TrackIsBackConfiguration] = []
+
+    init(recorder: OperationRecorder) {
+        self.recorder = recorder
+    }
+
+    func start(
+        configuration: TrackIsBackConfiguration,
+        observeOnly: Bool
+    ) async -> AsyncStream<TrackpadSessionEvent> {
+        recorder.record("start")
+        workerCount += 1
+        maximumWorkerCount = max(maximumWorkerCount, workerCount)
+        startedConfigurations.append(configuration)
+        let (stream, continuation) = AsyncStream<TrackpadSessionEvent>.makeStream()
+        self.continuation = continuation
+        continuation.yield(.connected("Fake puck"))
+        return stream
+    }
+
+    func stop() async {
+        recorder.record("stop")
+        continuation?.finish()
+        continuation = nil
+        workerCount = 0
     }
 }
 

@@ -63,4 +63,62 @@ if [ "$status" -ne 2 ] \
     exit 1
 fi
 
-echo "Verified strict loading and mouse acceleration CLI configuration."
+profile_store="$test_dir/profiles.json"
+input_before="$test_dir/input-before.json"
+cp "$input_path" "$input_before"
+"$cli_path" --config "$input_path" --left-sensitivity 3 --write-config "$profile_store" \
+    >"$stdout_path" 2>"$stderr_path"
+if ! cmp -s "$input_path" "$input_before"; then
+    echo "Canonical conversion modified the legacy compatibility input." >&2
+    exit 1
+fi
+if ! grep -Fq '"schemaVersion" : 1' "$profile_store" \
+    || ! grep -Fq '"userProfiles"' "$profile_store"; then
+    echo "--write-config did not emit the canonical profile document." >&2
+    exit 1
+fi
+
+"$cli_path" --profile-store "$profile_store" --list-profiles >"$stdout_path" 2>"$stderr_path"
+if ! grep -Fq 'Default' "$stdout_path" || ! grep -Fq 'CLI configuration' "$stdout_path"; then
+    echo "Profile listing omitted the built-in or converted profile." >&2
+    exit 1
+fi
+profile_id=$(grep -F 'CLI configuration' "$stdout_path" | cut -f 3)
+if [ -z "$profile_id" ]; then
+    echo "Profile listing omitted the stable ID." >&2
+    exit 1
+fi
+
+"$cli_path" --profile-store "$profile_store" --select-profile Default >"$stdout_path" 2>"$stderr_path"
+"$cli_path" --profile-store "$profile_store" --list-profiles >"$stdout_path" 2>"$stderr_path"
+if ! grep -Fq "*$(printf '\t')Default$(printf '\t')" "$stdout_path"; then
+    echo "Profile name selection did not persist Default as active." >&2
+    exit 1
+fi
+"$cli_path" --profile-store "$profile_store" --select-profile "$profile_id" \
+    >"$stdout_path" 2>"$stderr_path"
+"$cli_path" --profile-store "$profile_store" --list-profiles >"$stdout_path" 2>"$stderr_path"
+if ! grep -Fq "*$(printf '\t')CLI configuration$(printf '\t')$profile_id" "$stdout_path"; then
+    echo "Stable-ID profile selection did not persist the requested profile." >&2
+    exit 1
+fi
+
+selection_stderr="$test_dir/selection-stderr"
+set +e
+"$cli_path" --profile-store "$profile_store" --select-profile Missing \
+    >"$stdout_path" 2>"$selection_stderr"
+selection_status=$?
+"$cli_path" --profile-store "$profile_store" --list-profiles --dry-run \
+    >"$stdout_path" 2>"$stderr_path"
+mutual_status=$?
+set -e
+if [ "$selection_status" -ne 2 ] || ! grep -Fq 'No profile matches Missing' "$selection_stderr"; then
+    echo "Unknown profile selection did not return the actionable error." >&2
+    exit 1
+fi
+if [ "$mutual_status" -ne 2 ] || ! grep -Fq 'cannot be combined' "$stderr_path"; then
+    echo "Profile operation mutual exclusion did not exit 2." >&2
+    exit 1
+fi
+
+echo "Verified strict loading, canonical profiles, list/select, and CLI mapping configuration."

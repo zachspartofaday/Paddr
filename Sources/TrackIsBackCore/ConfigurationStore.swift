@@ -40,7 +40,7 @@ public enum ConfigurationStore {
                 )
             }
             let data = try Data(contentsOf: candidate)
-            return try JSONDecoder().decode(TrackIsBackConfiguration.self, from: data).validated()
+            return try ConfigurationProfileStore.decodeConfiguration(from: data)
         } catch let error as TrackIsBackError {
             throw error
         } catch {

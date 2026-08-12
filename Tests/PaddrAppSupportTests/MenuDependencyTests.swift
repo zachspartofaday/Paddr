@@ -13,15 +13,19 @@ final class MenuDependencyTests: XCTestCase {
             configuration.left.sensitivity = 4
             return configuration
         }()
+        var mutableDocument = ConfigurationProfileDocument.default
+        let profile = try mutableDocument.createProfile(named: "Stored", configuration: storedConfiguration)
+        mutableDocument.activeProfileID = profile.id
+        let storedDocument = mutableDocument
         let dependencies = MenuDependencies(
             session: InertSession(),
-            loadConfiguration: {
+            loadProfiles: {
                 state.loadRanOnMainThread = Thread.isMainThread
-                return storedConfiguration
+                return ConfigurationProfileLoadResult(document: storedDocument)
             },
-            saveConfiguration: { configuration in
+            saveProfiles: { document in
                 state.saveRanOnMainThread = Thread.isMainThread
-                state.savedConfiguration = configuration
+                state.savedConfiguration = document.activeProfile?.configuration
             },
             probeReceiver: {
                 state.probeRanOnMainThread = Thread.isMainThread
@@ -32,12 +36,12 @@ final class MenuDependencyTests: XCTestCase {
             sleep: { _ in }
         )
 
-        let loadedConfiguration = try await dependencies.loadConfiguration()
-        try await dependencies.saveConfiguration(loadedConfiguration)
+        let loadedDocument = try await dependencies.loadProfiles().document
+        try await dependencies.saveProfiles(loadedDocument)
         let receiverDescription = await dependencies.probeReceiver()
 
-        XCTAssertEqual(loadedConfiguration.left.sensitivity, 4)
-        XCTAssertEqual(state.savedConfiguration, loadedConfiguration)
+        XCTAssertEqual(loadedDocument.activeProfile?.configuration.left.sensitivity, 4)
+        XCTAssertEqual(state.savedConfiguration, loadedDocument.activeProfile?.configuration)
         XCTAssertEqual(receiverDescription, "Fake puck")
         XCTAssertEqual(state.loadRanOnMainThread, false)
         XCTAssertEqual(state.saveRanOnMainThread, false)

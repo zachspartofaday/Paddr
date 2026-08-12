@@ -2,6 +2,22 @@ import Foundation
 import Observation
 import TrackIsBackCore
 
+public enum ProfileSelectionSource: Sendable {
+    case configurationWindow
+    case menu
+}
+
+public enum ProfileSelectionRequestResult: Equatable, Sendable {
+    case accepted
+    case confirmationRequired(ConfigurationProfileID)
+    case blockedByUnsavedChanges
+    case cancelled
+    case operationInProgress
+    case unchanged
+    case profileNotFound
+    case storageUnavailable
+}
+
 @MainActor
 @Observable
 public final class PaddrMenuModel {
@@ -15,6 +31,8 @@ public final class PaddrMenuModel {
         }
     }
     public private(set) var savedConfiguration: TrackIsBackConfiguration
+    public private(set) var profiles: [ConfigurationProfile] = [.default]
+    public private(set) var activeProfileID: ConfigurationProfileID = .default
     public var isEnabled = false {
         didSet {
             guard isEnabled != oldValue else { return }
@@ -34,6 +52,8 @@ public final class PaddrMenuModel {
     private(set) var isInitialized = false
 
     @ObservationIgnored private let dependencies: MenuDependencies
+    @ObservationIgnored private var profileDocument = ConfigurationProfileDocument.default
+    @ObservationIgnored private var storageWriteBlocked = false
     @ObservationIgnored private var sessionID: UUID?
     @ObservationIgnored private var lifecycleEpoch: UInt64 = 0
     @ObservationIgnored private var initializationTask: Task<Void, Never>?
@@ -60,6 +80,11 @@ public final class PaddrMenuModel {
 
     public var hasUnsavedChanges: Bool { needsInitialSave || configuration != savedConfiguration }
     public var hasSystemAccess: Bool { accessibilityTrusted }
+    public var activeProfile: ConfigurationProfile {
+        profiles.first { $0.id == activeProfileID } ?? .default
+    }
+    public var canEditActiveProfile: Bool { activeProfileID != .default }
+    public var canSelectProfileFromMenu: Bool { !hasUnsavedChanges && configurationTask == nil }
 
     public init(dependencies: MenuDependencies = .live) {
         self.dependencies = dependencies
@@ -139,12 +164,26 @@ public final class PaddrMenuModel {
     ) async {
         var statusGeneration = initialStatusGeneration
         do {
-            let loaded = try await dependencies.loadConfiguration()
-            if draftRevision == initialDraftRevision { publishConfiguration(loaded) }
-            savedConfiguration = loaded
+            let loaded = try await dependencies.loadProfiles()
+            let document = loaded.document
+            let configuration = document.activeProfile?.configuration ?? .default
+            publishProfileDocument(document)
+            if draftRevision == initialDraftRevision { publishConfiguration(configuration) }
+            savedConfiguration = configuration
+            storageWriteBlocked = false
+            if let diagnostic = loaded.diagnostic {
+                needsInitialSave = true
+                if terminationState == .idle {
+                    statusGeneration = withStatusPublicationGeneration(statusGeneration) {
+                        publishStatus(.failure(.configurationLoad(diagnostic: diagnostic)))
+                    }
+                }
+            }
         } catch {
             if draftRevision == initialDraftRevision { publishConfiguration(.default) }
             savedConfiguration = .default
+            publishProfileDocument(.default)
+            storageWriteBlocked = true
             needsInitialSave = true
             if terminationState == .idle {
                 statusGeneration = withStatusPublicationGeneration(statusGeneration) {
@@ -188,8 +227,16 @@ public final class PaddrMenuModel {
         operation: UInt64
     ) async {
         do {
-            try await dependencies.saveConfiguration(validated)
+            guard !storageWriteBlocked else {
+                throw TrackIsBackError.configuration(
+                    "Profile storage could not be loaded. Preserve or repair the original file, then relaunch Paddr before saving."
+                )
+            }
+            var document = profileDocument
+            try document.replaceConfiguration(for: activeProfileID, with: validated)
+            try await dependencies.saveProfiles(document)
             guard terminationState == .idle else { return }
+            publishProfileDocument(document)
             if draftRevision == initiatingDraftRevision { publishConfiguration(validated) }
             savedConfiguration = validated
             needsInitialSave = false
@@ -220,9 +267,111 @@ public final class PaddrMenuModel {
     }
 
     public func restoreDefaults() {
-        guard terminationState == .idle else { return }
+        guard terminationState == .idle, !isInitialized || canEditActiveProfile else { return }
         configuration = .default
         publishStatus(.defaultsRestored)
+    }
+
+    @discardableResult
+    public func requestProfileSelection(
+        id: ConfigurationProfileID,
+        source: ProfileSelectionSource
+    ) -> ProfileSelectionRequestResult {
+        guard profileDocument.profile(id: id) != nil else { return .profileNotFound }
+        guard !storageWriteBlocked else { return .storageUnavailable }
+        guard configurationTask == nil else { return .operationInProgress }
+        guard id != activeProfileID else { return .unchanged }
+        if hasUnsavedChanges {
+            return source == .configurationWindow
+                ? .confirmationRequired(id)
+                : .blockedByUnsavedChanges
+        }
+        beginProfileActivation(id: id)
+        return .accepted
+    }
+
+    @discardableResult
+    public func resolveProfileSelection(
+        id: ConfigurationProfileID,
+        discardChanges: Bool
+    ) -> ProfileSelectionRequestResult {
+        guard discardChanges else { return .cancelled }
+        guard profileDocument.profile(id: id) != nil else { return .profileNotFound }
+        guard !storageWriteBlocked else { return .storageUnavailable }
+        guard configurationTask == nil else { return .operationInProgress }
+        beginProfileActivation(id: id)
+        return .accepted
+    }
+
+    @discardableResult
+    public func createProfile(named name: String) -> Bool {
+        guard canBeginProfileMutation(discardingDraft: true) else { return false }
+        do {
+            var document = profileDocument
+            let profile = try document.createProfile(named: name)
+            try document.activateProfile(id: profile.id)
+            beginProfileDocumentActivation(document)
+            return true
+        } catch {
+            publishProfileOperationFailure(error)
+            return false
+        }
+    }
+
+    @discardableResult
+    public func duplicateActiveProfile() -> Bool {
+        guard canBeginProfileMutation(discardingDraft: true) else { return false }
+        do {
+            var document = profileDocument
+            let profile = try document.duplicateProfile(id: activeProfileID)
+            try document.activateProfile(id: profile.id)
+            beginProfileDocumentActivation(document)
+            return true
+        } catch {
+            publishProfileOperationFailure(error)
+            return false
+        }
+    }
+
+    @discardableResult
+    public func renameActiveProfile(to name: String) -> Bool {
+        guard canBeginProfileMutation(discardingDraft: false) else { return false }
+        do {
+            var document = profileDocument
+            try document.renameProfile(id: activeProfileID, to: name)
+            beginProfileDocumentSave(document)
+            return true
+        } catch {
+            publishProfileOperationFailure(error)
+            return false
+        }
+    }
+
+    @discardableResult
+    public func deleteProfile(id: ConfigurationProfileID, confirmed: Bool) -> Bool {
+        guard confirmed, canBeginProfileMutation(discardingDraft: false) else { return false }
+        guard id != activeProfileID || !hasUnsavedChanges else {
+            publishProfileOperationFailure(
+                TrackIsBackError.configuration(
+                    "Save or discard unsaved changes before deleting the active profile."
+                )
+            )
+            return false
+        }
+        do {
+            var document = profileDocument
+            let changesActiveProfile = id == activeProfileID
+            try document.deleteProfile(id: id)
+            if changesActiveProfile {
+                beginProfileDocumentActivation(document)
+            } else {
+                beginProfileDocumentSave(document)
+            }
+            return true
+        } catch {
+            publishProfileOperationFailure(error)
+            return false
+        }
     }
 
     public func requestAccessibility() {
@@ -242,6 +391,124 @@ public final class PaddrMenuModel {
         guard terminationState == .idle else { return }
         dependencies.openPrivacySettings("Privacy_Accessibility")
         publishStatus(.accessibilitySettings)
+    }
+
+    private func canBeginProfileMutation(discardingDraft: Bool) -> Bool {
+        guard terminationState == .idle, configurationTask == nil else { return false }
+        guard !storageWriteBlocked else {
+            publishProfileOperationFailure(
+                TrackIsBackError.configuration(
+                    "Profile storage could not be loaded. Preserve or repair the original file, then relaunch Paddr before saving."
+                )
+            )
+            return false
+        }
+        if discardingDraft, hasUnsavedChanges {
+            publishProfileOperationFailure(
+                TrackIsBackError.configuration(
+                    "Save or discard unsaved changes before changing profiles."
+                )
+            )
+            return false
+        }
+        return true
+    }
+
+    private func beginProfileActivation(id: ConfigurationProfileID) {
+        guard canBeginProfileMutation(discardingDraft: false) else { return }
+        do {
+            var document = profileDocument
+            try document.activateProfile(id: id)
+            beginProfileDocumentActivation(document)
+        } catch {
+            publishProfileOperationFailure(error)
+        }
+    }
+
+    private func beginProfileDocumentActivation(_ document: ConfigurationProfileDocument) {
+        beginProfileDocumentSave(document, replacingActiveConfiguration: true)
+    }
+
+    private func beginProfileDocumentSave(_ document: ConfigurationProfileDocument) {
+        beginProfileDocumentSave(document, replacingActiveConfiguration: false)
+    }
+
+    private func beginProfileDocumentSave(
+        _ document: ConfigurationProfileDocument,
+        replacingActiveConfiguration: Bool
+    ) {
+        guard terminationState == .idle, configurationTask == nil else { return }
+        guard !storageWriteBlocked else {
+            publishProfileOperationFailure(
+                TrackIsBackError.configuration(
+                    "Profile storage could not be loaded. Preserve or repair the original file, then relaunch Paddr before saving."
+                )
+            )
+            return
+        }
+
+        configurationEpoch &+= 1
+        let operation = configurationEpoch
+        let shouldRestart = replacingActiveConfiguration && isEnabled
+        if shouldRestart {
+            lifecycleEpoch &+= 1
+            lifecycleTask?.cancel()
+            reconnectTask?.cancel()
+            reconnectTask = nil
+            sessionID = nil
+            isRunning = false
+        }
+
+        configurationTask = Task { [weak self] in
+            guard let self else { return }
+            await initializationTask?.value
+            guard configurationEpoch == operation, terminationState == .idle else {
+                clearConfigurationTask(operation: operation)
+                return
+            }
+            if shouldRestart {
+                await dependencies.session.stop()
+                guard configurationEpoch == operation,
+                      terminationState == .idle,
+                      isEnabled else {
+                    clearConfigurationTask(operation: operation)
+                    return
+                }
+            }
+            do {
+                try await dependencies.saveProfiles(document)
+                guard configurationEpoch == operation, terminationState == .idle else {
+                    clearConfigurationTask(operation: operation)
+                    return
+                }
+                publishProfileDocument(document)
+                if replacingActiveConfiguration {
+                    let selected = document.activeProfile?.configuration ?? .default
+                    publishConfiguration(selected)
+                    savedConfiguration = selected
+                    needsInitialSave = false
+                }
+                clearConfigurationTask(operation: operation)
+                publishStatus(.configurationSaved)
+                if shouldRestart, isEnabled {
+                    startLifecycle(
+                        commitDraft: false,
+                        statusGeneration: currentStatusGeneration,
+                        sessionAlreadyStopped: true
+                    )
+                }
+            } catch {
+                clearConfigurationTask(operation: operation)
+                if shouldRestart, isEnabled { isEnabled = false }
+                publishStatus(.failure(.configurationSave(diagnostic: String(describing: error))))
+            }
+            statusDidChange?()
+        }
+    }
+
+    private func publishProfileOperationFailure(_ error: Error) {
+        publishStatus(.failure(.configurationInvalid(diagnostic: String(describing: error))))
+        statusDidChange?()
     }
 
     public func stopForTermination(completion: @escaping @MainActor () -> Void) -> Bool {
@@ -308,7 +575,11 @@ public final class PaddrMenuModel {
         }
     }
 
-    private func startLifecycle(commitDraft: Bool, statusGeneration: UInt64) {
+    private func startLifecycle(
+        commitDraft: Bool,
+        statusGeneration: UInt64,
+        sessionAlreadyStopped: Bool = false
+    ) {
         guard terminationState == .idle else { return }
         if commitDraft { activationCommitPending = true }
         let shouldCommitDraft = activationCommitPending
@@ -320,7 +591,8 @@ public final class PaddrMenuModel {
             await self.start(
                 operation: operation,
                 commitDraft: shouldCommitDraft,
-                statusGeneration: statusGeneration
+                statusGeneration: statusGeneration,
+                sessionAlreadyStopped: sessionAlreadyStopped
             )
             self.clearLifecycleTask(operation: operation)
         }
@@ -348,7 +620,8 @@ public final class PaddrMenuModel {
     private func start(
         operation: UInt64,
         commitDraft: Bool,
-        statusGeneration initiatingStatusGeneration: UInt64
+        statusGeneration initiatingStatusGeneration: UInt64,
+        sessionAlreadyStopped: Bool
     ) async {
         var statusGeneration = initiatingStatusGeneration
         await initializationTask?.value
@@ -360,8 +633,10 @@ public final class PaddrMenuModel {
         sessionID = nil
         controllerConnected = false
         isRunning = false
-        await dependencies.session.stop()
-        guard isCurrent(operation), isEnabled else { return }
+        if !sessionAlreadyStopped {
+            await dependencies.session.stop()
+            guard isCurrent(operation), isEnabled else { return }
+        }
 
         if commitDraft {
             guard await commitConfigurationForActivation(
@@ -437,7 +712,15 @@ public final class PaddrMenuModel {
             }
 
             do {
-                try await dependencies.saveConfiguration(validated)
+                guard !storageWriteBlocked else {
+                    throw TrackIsBackError.configuration(
+                        "Profile storage could not be loaded. Preserve or repair the original file, then relaunch Paddr before saving."
+                    )
+                }
+                var document = profileDocument
+                try document.replaceConfiguration(for: activeProfileID, with: validated)
+                try await dependencies.saveProfiles(document)
+                publishProfileDocument(document)
                 savedConfiguration = validated
                 needsInitialSave = false
                 guard isCurrent(operation), isEnabled else { return false }
@@ -735,6 +1018,12 @@ public final class PaddrMenuModel {
         isPublishingConfiguration = true
         defer { isPublishingConfiguration = false }
         self.configuration = configuration
+    }
+
+    private func publishProfileDocument(_ document: ConfigurationProfileDocument) {
+        profileDocument = document
+        profiles = document.profiles
+        activeProfileID = document.activeProfileID
     }
 
     var hasPendingLifecycleWork: Bool {
