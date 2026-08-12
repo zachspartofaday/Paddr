@@ -37,11 +37,14 @@ public struct TrackpadRunResult: Equatable, Sendable {
 
 public enum TrackpadSessionEvent: Equatable, Sendable {
     case connecting
-    case connected(String)
+    case waitingForController(String)
+    case controllerConnected
+    case outputArmed
     case progress(TrackpadRunSummary)
+    case controllerLost(TrackpadRunSummary)
     case stopped(TrackpadRunSummary)
-    case deviceRemoved(TrackpadRunSummary)
-    case deviceUnavailable(String)
+    case receiverRemoved(TrackpadRunSummary)
+    case receiverUnavailable(String)
     case failed(String)
 }
 
@@ -56,16 +59,19 @@ public protocol TrackpadSessionControlling: Sendable {
 public struct TrackpadRuntimeDependencies: Sendable {
     public var openHID: @Sendable () throws -> any TrackpadHIDStreaming
     public var makeOutput: @Sendable () -> any TrackpadOutputDispatching
-    public var now: @Sendable () -> Date
+    public var wallNow: @Sendable () -> Date
+    public var uptimeNanoseconds: @Sendable () -> UInt64
 
     public init(
         openHID: @escaping @Sendable () throws -> any TrackpadHIDStreaming,
         makeOutput: @escaping @Sendable () -> any TrackpadOutputDispatching,
-        now: @escaping @Sendable () -> Date = Date.init
+        wallNow: @escaping @Sendable () -> Date = Date.init,
+        uptimeNanoseconds: @escaping @Sendable () -> UInt64 = { DispatchTime.now().uptimeNanoseconds }
     ) {
         self.openHID = openHID
         self.makeOutput = makeOutput
-        self.now = now
+        self.wallNow = wallNow
+        self.uptimeNanoseconds = uptimeNanoseconds
     }
 
     public static let live = TrackpadRuntimeDependencies(
@@ -75,95 +81,161 @@ public struct TrackpadRuntimeDependencies: Sendable {
 }
 
 public enum TrackpadRuntime {
+    static let controllerLossDeadlineNanoseconds: UInt64 = 1_000_000_000
+
     public static func run(
         configuration: TrackIsBackConfiguration,
         observeOnly: Bool,
         stopToken: TrackpadStopToken,
         deadline: Date? = nil,
         dependencies: TrackpadRuntimeDependencies = .live,
-        onConnected: (@Sendable (String) -> Void)? = nil,
-        onAction: (@Sendable (String) -> Void)? = nil,
-        onProgress: (@Sendable (TrackpadRunSummary) -> Void)? = nil
+        onEvent: (@Sendable (TrackpadSessionEvent) -> Void)? = nil,
+        onAction: (@Sendable (String) -> Void)? = nil
     ) throws -> TrackpadRunResult {
         let validated = try configuration.validated()
         let device = try dependencies.openHID()
-        onConnected?(device.summaryDescription)
-        var leftMapper = PadMapper(side: .left, configuration: validated.left)
-        var rightMapper = PadMapper(side: .right, configuration: validated.right)
-        var arbiter = OutputArbiter()
         let output = dependencies.makeOutput()
+        var controllerEpoch: ControllerEpoch?
+        var lastAcceptedReportUptime: UInt64?
         var reportCount = 0
         var actionCount = 0
 
+        func summary() -> TrackpadRunSummary {
+            TrackpadRunSummary(reportCount: reportCount, actionCount: actionCount)
+        }
+
+        func cleanupControllerEpoch() throws {
+            guard var epoch = controllerEpoch else { return }
+            controllerEpoch = nil
+            lastAcceptedReportUptime = nil
+
+            var cleanupFailures: [String] = []
+            let leftReleases: [TrackpadOutputAction]
+            do {
+                leftReleases = try epoch.leftMapper.releaseAll()
+            } catch {
+                leftReleases = []
+                cleanupFailures.append("left-pad release mapping failed: \(error)")
+            }
+            let rightReleases: [TrackpadOutputAction]
+            do {
+                rightReleases = try epoch.rightMapper.releaseAll()
+            } catch {
+                rightReleases = []
+                cleanupFailures.append("right-pad release mapping failed: \(error)")
+            }
+            let releases = epoch.arbiter.process(leftReleases, from: .leftPad)
+                + epoch.arbiter.process(rightReleases, from: .rightPad)
+                + epoch.arbiter.releaseAll()
+            if !observeOnly {
+                for release in releases {
+                    do {
+                        try output.dispatch([release])
+                    } catch {
+                        cleanupFailures.append("\(release.description): \(error)")
+                    }
+                }
+            }
+            if !cleanupFailures.isEmpty {
+                throw TrackIsBackError.output(
+                    "Could not release held outputs: \(cleanupFailures.joined(separator: "; "))."
+                )
+            }
+        }
+
+        onEvent?(.waitingForController(device.summaryDescription))
         let streamOutcome: Result<TrackpadStreamTermination, any Error>
         do {
             streamOutcome = .success(try device.stream(
                 shouldContinue: {
-                    stopToken.shouldContinue && (deadline.map { dependencies.now() < $0 } ?? true)
+                    stopToken.shouldContinue && (deadline.map { dependencies.wallNow() < $0 } ?? true)
+                },
+                onWake: {
+                    guard let lastAcceptedReportUptime else { return }
+                    let now = dependencies.uptimeNanoseconds()
+                    guard now >= lastAcceptedReportUptime,
+                          now - lastAcceptedReportUptime >= controllerLossDeadlineNanoseconds
+                    else { return }
+                    try cleanupControllerEpoch()
+                    onEvent?(.controllerLost(summary()))
                 },
                 onReport: { bytes, timestamp in
-                    guard let pads = TritonParser.parseTrackpads(bytes, timestampNanoseconds: timestamp) else { return }
+                    guard let pads = TritonParser.parseTrackpads(bytes, timestampNanoseconds: timestamp) else {
+                        return
+                    }
+                    lastAcceptedReportUptime = dependencies.uptimeNanoseconds()
                     reportCount += 1
-                    let left = try leftMapper.process(pads.left)
-                    let right = try rightMapper.process(pads.right)
-                    let actions = arbiter.process(left, from: .leftPad)
-                        + arbiter.process(right, from: .rightPad)
+
+                    if controllerEpoch == nil {
+                        controllerEpoch = ControllerEpoch(configuration: validated)
+                        onEvent?(.controllerConnected)
+                    }
+                    guard var epoch = controllerEpoch else { return }
+
+                    if !epoch.isArmed {
+                        guard pads.isNeutral else {
+                            controllerEpoch = epoch
+                            return
+                        }
+                        _ = try epoch.leftMapper.process(pads.left)
+                        _ = try epoch.rightMapper.process(pads.right)
+                        epoch.isArmed = true
+                        controllerEpoch = epoch
+                        onEvent?(.outputArmed)
+                        if reportCount.isMultiple(of: 100) { onEvent?(.progress(summary())) }
+                        return
+                    }
+
+                    let left = try epoch.leftMapper.process(pads.left)
+                    let right = try epoch.rightMapper.process(pads.right)
+                    let actions = epoch.arbiter.process(left, from: .leftPad)
+                        + epoch.arbiter.process(right, from: .rightPad)
+                    controllerEpoch = epoch
                     actionCount += actions.count
                     for action in actions { onAction?(action.description) }
                     if !observeOnly { try output.dispatch(actions) }
-                    if reportCount.isMultiple(of: 100) {
-                        onProgress?(TrackpadRunSummary(reportCount: reportCount, actionCount: actionCount))
-                    }
+                    if reportCount.isMultiple(of: 100) { onEvent?(.progress(summary())) }
                 }
             ))
         } catch {
             streamOutcome = .failure(error)
         }
 
-        var cleanupFailures: [String] = []
-        let leftReleases: [TrackpadOutputAction]
         do {
-            leftReleases = try leftMapper.releaseAll()
+            try cleanupControllerEpoch()
         } catch {
-            leftReleases = []
-            cleanupFailures.append("left-pad release mapping failed: \(error)")
-        }
-        let rightReleases: [TrackpadOutputAction]
-        do {
-            rightReleases = try rightMapper.releaseAll()
-        } catch {
-            rightReleases = []
-            cleanupFailures.append("right-pad release mapping failed: \(error)")
-        }
-        let releases = arbiter.process(leftReleases, from: .leftPad)
-            + arbiter.process(rightReleases, from: .rightPad)
-            + arbiter.releaseAll()
-        if !observeOnly {
-            for release in releases {
-                do {
-                    try output.dispatch([release])
-                } catch {
-                    cleanupFailures.append("\(release.description): \(error)")
-                }
-            }
-        }
-        if !cleanupFailures.isEmpty {
             let streamFailure: String
             switch streamOutcome {
             case .success:
                 streamFailure = ""
-            case let .failure(error):
-                streamFailure = " Runtime also failed: \(error)."
+            case let .failure(runtimeError):
+                streamFailure = " Runtime also failed: \(runtimeError)."
             }
-            throw TrackIsBackError.output(
-                "Could not release held outputs: \(cleanupFailures.joined(separator: "; ")).\(streamFailure)"
-            )
+            throw TrackIsBackError.output("\(error)\(streamFailure)")
         }
 
         return TrackpadRunResult(
-            summary: TrackpadRunSummary(reportCount: reportCount, actionCount: actionCount),
+            summary: summary(),
             termination: try streamOutcome.get()
         )
+    }
+}
+
+private struct ControllerEpoch {
+    var leftMapper: PadMapper
+    var rightMapper: PadMapper
+    var arbiter = OutputArbiter()
+    var isArmed = false
+
+    init(configuration: TrackIsBackConfiguration) {
+        leftMapper = PadMapper(side: .left, configuration: configuration.left)
+        rightMapper = PadMapper(side: .right, configuration: configuration.right)
+    }
+}
+
+private extension TrackpadPair {
+    var isNeutral: Bool {
+        !left.isTouched && !left.isClicked && !right.isTouched && !right.isClicked
     }
 }
 
@@ -172,8 +244,7 @@ public actor TrackpadSession: TrackpadSessionControlling {
         TrackIsBackConfiguration,
         Bool,
         TrackpadStopToken,
-        @escaping @Sendable (String) -> Void,
-        @escaping @Sendable (TrackpadRunSummary) -> Void
+        @escaping @Sendable (TrackpadSessionEvent) -> Void
     ) throws -> TrackpadRunResult
 
     private struct WorkerRecord: Sendable {
@@ -221,14 +292,9 @@ public actor TrackpadSession: TrackpadSessionControlling {
                     configuration,
                     observeOnly,
                     token,
-                    { description in
+                    { event in
                         eventGate.enqueue(ifCurrent: request) {
-                            continuation.yield(.connected(description))
-                        }
-                    },
-                    { summary in
-                        eventGate.enqueue(ifCurrent: request) {
-                            continuation.yield(.progress(summary))
+                            continuation.yield(event)
                         }
                     }
                 )
@@ -238,11 +304,11 @@ public actor TrackpadSession: TrackpadSessionControlling {
                 case let .success(result):
                     switch result.termination {
                     case .stopped: continuation.yield(.stopped(result.summary))
-                    case .deviceRemoved: continuation.yield(.deviceRemoved(result.summary))
+                    case .deviceRemoved: continuation.yield(.receiverRemoved(result.summary))
                     }
                 case let .failure(error as TrackIsBackError):
                     if case .device = error {
-                        continuation.yield(.deviceUnavailable(error.description))
+                        continuation.yield(.receiverUnavailable(error.description))
                     } else {
                         continuation.yield(.failed(error.description))
                     }
@@ -301,15 +367,13 @@ public actor TrackpadSession: TrackpadSessionControlling {
         configuration: TrackIsBackConfiguration,
         observeOnly: Bool,
         stopToken: TrackpadStopToken,
-        onConnected: @escaping @Sendable (String) -> Void,
-        onProgress: @escaping @Sendable (TrackpadRunSummary) -> Void
+        onEvent: @escaping @Sendable (TrackpadSessionEvent) -> Void
     ) throws -> TrackpadRunResult {
         try TrackpadRuntime.run(
             configuration: configuration,
             observeOnly: observeOnly,
             stopToken: stopToken,
-            onConnected: onConnected,
-            onProgress: onProgress
+            onEvent: onEvent
         )
     }
 }

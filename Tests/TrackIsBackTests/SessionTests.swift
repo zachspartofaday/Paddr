@@ -101,7 +101,8 @@ final class SessionTests: XCTestCase {
 
         let oldEvents = await events(in: oldStream)
         XCTAssertEqual(Array(runtime.lifecycleEvents.prefix(3)), ["start:1", "finish:1", "start:2"])
-        XCTAssertFalse(oldEvents.contains(.connected("late:1")))
+        XCTAssertEqual(oldEvents.filter { $0 == .controllerConnected }.count, 1)
+        XCTAssertFalse(oldEvents.contains(.controllerLost(.init(reportCount: 1, actionCount: 1))))
         XCTAssertEqual(runtime.maximumConcurrent, 1)
 
         let stop = Task { await session.stop() }
@@ -116,8 +117,8 @@ final class SessionTests: XCTestCase {
         let oldStream = await session.start(configuration: configuration(sensitivity: 1))
         await runtime.waitForStartCount(1)
         var oldIterator = oldStream.makeAsyncIterator()
-        let initialEvents = [await oldIterator.next(), await oldIterator.next()]
-        XCTAssertEqual(initialEvents, [.connecting, .connected("worker:1")])
+        let initialEvents = [await oldIterator.next(), await oldIterator.next(), await oldIterator.next()]
+        XCTAssertEqual(initialEvents, [.connecting, .waitingForController("worker:1"), .controllerConnected])
 
         let replacementConfiguration = configuration(sensitivity: 2)
         let replacement = Task {
@@ -198,8 +199,7 @@ private final class GatedRuntime: Sendable {
         configuration: TrackIsBackConfiguration,
         observeOnly: Bool,
         stopToken: TrackpadStopToken,
-        connected: @escaping @Sendable (String) -> Void,
-        progress: @escaping @Sendable (TrackpadRunSummary) -> Void
+        event: @escaping @Sendable (TrackpadSessionEvent) -> Void
     ) throws -> TrackpadRunResult {
         let (id, gate) = state.withLock { state -> (Int, DispatchSemaphore) in
             state.nextID += 1
@@ -212,11 +212,13 @@ private final class GatedRuntime: Sendable {
             state.lifecycleEvents.append("start:\(id)")
             return (id, gate)
         }
-        connected("worker:\(id)")
+        event(.waitingForController("worker:\(id)"))
+        event(.controllerConnected)
         startContinuation.yield(id)
         gate.wait()
-        connected("late:\(id)")
-        progress(.init(reportCount: id, actionCount: id))
+        event(.controllerConnected)
+        event(.controllerLost(.init(reportCount: id, actionCount: id)))
+        event(.progress(.init(reportCount: id, actionCount: id)))
         state.withLock {
             $0.active -= 1
             $0.lifecycleEvents.append("finish:\(id)")

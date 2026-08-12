@@ -78,6 +78,7 @@ public protocol TrackpadHIDStreaming {
     var summaryDescription: String { get }
     func stream(
         shouldContinue: () -> Bool,
+        onWake: () throws -> Void,
         onReport: ([UInt8], UInt64) throws -> Void
     ) throws -> TrackpadStreamTermination
 }
@@ -148,6 +149,7 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
 
     public func stream(
         shouldContinue: () -> Bool,
+        onWake: () throws -> Void,
         onReport: ([UInt8], UInt64) throws -> Void
     ) throws -> TrackpadStreamTermination {
         #if canImport(IOKit)
@@ -183,6 +185,8 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
                 guard !callbackState.isRemoved else { break }
                 try onReport(bytes, timestamp)
             }
+            guard !callbackState.isRemoved else { break }
+            try onWake()
         }
         return callbackState.isRemoved ? .deviceRemoved : .stopped
         #else

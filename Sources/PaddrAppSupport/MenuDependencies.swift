@@ -13,7 +13,7 @@ public struct MenuDependencies: Sendable {
         session: any TrackpadSessionControlling,
         loadConfiguration: @escaping @Sendable () throws -> TrackIsBackConfiguration,
         saveConfiguration: @escaping @Sendable (TrackIsBackConfiguration) throws -> Void,
-        probeController: @escaping @Sendable () -> String?,
+        probeReceiver: @escaping @Sendable () -> String?,
         accessibilityTrusted: @escaping @Sendable (_ prompt: Bool) -> Bool,
         openPrivacySettings: @escaping @MainActor @Sendable (_ anchor: String) -> Void,
         sleep: @escaping @Sendable (Duration) async throws -> Void
@@ -22,7 +22,7 @@ public struct MenuDependencies: Sendable {
         background = BackgroundMenuDependencies(
             loadConfiguration: loadConfiguration,
             saveConfiguration: saveConfiguration,
-            probeController: probeController
+            probeReceiver: probeReceiver
         )
         self.accessibilityTrusted = accessibilityTrusted
         self.openPrivacySettings = openPrivacySettings
@@ -37,15 +37,15 @@ public struct MenuDependencies: Sendable {
         try await background.saveConfiguration(configuration)
     }
 
-    func probeController() async -> String? {
-        await background.probeController()
+    func probeReceiver() async -> String? {
+        await background.probeReceiver()
     }
 
     public static let live = MenuDependencies(
         session: TrackpadSession(),
         loadConfiguration: { try ConfigurationStore.load() },
         saveConfiguration: { try ConfigurationStore.save($0) },
-        probeController: { TritonHIDDevice.probe()?.description },
+        probeReceiver: { TritonHIDDevice.probe()?.description },
         accessibilityTrusted: Permissions.accessibilityTrusted,
         openPrivacySettings: { anchor in
             guard let url = URL(
@@ -65,11 +65,11 @@ private actor BackgroundMenuDependencies {
     init(
         loadConfiguration: @escaping @Sendable () throws -> TrackIsBackConfiguration,
         saveConfiguration: @escaping @Sendable (TrackIsBackConfiguration) throws -> Void,
-        probeController: @escaping @Sendable () -> String?
+        probeReceiver: @escaping @Sendable () -> String?
     ) {
         load = loadConfiguration
         save = saveConfiguration
-        probe = probeController
+        probe = probeReceiver
     }
 
     func loadConfiguration() throws -> TrackIsBackConfiguration {
@@ -80,7 +80,7 @@ private actor BackgroundMenuDependencies {
         try save(configuration)
     }
 
-    func probeController() -> String? {
+    func probeReceiver() -> String? {
         probe()
     }
 }

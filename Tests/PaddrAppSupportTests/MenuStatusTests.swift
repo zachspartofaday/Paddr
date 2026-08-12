@@ -27,6 +27,7 @@ final class MenuStatusTests: XCTestCase {
         let hiddenStatuses: [MenuStatus] = [
             .off,
             .waitingForController,
+            .waitingForNeutral,
             .connecting,
             .active,
             .configurationSaved,
