@@ -25,7 +25,87 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(state.loadRanOnMainThread, false)
     }
 
-    func testInitializationFailurePreservesNewerValidationFailureStatus() async {
+    func testCreateBeforeInitializationCannotReplaceStoredProfiles() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let loadGate = DispatchSemaphore(value: 0)
+        state.loadGate = loadGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+
+        XCTAssertFalse(model.createProfile(named: "New"))
+        XCTAssertEqual(state.saveCallCount, 0)
+
+        loadGate.signal()
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+
+        XCTAssertEqual(model.profiles, document.profiles)
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertEqual(model.configuration, first.configuration)
+        XCTAssertEqual(model.profiles.first(where: { $0.id == second.id }), second)
+        XCTAssertEqual(state.saveCallCount, 0)
+        XCTAssertNil(state.savedProfileDocument)
+    }
+
+    func testDuplicateBeforeInitializationCannotReplaceStoredProfiles() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let loadGate = DispatchSemaphore(value: 0)
+        state.loadGate = loadGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+
+        XCTAssertFalse(model.duplicateActiveProfile())
+        XCTAssertEqual(state.saveCallCount, 0)
+
+        loadGate.signal()
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+
+        XCTAssertEqual(model.profiles, document.profiles)
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertEqual(model.configuration, first.configuration)
+        XCTAssertEqual(model.profiles.first(where: { $0.id == second.id }), second)
+        XCTAssertEqual(state.saveCallCount, 0)
+        XCTAssertNil(state.savedProfileDocument)
+    }
+
+    func testProfileSelectionAndCapabilitiesRemainUnavailableUntilInitialization() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let loadGate = DispatchSemaphore(value: 0)
+        state.loadGate = loadGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+
+        XCTAssertFalse(model.isInitialized)
+        XCTAssertFalse(model.canEditActiveProfile)
+        XCTAssertFalse(model.canSaveAndApply)
+        XCTAssertFalse(model.canSelectProfileFromMenu)
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .operationInProgress
+        )
+        XCTAssertEqual(
+            model.resolveProfileSelection(id: second.id, discardChanges: true),
+            .operationInProgress
+        )
+        XCTAssertFalse(model.renameActiveProfile(to: "Renamed"))
+        XCTAssertFalse(model.deleteProfile(id: first.id, confirmed: true))
+        XCTAssertEqual(state.saveCallCount, 0)
+
+        loadGate.signal()
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertEqual(model.profiles, document.profiles)
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertTrue(model.canEditActiveProfile)
+        XCTAssertTrue(model.canSelectProfileFromMenu)
+        XCTAssertEqual(state.saveCallCount, 0)
+    }
+
+    func testSaveAndApplyBeforeInitializationCannotReplaceLoadFailure() async {
         let state = readyState(receiver: nil)
         state.loadFailure = "Unreadable configuration"
         let loadGate = DispatchSemaphore(value: 0)
@@ -34,41 +114,49 @@ final class MenuModelTests: XCTestCase {
 
         model.configuration.left.sensitivity = 21
         model.saveAndApply()
-        guard case .failure(.configurationInvalid) = model.status else {
-            return XCTFail("Expected the newer validation failure")
-        }
+
+        XCTAssertEqual(model.configuration, .default)
+        XCTAssertEqual(state.saveCallCount, 0)
 
         loadGate.signal()
         await waitUntil(model: model) { model.isInitialized }
 
-        XCTAssertEqual(model.configuration.left.sensitivity, 21)
+        XCTAssertEqual(model.configuration, .default)
         XCTAssertEqual(model.savedConfiguration, .default)
         XCTAssertTrue(model.hasUnsavedChanges)
         XCTAssertTrue(model.needsInitialSave)
-        guard case .failure(.configurationInvalid) = model.status else {
-            return XCTFail("Expected the newer validation failure to remain published")
+        XCTAssertEqual(state.saveCallCount, 0)
+        guard case let .failure(.configurationLoad(diagnostic)) = model.status else {
+            return XCTFail("Expected the load failure")
         }
+        XCTAssertEqual(diagnostic, "Unreadable configuration")
     }
 
-    func testInitializationFailureDoesNotReplaceTerminationStatus() async {
-        let state = readyState(receiver: nil)
-        state.loadFailure = "Unreadable configuration"
+    func testEnableBeforeInitializationDoesNotStartOrPersist() async {
+        let state = readyState(receiver: "Fake")
+        var stored = TrackIsBackConfiguration.default
+        stored.left.sensitivity = 4
+        state.loadedConfiguration = stored
         let loadGate = DispatchSemaphore(value: 0)
         state.loadGate = loadGate
-        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
 
         model.isEnabled = true
-        var didComplete = false
-        XCTAssertTrue(model.stopForTermination { didComplete = true })
-        XCTAssertEqual(model.status, .releasingOutputs)
+
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertEqual(state.saveCallCount, 0)
+        let preInitializationStartCount = await session.startCount
+        XCTAssertEqual(preInitializationStartCount, 0)
 
         loadGate.signal()
-        await waitUntil(model: model) { didComplete }
+        await waitUntil(model: model) { model.isInitialized }
 
-        XCTAssertEqual(model.savedConfiguration, .default)
-        XCTAssertTrue(model.hasUnsavedChanges)
-        XCTAssertTrue(model.needsInitialSave)
-        XCTAssertEqual(model.status, .releasingOutputs)
+        XCTAssertEqual(model.configuration.left.sensitivity, 4)
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 4)
+        XCTAssertEqual(state.saveCallCount, 0)
+        let postInitializationStartCount = await session.startCount
+        XCTAssertEqual(postInitializationStartCount, 0)
     }
 
     func testInitializationFailurePreservesNewerPermissionGuidanceAndReconcilesIt() async {
@@ -97,7 +185,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.status == .off }
     }
 
-    func testEditAndEnableBeforeInitializationPreservesAndActivatesNewerDraft() async {
+    func testEditAndEnableAfterInitializationPersistsAndActivatesNewerDraft() async {
         let state = readyState(receiver: "Fake")
         var stored = TrackIsBackConfiguration.default
         stored.left.sensitivity = 4
@@ -107,9 +195,10 @@ final class MenuModelTests: XCTestCase {
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
 
+        loadGate.signal()
+        await waitUntil(model: model) { model.isInitialized }
         model.configuration.left.sensitivity = 7
         model.isEnabled = true
-        loadGate.signal()
         await waitUntil(model: model) { await session.startCount == 1 }
 
         let startedSensitivity = await session.startedConfigurations.first?.left.sensitivity
@@ -120,7 +209,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.hasUnsavedChanges)
     }
 
-    func testDefaultsDuringInitializationPreservesDeliberateDefaultDraft() async {
+    func testDraftAndDefaultsBeforeInitializationCannotReplaceLoadedConfiguration() async {
         let state = readyState(receiver: nil)
         var stored = TrackIsBackConfiguration.default
         stored.left.sensitivity = 4
@@ -131,13 +220,17 @@ final class MenuModelTests: XCTestCase {
 
         model.configuration.left.sensitivity = 7
         model.restoreDefaults()
+
+        XCTAssertEqual(model.configuration, .default)
+        XCTAssertEqual(model.status, .off)
+
         loadGate.signal()
         await waitUntil(model: model) { model.isInitialized }
 
-        XCTAssertEqual(model.configuration, .default)
+        XCTAssertEqual(model.configuration.left.sensitivity, 4)
         XCTAssertEqual(model.savedConfiguration.left.sensitivity, 4)
-        XCTAssertTrue(model.hasUnsavedChanges)
-        XCTAssertEqual(model.status, .defaultsRestored)
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertEqual(state.saveCallCount, 0)
     }
 
     func testMissingAccessibilityTurnsOutputBackOffWithFailure() async {

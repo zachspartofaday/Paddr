@@ -98,6 +98,9 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
         options.showHelp = true
         return options
     }
+    for option in ["--config", "--profile-store"] where args.filter({ $0 == option }).count > 1 {
+        throw TrackIsBackError.configuration("\(option) may only be specified once.")
+    }
     let explicitConfigurationURL = try value(after: "--config", in: args).map(url)
     let profileStoreURL = try value(after: "--profile-store", in: args).map(url)
     let selectProfile = try value(after: "--select-profile", in: args)

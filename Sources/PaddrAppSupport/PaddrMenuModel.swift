@@ -23,7 +23,13 @@ public enum ProfileSelectionRequestResult: Equatable, Sendable {
 public final class PaddrMenuModel {
     public var configuration: TrackIsBackConfiguration {
         didSet {
-            guard !isPublishingConfiguration else { return }
+            guard !isPublishingConfiguration, !isRejectingPreInitializationConfiguration else { return }
+            guard isInitialized else {
+                isRejectingPreInitializationConfiguration = true
+                configuration = oldValue
+                isRejectingPreInitializationConfiguration = false
+                return
+            }
             draftRevision &+= 1
             preservingCurrentOperationalStatusAuthority {
                 advanceStatusGeneration()
@@ -35,7 +41,13 @@ public final class PaddrMenuModel {
     public private(set) var activeProfileID: ConfigurationProfileID = .default
     public var isEnabled = false {
         didSet {
-            guard isEnabled != oldValue else { return }
+            guard !isRejectingPreInitializationEnabled, isEnabled != oldValue else { return }
+            guard isInitialized else {
+                isRejectingPreInitializationEnabled = true
+                isEnabled = oldValue
+                isRejectingPreInitializationEnabled = false
+                return
+            }
             if statusPublicationGeneration == nil { advanceStatusGeneration() }
             beginEnabledTransition(statusGeneration: currentStatusGeneration)
             statusDidChange?()
@@ -49,7 +61,7 @@ public final class PaddrMenuModel {
     public private(set) var reportCount = 0
     public private(set) var actionCount = 0
     public private(set) var needsInitialSave = false
-    private(set) var isInitialized = false
+    public private(set) var isInitialized = false
 
     @ObservationIgnored private let dependencies: MenuDependencies
     @ObservationIgnored private var profileDocument = ConfigurationProfileDocument.default
@@ -65,6 +77,8 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var statusPublicationGeneration: UInt64?
     @ObservationIgnored private var allowsAuthoritativeStatusPublication = false
     @ObservationIgnored private var isPublishingConfiguration = false
+    @ObservationIgnored private var isRejectingPreInitializationConfiguration = false
+    @ObservationIgnored private var isRejectingPreInitializationEnabled = false
     @ObservationIgnored private var activationCommitPending = false
     @ObservationIgnored private var statusRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var statusRefreshEpoch: UInt64 = 0
@@ -83,13 +97,16 @@ public final class PaddrMenuModel {
     public var activeProfile: ConfigurationProfile {
         profiles.first { $0.id == activeProfileID } ?? .default
     }
-    public var canEditActiveProfile: Bool { activeProfileID != .default }
+    public var canEditActiveProfile: Bool { isInitialized && activeProfileID != .default }
     public var canSaveAndApply: Bool {
-        !storageWriteBlocked
+        isInitialized
+            && !storageWriteBlocked
             && (canEditActiveProfile || needsInitialSave)
             && (hasUnsavedChanges || isEnabled)
     }
-    public var canSelectProfileFromMenu: Bool { !hasUnsavedChanges && configurationTask == nil }
+    public var canSelectProfileFromMenu: Bool {
+        isInitialized && !hasUnsavedChanges && configurationTask == nil
+    }
 
     public init(dependencies: MenuDependencies = .live) {
         self.dependencies = dependencies
@@ -128,7 +145,8 @@ public final class PaddrMenuModel {
 
     public func saveAndApply() {
         guard terminationState == .idle,
-              !isInitialized || canEditActiveProfile || needsInitialSave else { return }
+              isInitialized,
+              canEditActiveProfile || needsInitialSave else { return }
         let draft = configuration
         let initiatingDraftRevision = draftRevision
         let validated: TrackIsBackConfiguration
@@ -284,7 +302,7 @@ public final class PaddrMenuModel {
     }
 
     public func restoreDefaults() {
-        guard terminationState == .idle, !isInitialized || canEditActiveProfile else { return }
+        guard terminationState == .idle, isInitialized, canEditActiveProfile else { return }
         configuration = .default
         publishStatus(.defaultsRestored)
     }
@@ -294,6 +312,7 @@ public final class PaddrMenuModel {
         id: ConfigurationProfileID,
         source: ProfileSelectionSource
     ) -> ProfileSelectionRequestResult {
+        guard isInitialized else { return .operationInProgress }
         guard profileDocument.profile(id: id) != nil else { return .profileNotFound }
         guard !storageWriteBlocked else { return .storageUnavailable }
         guard configurationTask == nil else { return .operationInProgress }
@@ -312,6 +331,7 @@ public final class PaddrMenuModel {
         id: ConfigurationProfileID,
         discardChanges: Bool
     ) -> ProfileSelectionRequestResult {
+        guard isInitialized else { return .operationInProgress }
         guard discardChanges else { return .cancelled }
         guard profileDocument.profile(id: id) != nil else { return .profileNotFound }
         guard !storageWriteBlocked else { return .storageUnavailable }
@@ -411,7 +431,9 @@ public final class PaddrMenuModel {
     }
 
     private func canBeginProfileMutation(discardingDraft: Bool) -> Bool {
-        guard terminationState == .idle, configurationTask == nil else { return false }
+        guard isInitialized,
+              terminationState == .idle,
+              configurationTask == nil else { return false }
         guard !storageWriteBlocked else {
             publishProfileOperationFailure(
                 TrackIsBackError.configuration(
@@ -455,7 +477,9 @@ public final class PaddrMenuModel {
         replacingActiveConfiguration: Bool,
         clearsInitialSave: Bool = false
     ) {
-        guard terminationState == .idle, configurationTask == nil else { return }
+        guard isInitialized,
+              terminationState == .idle,
+              configurationTask == nil else { return }
         guard !storageWriteBlocked else {
             publishProfileOperationFailure(
                 TrackIsBackError.configuration(
@@ -624,7 +648,7 @@ public final class PaddrMenuModel {
     }
 
     private func beginEnabledTransition(statusGeneration: UInt64) {
-        guard terminationState == .idle else { return }
+        guard isInitialized, terminationState == .idle else { return }
         if isEnabled {
             startLifecycle(commitDraft: true, statusGeneration: statusGeneration)
         } else {

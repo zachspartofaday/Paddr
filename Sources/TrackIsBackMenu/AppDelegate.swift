@@ -79,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             keyEquivalent: ""
         )
         outputItem.target = self
+        outputItem.isEnabled = model.isInitialized
         outputItem.state = model.isEnabled ? .on : .off
         outputItem.image = NSImage(
             systemSymbolName: model.isEnabled ? "wave.3.right.circle.fill" : "pause.circle",

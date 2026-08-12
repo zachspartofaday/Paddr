@@ -132,4 +132,37 @@ if [ "$mutual_status" -ne 2 ] || ! grep -Fq 'cannot be combined' "$stderr_path";
     exit 1
 fi
 
-echo "Verified strict loading, canonical profiles, list/select, and CLI mapping configuration."
+repeated_store_a="$test_dir/repeated-store-a.json"
+repeated_store_b="$test_dir/repeated-store-b.json"
+cp "$profile_store" "$repeated_store_a"
+printf '%s\n' '{"sentinel":"second store must remain unchanged"}' >"$repeated_store_b"
+cp "$repeated_store_a" "$repeated_store_a.before"
+cp "$repeated_store_b" "$repeated_store_b.before"
+set +e
+"$cli_path" --profile-store "$repeated_store_a" --profile-store "$repeated_store_b" \
+    --select-profile Default >"$stdout_path" 2>"$stderr_path"
+repeated_store_status=$?
+set -e
+if [ "$repeated_store_status" -ne 2 ] \
+    || ! grep -Fq -- '--profile-store may only be specified once.' "$stderr_path"; then
+    echo "Repeated --profile-store did not fail with the duplicate-option diagnostic." >&2
+    exit 1
+fi
+if ! cmp -s "$repeated_store_a" "$repeated_store_a.before" \
+    || ! cmp -s "$repeated_store_b" "$repeated_store_b.before"; then
+    echo "Repeated --profile-store modified an input or output target." >&2
+    exit 1
+fi
+
+set +e
+"$cli_path" --config "$input_path" --config "$missing_path" --show-config \
+    >"$stdout_path" 2>"$stderr_path"
+repeated_config_status=$?
+set -e
+if [ "$repeated_config_status" -ne 2 ] \
+    || ! grep -Fq -- '--config may only be specified once.' "$stderr_path"; then
+    echo "Repeated --config did not fail before selecting a load source." >&2
+    exit 1
+fi
+
+printf '%s\n' "Verified strict loading, canonical profiles, list/select, duplicate path rejection, and CLI mapping configuration."
