@@ -377,13 +377,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
 
         let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: NSSize(width: 680, height: 470)),
+            contentRect: NSRect(origin: .zero, size: PaddrStyle.guideWindowSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = String(localized: "Paddr Guide")
-        window.contentMinSize = NSSize(width: 560, height: 430)
+        window.contentMinSize = PaddrStyle.minimumGuideWindowSize
         window.collectionBehavior.insert(.fullScreenNone)
         window.standardWindowButton(.zoomButton)?.isEnabled = false
         window.tabbingMode = .disallowed

@@ -6,7 +6,19 @@ struct OnboardingGuideView: View {
     let onSkip: @MainActor () -> Void
     let onComplete: @MainActor () -> Void
 
-    @State private var pager = OnboardingPager()
+    @State private var pager: OnboardingPager
+
+    init(
+        model: PaddrMenuModel,
+        onSkip: @escaping @MainActor () -> Void,
+        onComplete: @escaping @MainActor () -> Void,
+        initialPager: OnboardingPager = OnboardingPager()
+    ) {
+        self.model = model
+        self.onSkip = onSkip
+        self.onComplete = onComplete
+        _pager = State(initialValue: initialPager)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,7 +28,12 @@ struct OnboardingGuideView: View {
             Divider()
             footer
         }
-        .frame(minWidth: 560, idealWidth: 680, minHeight: 430, idealHeight: 470)
+        .frame(
+            minWidth: PaddrStyle.minimumGuideWindowSize.width,
+            idealWidth: PaddrStyle.guideWindowSize.width,
+            minHeight: PaddrStyle.minimumGuideWindowSize.height,
+            idealHeight: PaddrStyle.guideWindowSize.height
+        )
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
