@@ -1019,6 +1019,12 @@
       }
     },
     "Switching profiles replaces the current draft. Unsaved changes will not be copied.": {},
+    "Switching to %arg": {
+      "comment": "Profile selector accessibility value while the selected profile is being saved"
+    },
+    "Switching to %arg…": {
+      "comment": "Profile selector value while the selected profile is being saved"
+    },
     "System access": {
       "localizations": {
         "en": {

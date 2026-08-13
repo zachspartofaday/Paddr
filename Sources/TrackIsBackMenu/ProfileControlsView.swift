@@ -4,7 +4,7 @@ import TrackIsBackCore
 
 struct ProfileControlsView: View {
     @Bindable var model: PaddrMenuModel
-    @State private var pendingSelectionID: ConfigurationProfileID?
+    @State private var confirmationSelectionID: ConfigurationProfileID?
     @State private var showsDiscardConfirmation = false
     @State private var namePrompt: NamePrompt?
     @State private var nameDraft = ""
@@ -18,7 +18,7 @@ struct ProfileControlsView: View {
 
             Picker("Profile", selection: profileSelection) {
                 ForEach(model.profiles) { profile in
-                    Text(profile.name).tag(profile.id)
+                    profileLabel(for: profile).tag(profile.id)
                 }
             }
             .pickerStyle(.menu)
@@ -26,7 +26,7 @@ struct ProfileControlsView: View {
             .paddrMenuSelector()
             .frame(width: 220)
             .accessibilityLabel("Profile")
-            .accessibilityValue(model.activeProfile.name)
+            .accessibilityValue(profileSelectionAccessibilityValue)
             .help("Select the active profile")
 
             Menu {
@@ -80,16 +80,16 @@ struct ProfileControlsView: View {
         .disabled(!model.canManageProfiles)
         .alert("Discard unsaved changes?", isPresented: $showsDiscardConfirmation) {
             Button("Cancel", role: .cancel) {
-                if let id = pendingSelectionID {
+                if let id = confirmationSelectionID {
                     _ = model.resolveProfileSelection(id: id, discardChanges: false)
                 }
-                pendingSelectionID = nil
+                confirmationSelectionID = nil
             }
             Button("Discard Changes", role: .destructive) {
-                if let id = pendingSelectionID {
+                if let id = confirmationSelectionID {
                     _ = model.resolveProfileSelection(id: id, discardChanges: true)
                 }
-                pendingSelectionID = nil
+                confirmationSelectionID = nil
             }
         } message: {
             Text("Switching profiles replaces the current draft. Unsaved changes will not be copied.")
@@ -130,6 +130,35 @@ struct ProfileControlsView: View {
 
     private var isDefaultProfile: Bool { model.activeProfileID == .default }
 
+    @ViewBuilder
+    private func profileLabel(for profile: ConfigurationProfile) -> some View {
+        if case let .switching(to: pendingID) = model.profileSelectionPresentation,
+           pendingID == profile.id {
+            Text(
+                "Switching to \(profile.name)…",
+                comment: "Profile selector value while the selected profile is being saved"
+            )
+        } else {
+            Text(verbatim: profile.name)
+        }
+    }
+
+    private var profileSelectionAccessibilityValue: Text {
+        switch model.profileSelectionPresentation {
+        case .active:
+            Text(verbatim: model.activeProfile.name)
+        case let .switching(to: id):
+            Text(
+                "Switching to \(profileName(for: id))",
+                comment: "Profile selector accessibility value while the selected profile is being saved"
+            )
+        }
+    }
+
+    private func profileName(for id: ConfigurationProfileID) -> String {
+        model.profiles.first { $0.id == id }?.name ?? model.activeProfile.name
+    }
+
     private var profileActionsAccessibilityLabel: LocalizedStringResource {
         isDefaultProfile ? "Duplicate Default to Edit" : "Profile actions"
     }
@@ -146,7 +175,7 @@ struct ProfileControlsView: View {
 
     private var profileSelection: Binding<ConfigurationProfileID> {
         Binding(
-            get: { model.activeProfileID },
+            get: { model.profileSelectionPresentation.selectedProfileID },
             set: requestProfileSelection
         )
     }
@@ -168,7 +197,7 @@ struct ProfileControlsView: View {
     private func requestProfileSelection(id: ConfigurationProfileID) {
         switch model.requestProfileSelection(id: id, source: .configurationWindow) {
         case .confirmationRequired:
-            pendingSelectionID = id
+            confirmationSelectionID = id
             showsDiscardConfirmation = true
         case .accepted, .blockedByUnsavedChanges, .cancelled, .operationInProgress,
              .profileNotFound, .storageUnavailable, .unchanged:

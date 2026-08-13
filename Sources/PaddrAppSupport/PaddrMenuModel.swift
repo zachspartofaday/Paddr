@@ -18,6 +18,17 @@ public enum ProfileSelectionRequestResult: Equatable, Sendable {
     case storageUnavailable
 }
 
+public enum ProfileSelectionPresentation: Equatable, Sendable {
+    case active(ConfigurationProfileID)
+    case switching(to: ConfigurationProfileID)
+
+    public var selectedProfileID: ConfigurationProfileID {
+        switch self {
+        case let .active(id), let .switching(to: id): id
+        }
+    }
+}
+
 @MainActor
 @Observable
 public final class PaddrMenuModel {
@@ -82,6 +93,7 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var isRejectingConfigurationEdit = false
     @ObservationIgnored private var isRejectingEnabledChange = false
     private var profileOperationInProgress = false
+    private var pendingProfileSelectionID: ConfigurationProfileID?
     @ObservationIgnored private var profileDocumentSaveInProgress = false
     private var replacesActiveConfiguration = false
     @ObservationIgnored private var activationCommitPending = false
@@ -104,6 +116,12 @@ public final class PaddrMenuModel {
     }
     public var canEditActiveProfile: Bool {
         isInitialized && !replacesActiveConfiguration && activeProfileID != .default
+    }
+    public var profileSelectionPresentation: ProfileSelectionPresentation {
+        if let pendingProfileSelectionID {
+            return .switching(to: pendingProfileSelectionID)
+        }
+        return .active(activeProfileID)
     }
     public var canManageProfiles: Bool { isInitialized && !profileOperationInProgress }
     public var canToggleOutput: Bool {
@@ -481,6 +499,9 @@ public final class PaddrMenuModel {
             var document = profileDocument
             try document.activateProfile(id: id)
             beginProfileDocumentActivation(document)
+            if profileOperationInProgress {
+                pendingProfileSelectionID = id
+            }
         } catch {
             publishProfileOperationFailure(error)
         }
@@ -1161,6 +1182,7 @@ public final class PaddrMenuModel {
         guard configurationEpoch == operation else { return }
         configurationTask = nil
         profileOperationInProgress = false
+        pendingProfileSelectionID = nil
         profileDocumentSaveInProgress = false
         replacesActiveConfiguration = false
     }
@@ -1177,6 +1199,7 @@ public final class PaddrMenuModel {
         initializationTask = nil
         configurationTask = nil
         profileOperationInProgress = false
+        pendingProfileSelectionID = nil
         profileDocumentSaveInProgress = false
         replacesActiveConfiguration = false
         activationCommitPending = false
