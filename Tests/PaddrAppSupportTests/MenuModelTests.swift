@@ -1783,6 +1783,69 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.hasUnsavedChanges)
     }
 
+    func testProfileControlAppearancePreservesCommittedEditabilityUntilSelectionCommits() async throws {
+        do {
+            let state = readyState(receiver: nil)
+            let (document, _, second) = try twoProfileDocument()
+            state.loadedProfileDocument = document
+            let saveGate = DispatchSemaphore(value: 0)
+            state.saveGate = saveGate
+            let model = PaddrMenuModel(dependencies: dependencies(state: state))
+            await waitUntil(model: model) { model.isInitialized }
+
+            XCTAssertTrue(model.activeProfileControlsAppearEnabled)
+            XCTAssertEqual(model.requestProfileSelection(id: second.id, source: .menu), .accepted)
+            XCTAssertFalse(model.canEditActiveProfile)
+            XCTAssertTrue(model.activeProfileControlsAppearEnabled)
+            state.saveGate = nil
+            saveGate.signal()
+            await waitUntil(model: model) { model.activeProfileID == second.id }
+            XCTAssertTrue(model.canEditActiveProfile)
+            XCTAssertTrue(model.activeProfileControlsAppearEnabled)
+        }
+
+        do {
+            let state = readyState(receiver: nil)
+            let (document, _, _) = try twoProfileDocument()
+            state.loadedProfileDocument = document
+            let saveGate = DispatchSemaphore(value: 0)
+            state.saveGate = saveGate
+            let model = PaddrMenuModel(dependencies: dependencies(state: state))
+            await waitUntil(model: model) { model.isInitialized }
+
+            XCTAssertTrue(model.activeProfileControlsAppearEnabled)
+            XCTAssertEqual(model.requestProfileSelection(id: .default, source: .menu), .accepted)
+            XCTAssertFalse(model.canEditActiveProfile)
+            XCTAssertTrue(model.activeProfileControlsAppearEnabled)
+            state.saveGate = nil
+            saveGate.signal()
+            await waitUntil(model: model) { model.activeProfileID == .default }
+            XCTAssertFalse(model.canEditActiveProfile)
+            XCTAssertFalse(model.activeProfileControlsAppearEnabled)
+        }
+
+        do {
+            let state = readyState(receiver: nil)
+            var (document, _, second) = try twoProfileDocument()
+            document.activeProfileID = .default
+            state.loadedProfileDocument = document
+            let saveGate = DispatchSemaphore(value: 0)
+            state.saveGate = saveGate
+            let model = PaddrMenuModel(dependencies: dependencies(state: state))
+            await waitUntil(model: model) { model.isInitialized }
+
+            XCTAssertFalse(model.activeProfileControlsAppearEnabled)
+            XCTAssertEqual(model.requestProfileSelection(id: second.id, source: .menu), .accepted)
+            XCTAssertFalse(model.canEditActiveProfile)
+            XCTAssertFalse(model.activeProfileControlsAppearEnabled)
+            state.saveGate = nil
+            saveGate.signal()
+            await waitUntil(model: model) { model.activeProfileID == second.id }
+            XCTAssertTrue(model.canEditActiveProfile)
+            XCTAssertTrue(model.activeProfileControlsAppearEnabled)
+        }
+    }
+
     func testMenuProfileSelectionIsBlockedWhileDraftIsUnsaved() async throws {
         let state = readyState(receiver: nil)
         let (document, first, second) = try twoProfileDocument()
@@ -2289,6 +2352,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil { state.saveCallCount == 1 }
 
         XCTAssertFalse(model.canEditActiveProfile)
+        XCTAssertTrue(model.activeProfileControlsAppearEnabled)
         XCTAssertFalse(model.canManageProfiles)
         XCTAssertFalse(model.canSaveAndApply)
         model.configuration.left.sensitivity = 9

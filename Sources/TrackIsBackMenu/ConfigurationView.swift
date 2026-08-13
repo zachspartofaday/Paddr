@@ -41,7 +41,9 @@ struct ConfigurationView: View {
                                 )
                             }
                         }
-                        .disabled(!model.canEditActiveProfile)
+                        .disabled(!model.activeProfileControlsAppearEnabled)
+                        .allowsHitTesting(model.canEditActiveProfile)
+                        .accessibilityRespondsToUserInteraction(model.canEditActiveProfile)
                     }
                     .padding(PaddrStyle.panelPadding)
                     .onGeometryChange(

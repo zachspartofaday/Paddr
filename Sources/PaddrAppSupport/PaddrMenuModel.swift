@@ -123,6 +123,14 @@ public final class PaddrMenuModel {
         }
         return .active(activeProfileID)
     }
+    public var activeProfileControlsAppearEnabled: Bool {
+        switch profileSelectionPresentation {
+        case .active:
+            canEditActiveProfile
+        case .switching:
+            isInitialized && activeProfileID != .default
+        }
+    }
     public var canManageProfiles: Bool { isInitialized && !profileOperationInProgress }
     public var canToggleOutput: Bool {
         isInitialized && (!profileDocumentSaveInProgress || replacesActiveConfiguration || isEnabled)
