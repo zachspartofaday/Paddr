@@ -584,7 +584,7 @@ public final class PaddrMenuModel {
                 }
             } catch {
                 clearConfigurationTask(operation: operation)
-                if shouldRestart, isEnabled {
+                if replacingActiveConfiguration, isEnabled {
                     isEnabled = false
                     withStatusPublicationGeneration(currentStatusGeneration) {
                         publishStatus(

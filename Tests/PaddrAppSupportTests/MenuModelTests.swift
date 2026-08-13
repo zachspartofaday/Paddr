@@ -1793,6 +1793,55 @@ final class MenuModelTests: XCTestCase {
         XCTAssertTrue(renameDiagnostic.contains("cannot be UUIDs"))
     }
 
+    func testProfileSelectionSaveFailureDisablesOutputEnabledDuringPersistence() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        state.saveFailure = "simulated profile activation save failure"
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let session = GatedSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await waitUntil { state.saveCallCount == 1 }
+        model.isEnabled = true
+        XCTAssertTrue(model.isEnabled)
+
+        saveGate.signal()
+        await waitUntil(model: model) {
+            guard state.saveCompletionCount == 1, model.canManageProfiles else { return false }
+            if !model.isEnabled { return true }
+            return await session.startCount > 0
+        }
+        if !model.isEnabled {
+            await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+        }
+
+        let startCount = await session.startCount
+        let stopCount = await session.stopCount
+        XCTAssertEqual(startCount, 0)
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertEqual(model.configuration, first.configuration)
+        XCTAssertEqual(model.savedConfiguration, first.configuration)
+        XCTAssertNil(state.savedProfileDocument)
+        guard case let .failure(.configurationSave(diagnostic)) = model.status else {
+            return XCTFail("Expected the profile activation save failure, got \(model.status)")
+        }
+        XCTAssertTrue(diagnostic.contains("simulated profile activation save failure"))
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+        guard case .failure(.configurationSave) = model.status else {
+            return XCTFail("Expected the profile activation save failure to remain authoritative")
+        }
+    }
+
     func testEnabledProfileSelectionSerializesStopSaveStartWithoutWorkerOverlap() async throws {
         let state = readyState(receiver: "Fake")
         let (document, _, second) = try twoProfileDocument()
