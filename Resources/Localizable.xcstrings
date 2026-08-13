@@ -11,6 +11,16 @@
         }
       }
     },
+    "About Paddr": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "About Paddr"
+          }
+        }
+      }
+    },
     "Access": {
       "comment": "Short heading for the combined system-permission status.",
       "localizations": {
@@ -52,12 +62,42 @@
         }
       }
     },
+    "Accessibility access is needed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accessibility access is needed"
+          }
+        }
+      }
+    },
+    "Accessibility access is ready": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accessibility access is ready"
+          }
+        }
+      }
+    },
     "Accessibility is required before Paddr can emit mapped input.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Accessibility is required before Paddr can emit mapped input."
+          }
+        }
+      }
+    },
+    "Accessibility permission lets Paddr send your mapped mouse and keyboard input. Paddr only requests permission or opens Settings when you choose an action below.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accessibility permission lets Paddr send your mapped mouse and keyboard input. Paddr only requests permission or opens Settings when you choose an action below."
           }
         }
       }
@@ -80,6 +120,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Active"
+          }
+        }
+      }
+    },
+    "Allow Accessibility": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Accessibility"
           }
         }
       }
@@ -125,6 +175,16 @@
         }
       }
     },
+    "Back": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back"
+          }
+        }
+      }
+    },
     "Behavior": {
       "localizations": {
         "en": {
@@ -161,6 +221,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bottom right"
+          }
+        }
+      }
+    },
+    "Bring All to Front": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bring All to Front"
           }
         }
       }
@@ -223,6 +293,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Click a mouse button or emit a keyboard key after a short touch and release."
+          }
+        }
+      }
+    },
+    "Close": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close"
           }
         }
       }
@@ -321,7 +401,37 @@
         }
       }
     },
+    "Copy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy"
+          }
+        }
+      }
+    },
     "Create, duplicate, rename, or delete profiles": {},
+    "Cut": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cut"
+          }
+        }
+      }
+    },
+    "Default is a safe, read-only reference. Duplicate Default to create an editable profile, then set each pad to Pointer, Scroll, Off, or Zones.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default is a safe, read-only reference. Duplicate Default to create an editable profile, then set each pad to Pointer, Scroll, Off, or Zones."
+          }
+        }
+      }
+    },
     "Default is read-only": {},
     "Defaults": {
       "localizations": {
@@ -372,6 +482,16 @@
     "Duplicate Default to create an editable profile": {},
     "Duplicate Profile": {},
     "Duplicate to Edit": {},
+    "Edit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit"
+          }
+        }
+      }
+    },
     "Editable profile": {},
     "Enable Paddr in Accessibility, then return to the app.": {
       "localizations": {
@@ -409,6 +529,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "Four-way radial"
+          }
+        }
+      }
+    },
+    "Get Started": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Get Started"
+          }
+        }
+      }
+    },
+    "Guide progress": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guide progress"
+          }
+        }
+      }
+    },
+    "Help": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Help"
+          }
+        }
+      }
+    },
+    "Hide Others": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Others"
+          }
+        }
+      }
+    },
+    "Hide Paddr": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Paddr"
           }
         }
       }
@@ -470,6 +640,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Left trackpad"
+          }
+        }
+      }
+    },
+    "Minimize": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minimize"
           }
         }
       }
@@ -549,6 +729,16 @@
       }
     },
     "New Profile": {},
+    "Next": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next"
+          }
+        }
+      }
+    },
     "None": {
       "localizations": {
         "en": {
@@ -685,6 +875,36 @@
         }
       }
     },
+    "Paddr Guide": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paddr Guide"
+          }
+        }
+      }
+    },
+    "Paddr Guide…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paddr Guide…"
+          }
+        }
+      }
+    },
+    "Paste": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste"
+          }
+        }
+      }
+    },
     "Permissions": {
       "comment": "Heading for macOS permission controls.",
       "localizations": {
@@ -742,6 +962,16 @@
     "Profile name": {},
     "Profile names must be nonempty and unique, ignoring case.": {},
     "Profiles": {},
+    "Profiles and Duplicate Default": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profiles and Duplicate Default"
+          }
+        }
+      }
+    },
     "Quit Paddr": {
       "localizations": {
         "en": {
@@ -768,6 +998,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ready"
+          }
+        }
+      }
+    },
+    "Redo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redo"
           }
         }
       }
@@ -934,6 +1174,16 @@
         }
       }
     },
+    "Select All": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select All"
+          }
+        }
+      }
+    },
     "Select a highlighted pad area, then choose its keyboard or mouse action.": {
       "localizations": {
         "en": {
@@ -965,6 +1215,16 @@
         }
       }
     },
+    "Services": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Services"
+          }
+        }
+      }
+    },
     "Settings could not be saved. Your edits are still available.": {
       "localizations": {
         "en": {
@@ -982,6 +1242,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Shift"
+          }
+        }
+      }
+    },
+    "Show All": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show All"
+          }
+        }
+      }
+    },
+    "Skip": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skip"
           }
         }
       }
@@ -1007,6 +1287,16 @@
         }
       }
     },
+    "Start Output Safely": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start Output Safely"
+          }
+        }
+      }
+    },
     "Status": {
       "comment": "Heading for the app status summary.",
       "localizations": {
@@ -1018,6 +1308,8 @@
         }
       }
     },
+    "Step %arg of %arg": {},
+    "Step %arg of %arg: %arg": {},
     "Switching profiles replaces the current draft. Unsaved changes will not be copied.": {},
     "Switching to %arg": {
       "comment": "Profile selector accessibility value while the selected profile is being saved"
@@ -1061,6 +1353,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tap area"
+          }
+        }
+      }
+    },
+    "The Paddr menu shows receiver and controller status with the Trackpad Output toggle. When output starts, release both trackpads to return to neutral before mapped input activates.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Paddr menu shows receiver and controller status with the Trackpad Output toggle. When output starts, release both trackpads to return to neutral before mapped input activates."
           }
         }
       }
@@ -1247,6 +1549,16 @@
         }
       }
     },
+    "Undo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undo"
+          }
+        }
+      }
+    },
     "Unsaved changes": {
       "localizations": {
         "en": {
@@ -1263,6 +1575,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Up arrow"
+          }
+        }
+      }
+    },
+    "Use Steam Controller trackpads without Steam Input. Paddr maps trackpad gestures to normal macOS mouse, scrolling, and keyboard input; it does not inject into games.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use Steam Controller trackpads without Steam Input. Paddr maps trackpad gestures to normal macOS mouse, scrolling, and keyboard input; it does not inject into games."
           }
         }
       }
@@ -1284,6 +1606,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Waiting for Steam Controller 2 through the puck…"
+          }
+        }
+      }
+    },
+    "Welcome to Paddr": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welcome to Paddr"
+          }
+        }
+      }
+    },
+    "Window": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Window"
           }
         }
       }
@@ -1326,6 +1668,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zones"
+          }
+        }
+      }
+    },
+    "Zoom": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom"
           }
         }
       }

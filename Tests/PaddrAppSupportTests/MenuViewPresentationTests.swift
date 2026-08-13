@@ -9,6 +9,35 @@ import TrackIsBackCore
 
 @MainActor
 final class MenuViewPresentationTests: XCTestCase {
+    func testAccessibilityOnboardingPageFitsCompactWindowWithoutScrolling() throws {
+        var pager = OnboardingPager()
+        pager.advance()
+        pager.advance()
+        let model = PaddrMenuModel(dependencies: dependencies(store: BlockingProfileStore()))
+        let view = OnboardingGuideView(
+            model: model,
+            onSkip: {},
+            onComplete: {},
+            initialPager: pager
+        )
+        XCTAssertEqual(PaddrStyle.guideWindowSize, NSSize(width: 680, height: 430))
+        XCTAssertEqual(PaddrStyle.minimumGuideWindowSize, NSSize(width: 560, height: 430))
+
+        let hostingView = NSHostingView(rootView: view)
+        hostingView.frame = NSRect(origin: .zero, size: PaddrStyle.guideWindowSize)
+        hostingView.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(
+            hostingView.fittingSize.height,
+            PaddrStyle.guideWindowSize.height,
+            accuracy: 0.5
+        )
+        let scrollView = try XCTUnwrap(firstDescendant(of: NSScrollView.self, in: hostingView))
+        let documentView = try XCTUnwrap(scrollView.documentView)
+        documentView.layoutSubtreeIfNeeded()
+        XCTAssertLessThanOrEqual(documentView.fittingSize.height, scrollView.contentSize.height + 0.5)
+    }
+
     func testPadConfigurationCardUsesFixedExpandedAndIntrinsicCollapsedHeights() {
         let expandedHeight = hostedPadConfigurationHeight(initiallyExpanded: true)
         let collapsedHeight = hostedPadConfigurationHeight(initiallyExpanded: false)
@@ -71,6 +100,14 @@ final class MenuViewPresentationTests: XCTestCase {
         let pendingOption = try XCTUnwrap(presentation.options.first { $0.id == pendingID })
         XCTAssertEqual(pendingOption.label, "Switching to \(expectedName)…")
         XCTAssertEqual(presentation.accessibilityValue, "Switching to \(expectedName)")
+    }
+
+    private func firstDescendant<ViewType: NSView>(
+        of type: ViewType.Type,
+        in view: NSView
+    ) -> ViewType? {
+        if let match = view as? ViewType { return match }
+        return view.subviews.lazy.compactMap { self.firstDescendant(of: type, in: $0) }.first
     }
 
     private func dependencies(store: BlockingProfileStore) -> MenuDependencies {
