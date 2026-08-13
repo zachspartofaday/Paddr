@@ -44,9 +44,11 @@ Puck mode is the only confirmed connection. Bluetooth and direct USB remain unva
 
 ![Paddr permission-request window showing one Accessibility tile with a Request button and Access Needed status](docs/images/paddr-permissions.png)
 
-4. Configure each trackpad and choose **Save & Apply**, or turn output on to save and activate the draft.
+4. Duplicate the built-in **Default** profile, name the copy, configure both trackpads, and choose **Save & Apply**. Default always remains left Scroll/right Pointer and cannot be renamed, edited, or deleted.
 
-Closing the configuration window leaves Paddr in the menu bar with quick actions for output, configuration, and quitting. The window remains ordinarily resizable but does not support full screen.
+Profiles own the complete left/right configuration and keep a stable internal ID when renamed. Use the configuration-window picker to create, duplicate, rename, select, or delete profiles; profile names cannot themselves be UUIDs, keeping name-or-ID selection unambiguous. Switching with unsaved edits asks before discarding them. Deleting the active user profile confirms and activates Default first.
+
+Closing the configuration window leaves Paddr in the menu bar with quick actions for output and saved-profile switching. Menu switching is unavailable while the configuration window has an unsaved draft; open the window to save or explicitly discard it. The window remains ordinarily resizable but does not support full screen.
 
 ## Button Zones
 
@@ -74,15 +76,19 @@ Paddr builds for arm64 and retains macOS 26.0 as its deployment target in case A
 
 ## CLI
 
-The CLI shares the app's configuration model and is intended primarily for development and diagnostics:
+The CLI shares the app's canonical profile document and is intended primarily for development and diagnostics:
 
 ```bash
+scripts/paddr.sh --list-profiles
+scripts/paddr.sh --select-profile "Arcade"
+scripts/paddr.sh --select-profile 01234567-89ab-cdef-0123-456789abcdef
 scripts/paddr.sh --dry-run
 scripts/paddr.sh --observe-only --verbose --duration 10
-scripts/paddr.sh
 ```
 
-Configuration is stored at `~/.config/Paddr/config.json`. An explicit `--config PATH` must identify an existing, readable JSON file; invalid paths fail instead of silently loading defaults. Run `scripts/paddr.sh --help` for mappings and numeric ranges.
+Profiles are stored at `~/.config/Paddr/config.json`. On first profile-aware load, an existing raw left/right configuration is atomically migrated: unchanged defaults activate **Default**, while customized values become the active **Previous configuration** profile. A failed migration leaves the original file intact and reports its path.
+
+`--list-profiles` prints each name and stable ID; `--select-profile` persists an exact name or ID selection. Use `--profile-store PATH` for a different canonical document. An explicit `--config PATH` remains a read-only compatibility input for an existing legacy raw configuration (or canonical document); invalid paths fail instead of loading defaults. Mapping flags change only the effective CLI draft unless `--write-config PATH` persists it. With canonical input, that write preserves the complete profile document and updates its active profile; with legacy raw input, it creates a new canonical document from the effective configuration. Profile list/select operations are mutually exclusive with runtime and mapping options. Run `scripts/paddr.sh --help` for the complete flag list and numeric ranges.
 
 Example:
 

@@ -25,7 +25,87 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(state.loadRanOnMainThread, false)
     }
 
-    func testInitializationFailurePreservesNewerValidationFailureStatus() async {
+    func testCreateBeforeInitializationCannotReplaceStoredProfiles() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let loadGate = DispatchSemaphore(value: 0)
+        state.loadGate = loadGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+
+        XCTAssertFalse(model.createProfile(named: "New"))
+        XCTAssertEqual(state.saveCallCount, 0)
+
+        loadGate.signal()
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+
+        XCTAssertEqual(model.profiles, document.profiles)
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertEqual(model.configuration, first.configuration)
+        XCTAssertEqual(model.profiles.first(where: { $0.id == second.id }), second)
+        XCTAssertEqual(state.saveCallCount, 0)
+        XCTAssertNil(state.savedProfileDocument)
+    }
+
+    func testDuplicateBeforeInitializationCannotReplaceStoredProfiles() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let loadGate = DispatchSemaphore(value: 0)
+        state.loadGate = loadGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+
+        XCTAssertFalse(model.duplicateActiveProfile())
+        XCTAssertEqual(state.saveCallCount, 0)
+
+        loadGate.signal()
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+
+        XCTAssertEqual(model.profiles, document.profiles)
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertEqual(model.configuration, first.configuration)
+        XCTAssertEqual(model.profiles.first(where: { $0.id == second.id }), second)
+        XCTAssertEqual(state.saveCallCount, 0)
+        XCTAssertNil(state.savedProfileDocument)
+    }
+
+    func testProfileSelectionAndCapabilitiesRemainUnavailableUntilInitialization() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let loadGate = DispatchSemaphore(value: 0)
+        state.loadGate = loadGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+
+        XCTAssertFalse(model.isInitialized)
+        XCTAssertFalse(model.canEditActiveProfile)
+        XCTAssertFalse(model.canSaveAndApply)
+        XCTAssertFalse(model.canSelectProfileFromMenu)
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .operationInProgress
+        )
+        XCTAssertEqual(
+            model.resolveProfileSelection(id: second.id, discardChanges: true),
+            .operationInProgress
+        )
+        XCTAssertFalse(model.renameActiveProfile(to: "Renamed"))
+        XCTAssertFalse(model.deleteProfile(id: first.id, confirmed: true))
+        XCTAssertEqual(state.saveCallCount, 0)
+
+        loadGate.signal()
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertEqual(model.profiles, document.profiles)
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertTrue(model.canEditActiveProfile)
+        XCTAssertTrue(model.canSelectProfileFromMenu)
+        XCTAssertEqual(state.saveCallCount, 0)
+    }
+
+    func testSaveAndApplyBeforeInitializationCannotReplaceLoadFailure() async {
         let state = readyState(receiver: nil)
         state.loadFailure = "Unreadable configuration"
         let loadGate = DispatchSemaphore(value: 0)
@@ -34,41 +114,49 @@ final class MenuModelTests: XCTestCase {
 
         model.configuration.left.sensitivity = 21
         model.saveAndApply()
-        guard case .failure(.configurationInvalid) = model.status else {
-            return XCTFail("Expected the newer validation failure")
-        }
+
+        XCTAssertEqual(model.configuration, .default)
+        XCTAssertEqual(state.saveCallCount, 0)
 
         loadGate.signal()
         await waitUntil(model: model) { model.isInitialized }
 
-        XCTAssertEqual(model.configuration.left.sensitivity, 21)
+        XCTAssertEqual(model.configuration, .default)
         XCTAssertEqual(model.savedConfiguration, .default)
         XCTAssertTrue(model.hasUnsavedChanges)
         XCTAssertTrue(model.needsInitialSave)
-        guard case .failure(.configurationInvalid) = model.status else {
-            return XCTFail("Expected the newer validation failure to remain published")
+        XCTAssertEqual(state.saveCallCount, 0)
+        guard case let .failure(.configurationLoad(diagnostic)) = model.status else {
+            return XCTFail("Expected the load failure")
         }
+        XCTAssertEqual(diagnostic, "Unreadable configuration")
     }
 
-    func testInitializationFailureDoesNotReplaceTerminationStatus() async {
-        let state = readyState(receiver: nil)
-        state.loadFailure = "Unreadable configuration"
+    func testEnableBeforeInitializationDoesNotStartOrPersist() async {
+        let state = readyState(receiver: "Fake")
+        var stored = TrackIsBackConfiguration.default
+        stored.left.sensitivity = 4
+        state.loadedConfiguration = stored
         let loadGate = DispatchSemaphore(value: 0)
         state.loadGate = loadGate
-        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
 
         model.isEnabled = true
-        var didComplete = false
-        XCTAssertTrue(model.stopForTermination { didComplete = true })
-        XCTAssertEqual(model.status, .releasingOutputs)
+
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertEqual(state.saveCallCount, 0)
+        let preInitializationStartCount = await session.startCount
+        XCTAssertEqual(preInitializationStartCount, 0)
 
         loadGate.signal()
-        await waitUntil(model: model) { didComplete }
+        await waitUntil(model: model) { model.isInitialized }
 
-        XCTAssertEqual(model.savedConfiguration, .default)
-        XCTAssertTrue(model.hasUnsavedChanges)
-        XCTAssertTrue(model.needsInitialSave)
-        XCTAssertEqual(model.status, .releasingOutputs)
+        XCTAssertEqual(model.configuration.left.sensitivity, 4)
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 4)
+        XCTAssertEqual(state.saveCallCount, 0)
+        let postInitializationStartCount = await session.startCount
+        XCTAssertEqual(postInitializationStartCount, 0)
     }
 
     func testInitializationFailurePreservesNewerPermissionGuidanceAndReconcilesIt() async {
@@ -97,7 +185,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.status == .off }
     }
 
-    func testEditAndEnableBeforeInitializationPreservesAndActivatesNewerDraft() async {
+    func testEditAndEnableAfterInitializationPersistsAndActivatesNewerDraft() async {
         let state = readyState(receiver: "Fake")
         var stored = TrackIsBackConfiguration.default
         stored.left.sensitivity = 4
@@ -107,9 +195,10 @@ final class MenuModelTests: XCTestCase {
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
 
+        loadGate.signal()
+        await waitUntil(model: model) { model.isInitialized }
         model.configuration.left.sensitivity = 7
         model.isEnabled = true
-        loadGate.signal()
         await waitUntil(model: model) { await session.startCount == 1 }
 
         let startedSensitivity = await session.startedConfigurations.first?.left.sensitivity
@@ -120,7 +209,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.hasUnsavedChanges)
     }
 
-    func testDefaultsDuringInitializationPreservesDeliberateDefaultDraft() async {
+    func testDraftAndDefaultsBeforeInitializationCannotReplaceLoadedConfiguration() async {
         let state = readyState(receiver: nil)
         var stored = TrackIsBackConfiguration.default
         stored.left.sensitivity = 4
@@ -131,13 +220,17 @@ final class MenuModelTests: XCTestCase {
 
         model.configuration.left.sensitivity = 7
         model.restoreDefaults()
+
+        XCTAssertEqual(model.configuration, .default)
+        XCTAssertEqual(model.status, .off)
+
         loadGate.signal()
         await waitUntil(model: model) { model.isInitialized }
 
-        XCTAssertEqual(model.configuration, .default)
+        XCTAssertEqual(model.configuration.left.sensitivity, 4)
         XCTAssertEqual(model.savedConfiguration.left.sensitivity, 4)
-        XCTAssertTrue(model.hasUnsavedChanges)
-        XCTAssertEqual(model.status, .defaultsRestored)
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertEqual(state.saveCallCount, 0)
     }
 
     func testMissingAccessibilityTurnsOutputBackOffWithFailure() async {
@@ -1092,6 +1185,75 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.hasUnsavedChanges)
     }
 
+    func testEnableDrainsConfigurationTaskHandoffBeforeActivationCommit() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, first, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let recorder = OperationRecorder()
+        state.operationRecorder = recorder
+        let session = RecordingSession(recorder: recorder)
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.configuration.left.sensitivity = 3
+        let firstSaveGate = DispatchSemaphore(value: 0)
+        state.saveGate = firstSaveGate
+        model.saveAndApply()
+        await waitUntil { state.saveCallCount == 1 }
+
+        model.configuration.left.sensitivity = 5
+        model.isEnabled = true
+        let secondSaveGate = DispatchSemaphore(value: 0)
+        var didQueueRename = false
+        model.statusDidChange = {
+            guard !didQueueRename, state.saveCompletionCount == 1 else { return }
+            didQueueRename = true
+            state.saveGate = secondSaveGate
+            XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
+        }
+        state.saveGate = nil
+        firstSaveGate.signal()
+        await waitUntil { state.saveCallCount == 2 }
+
+        XCTAssertTrue(didQueueRename)
+        XCTAssertTrue(model.isEnabled)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertFalse(model.canManageProfiles)
+        let startedConfigurationsBeforeHandoff = await session.startedConfigurations
+        XCTAssertEqual(startedConfigurationsBeforeHandoff.count, 0)
+
+        state.saveGate = nil
+        secondSaveGate.signal()
+        for _ in 0..<1_000 {
+            if model.isRunning, state.saveCompletionCount == 3 { break }
+            await Task.yield()
+        }
+        model.statusDidChange = nil
+
+        let startedConfigurations = await session.startedConfigurations
+        let maximumWorkerCount = await session.maximumWorkerCount
+        XCTAssertEqual(state.saveCallCount, 3)
+        XCTAssertEqual(state.saveCompletionCount, 3)
+        XCTAssertEqual(recorder.values, ["save", "stop", "save", "save", "start"])
+        XCTAssertEqual(startedConfigurations.map(\.left.sensitivity), [5])
+        XCTAssertEqual(maximumWorkerCount, 1)
+        XCTAssertTrue(model.isEnabled)
+        XCTAssertTrue(model.isRunning)
+        XCTAssertTrue(model.canManageProfiles)
+        XCTAssertTrue(model.canEditActiveProfile)
+        XCTAssertTrue(model.canToggleOutput)
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertEqual(model.activeProfile.name, "Renamed")
+        XCTAssertEqual(model.configuration.left.sensitivity, 5)
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 5)
+        XCTAssertEqual(model.activeProfile.configuration.left.sensitivity, 5)
+        XCTAssertEqual(state.savedProfileDocument?.profile(id: first.id)?.name, "Renamed")
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
+            5
+        )
+    }
+
     func testEnableDuringOverlappingSaveCarriesCommitIntentToReplacementLifecycle() async {
         let state = readyState(receiver: "Fake")
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
@@ -1507,19 +1669,891 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(diagnostic, "Saved sensitivity is outside the supported range.")
     }
 
-    func testConfigurationLoadFailureCanSaveRecoveryDefaults() async {
+    func testConfigurationLoadFailureBlocksOverwriteOfRecoverableStorage() async {
         let state = readyState(receiver: nil)
         state.loadFailure = "Saved sensitivity is outside the supported range."
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
         await waitUntil(model: model) { model.isInitialized }
 
         model.saveAndApply()
-        await waitUntil(model: model) { model.status == .configurationSaved }
+        await waitUntil(model: model) {
+            guard case .failure(.configurationSave) = model.status else { return false }
+            return true
+        }
 
-        XCTAssertEqual(state.savedConfiguration, .default)
-        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertNil(state.savedConfiguration)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertTrue(model.needsInitialSave)
+        guard case let .failure(.configurationSave(diagnostic)) = model.status else {
+            return XCTFail("Expected storage overwrite protection")
+        }
+        XCTAssertTrue(diagnostic.contains("Preserve or repair"))
+    }
+
+    func testMissingActiveProfileRepairPreservesProfilesAndSurfacesDiagnostic() async throws {
+        let state = readyState(receiver: nil)
+        var document = ConfigurationProfileDocument.default
+        let recoverable = try document.createProfile(
+            named: "Recoverable",
+            id: ConfigurationProfileID(rawValue: "00000000-0000-0000-0000-000000000203")
+        )
+        state.loadedProfileDocument = document
+        state.loadDiagnostic = "Missing active profile; Default is active."
+        let session = ScriptedSession(events: [])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertEqual(model.activeProfileID, .default)
+        XCTAssertEqual(model.profiles.first(where: { $0.id == recoverable.id }), recoverable)
+        XCTAssertTrue(model.needsInitialSave)
+        XCTAssertTrue(model.canSaveAndApply)
+        XCTAssertFalse(model.canEditActiveProfile)
+        guard case let .failure(.configurationLoad(diagnostic)) = model.status else {
+            return XCTFail("Expected the preserved repair diagnostic")
+        }
+        XCTAssertEqual(diagnostic, state.loadDiagnostic)
+        XCTAssertFalse(model.renameActiveProfile(to: "Mutable Default"))
+        XCTAssertFalse(model.deleteProfile(id: .default, confirmed: true))
+
+        model.saveAndApply()
+        await waitUntil(model: model) { model.status == .configurationSaved }
+        XCTAssertEqual(state.savedProfileDocument?.userProfiles, [recoverable])
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, .default)
         XCTAssertFalse(model.needsInitialSave)
-        XCTAssertEqual(model.status, .configurationSaved)
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertFalse(model.canSaveAndApply)
+        let startCount = await session.startCount
+        XCTAssertEqual(startCount, 0)
+    }
+
+    func testEnabledMissingActiveProfileRepairSerializesStopSaveStartAndRearms() async {
+        let state = readyState(receiver: "Fake puck")
+        state.loadedProfileDocument = .default
+        state.loadDiagnostic = "Missing active profile; Default is active."
+        let recorder = OperationRecorder()
+        state.operationRecorder = recorder
+        let session = RecordingSession(recorder: recorder)
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.isEnabled = true
+        XCTAssertTrue(model.canSaveAndApply)
+        model.saveAndApply()
+        await waitUntil(model: model) { model.isRunning && !model.needsInitialSave }
+
+        XCTAssertEqual(recorder.values, ["stop", "save", "start"])
+        let maximumWorkerCount = await session.maximumWorkerCount
+        XCTAssertEqual(maximumWorkerCount, 1)
+        XCTAssertEqual(model.status, .active)
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, .default)
+    }
+
+    func testProfileSelectionRequiresDiscardConfirmationAndCancelPreservesDraft() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.left.sensitivity = 9
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .configurationWindow),
+            .confirmationRequired(second.id)
+        )
+        XCTAssertEqual(
+            model.resolveProfileSelection(id: second.id, discardChanges: false),
+            .cancelled
+        )
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertEqual(model.configuration.left.sensitivity, 9)
+
+        XCTAssertEqual(
+            model.resolveProfileSelection(id: second.id, discardChanges: true),
+            .accepted
+        )
+        await waitUntil(model: model) { model.activeProfileID == second.id }
+        XCTAssertEqual(model.configuration, second.configuration)
+        XCTAssertFalse(model.hasUnsavedChanges)
+    }
+
+    func testMenuProfileSelectionIsBlockedWhileDraftIsUnsaved() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.right.sensitivity = 8
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .blockedByUnsavedChanges
+        )
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertEqual(state.saveCallCount, 0)
+    }
+
+    func testCreateDuplicateRenameAndConfirmedDeletePersistStableProfiles() async throws {
+        let state = readyState(receiver: nil)
+        state.loadedProfileDocument = .default
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertTrue(model.createProfile(named: "  Gaming  "))
+        await waitUntil(model: model) { model.profiles.count == 2 }
+        let originalID = model.activeProfileID
+        XCTAssertEqual(model.activeProfile.name, "Gaming")
+
+        XCTAssertTrue(model.renameActiveProfile(to: "Arcade"))
+        await waitUntil(model: model) { model.activeProfile.name == "Arcade" }
+        XCTAssertEqual(model.activeProfileID, originalID)
+
+        XCTAssertTrue(model.duplicateActiveProfile())
+        await waitUntil(model: model) { model.profiles.count == 3 }
+        let duplicateID = model.activeProfileID
+        XCTAssertNotEqual(duplicateID, originalID)
+        XCTAssertEqual(model.activeProfile.name, "Arcade Copy")
+
+        XCTAssertFalse(model.deleteProfile(id: duplicateID, confirmed: false))
+        XCTAssertEqual(model.activeProfileID, duplicateID)
+        XCTAssertTrue(model.deleteProfile(id: originalID, confirmed: true))
+        await waitUntil(model: model) { model.profiles.count == 2 }
+        XCTAssertEqual(model.activeProfileID, duplicateID)
+
+        XCTAssertTrue(model.deleteProfile(id: duplicateID, confirmed: true))
+        await waitUntil(model: model) { model.activeProfileID == .default }
+        XCTAssertEqual(model.profiles, [.default])
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, .default)
+    }
+
+    func testCreateAndRenameRejectUUIDShapedNamesWithoutPersisting() async throws {
+        let createState = readyState(receiver: nil)
+        createState.loadedProfileDocument = .default
+        let createModel = PaddrMenuModel(dependencies: dependencies(state: createState))
+        await waitUntil(model: createModel) { createModel.isInitialized }
+
+        XCTAssertFalse(
+            createModel.createProfile(named: " A0000000-0000-0000-0000-000000000040 ")
+        )
+        XCTAssertEqual(createModel.profiles, [.default])
+        XCTAssertEqual(createState.saveCallCount, 0)
+        guard case let .failure(.configurationInvalid(createDiagnostic)) = createModel.status else {
+            return XCTFail("Expected UUID-shaped create name to publish a validation error")
+        }
+        XCTAssertTrue(createDiagnostic.contains("cannot be UUIDs"))
+
+        let renameState = readyState(receiver: nil)
+        var document = ConfigurationProfileDocument.default
+        let profile = try document.createProfile(
+            named: "Normal name",
+            id: ConfigurationProfileID(rawValue: "b0000000-0000-0000-0000-000000000040")
+        )
+        try document.activateProfile(id: profile.id)
+        renameState.loadedProfileDocument = document
+        let renameModel = PaddrMenuModel(dependencies: dependencies(state: renameState))
+        await waitUntil(model: renameModel) { renameModel.isInitialized }
+
+        XCTAssertFalse(renameModel.renameActiveProfile(to: profile.id.rawValue.uppercased()))
+        XCTAssertEqual(renameModel.activeProfile.name, "Normal name")
+        XCTAssertEqual(renameState.saveCallCount, 0)
+        guard case let .failure(.configurationInvalid(renameDiagnostic)) = renameModel.status else {
+            return XCTFail("Expected UUID-shaped rename to publish a validation error")
+        }
+        XCTAssertTrue(renameDiagnostic.contains("cannot be UUIDs"))
+    }
+
+    func testProfileSelectionSaveFailureDisablesOutputEnabledDuringPersistence() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        state.saveFailure = "simulated profile activation save failure"
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let session = GatedSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await waitUntil { state.saveCallCount == 1 }
+        model.isEnabled = true
+        XCTAssertTrue(model.isEnabled)
+
+        saveGate.signal()
+        await waitUntil(model: model) {
+            guard state.saveCompletionCount == 1, model.canManageProfiles else { return false }
+            if !model.isEnabled { return true }
+            return await session.startCount > 0
+        }
+        if !model.isEnabled {
+            await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+        }
+
+        let startCount = await session.startCount
+        let stopCount = await session.stopCount
+        XCTAssertEqual(startCount, 0)
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertEqual(model.configuration, first.configuration)
+        XCTAssertEqual(model.savedConfiguration, first.configuration)
+        XCTAssertNil(state.savedProfileDocument)
+        guard case let .failure(.configurationSave(diagnostic)) = model.status else {
+            return XCTFail("Expected the profile activation save failure, got \(model.status)")
+        }
+        XCTAssertTrue(diagnostic.contains("simulated profile activation save failure"))
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+        guard case .failure(.configurationSave) = model.status else {
+            return XCTFail("Expected the profile activation save failure to remain authoritative")
+        }
+    }
+
+    func testEnabledProfileSelectionSerializesStopSaveStartWithoutWorkerOverlap() async throws {
+        let state = readyState(receiver: "Fake")
+        let (document, _, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let recorder = OperationRecorder()
+        state.operationRecorder = recorder
+        let session = RecordingSession(recorder: recorder)
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+        recorder.removeAll()
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await waitUntil(model: model) {
+            model.activeProfileID == second.id && model.isRunning
+        }
+
+        let maximumWorkerCount = await session.maximumWorkerCount
+        let startedConfiguration = await session.startedConfigurations.last
+        XCTAssertEqual(recorder.values, ["stop", "save", "start"])
+        XCTAssertEqual(maximumWorkerCount, 1)
+        XCTAssertEqual(startedConfiguration, second.configuration)
+    }
+
+    func testEnabledProfileSelectionPersistsWhenOutputIsDisabledDuringStop() async throws {
+        let state = readyState(receiver: "Fake")
+        let (document, _, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let session = GatedSession(blockedStops: [2])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await session.waitForStop(2)
+        model.isEnabled = false
+        await session.waitForStop(3)
+        await session.releaseStop(2)
+        for _ in 0..<1_000 where state.saveCompletionCount == 0 {
+            await Task.yield()
+        }
+
+        let startCount = await session.startCount
+        XCTAssertEqual(state.saveCompletionCount, 1)
+        XCTAssertEqual(startCount, 1)
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .off)
+        XCTAssertEqual(model.activeProfileID, second.id)
+        XCTAssertEqual(model.configuration, second.configuration)
+        XCTAssertEqual(model.savedConfiguration, second.configuration)
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, second.id)
+    }
+
+    func testEnabledActiveProfileDeletionPersistsWhenOutputIsDisabledDuringStop() async throws {
+        let state = readyState(receiver: "Fake")
+        let (document, first, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let session = GatedSession(blockedStops: [2])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+
+        XCTAssertTrue(model.deleteProfile(id: first.id, confirmed: true))
+        await session.waitForStop(2)
+        model.isEnabled = false
+        await session.waitForStop(3)
+        await session.releaseStop(2)
+        for _ in 0..<1_000 where state.saveCompletionCount == 0 {
+            await Task.yield()
+        }
+
+        let startCount = await session.startCount
+        XCTAssertEqual(state.saveCompletionCount, 1)
+        XCTAssertEqual(startCount, 1)
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .off)
+        XCTAssertFalse(model.profiles.contains(where: { $0.id == first.id }))
+        XCTAssertEqual(model.activeProfileID, .default)
+        XCTAssertEqual(model.configuration, .default)
+        XCTAssertEqual(model.savedConfiguration, .default)
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, .default)
+    }
+
+    func testEnabledProfileRepairPersistsWhenOutputIsDisabledDuringStop() async {
+        let state = readyState(receiver: "Fake")
+        state.loadedProfileDocument = .default
+        state.loadDiagnostic = "Missing active profile; Default is active."
+        let session = GatedSession(blockedStops: [1])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.isEnabled = true
+        model.saveAndApply()
+        await session.waitForStop(1)
+        model.isEnabled = false
+        await session.waitForStop(2)
+        await session.releaseStop(1)
+        for _ in 0..<1_000 where state.saveCompletionCount == 0 {
+            await Task.yield()
+        }
+
+        let startCount = await session.startCount
+        XCTAssertEqual(state.saveCompletionCount, 1)
+        XCTAssertEqual(startCount, 0)
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .off)
+        XCTAssertFalse(model.needsInitialSave)
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertEqual(model.activeProfileID, .default)
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, .default)
+    }
+
+    func testProfileSelectionReenabledDuringStopRestartsExactlyOnceAfterPersistence() async throws {
+        let state = readyState(receiver: "Fake")
+        let (document, _, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let session = GatedSession(blockedStops: [2])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await session.waitForStop(2)
+        model.isEnabled = false
+        await session.waitForStop(3)
+        model.isEnabled = true
+        await session.releaseStop(2)
+        await waitUntil(model: model) { model.isRunning && state.saveCompletionCount == 1 }
+
+        let startCount = await session.startCount
+        let stopCount = await session.stopCount
+        XCTAssertEqual(startCount, 2)
+        XCTAssertEqual(stopCount, 3)
+        XCTAssertTrue(model.isEnabled)
+        XCTAssertTrue(model.isRunning)
+        XCTAssertEqual(model.status, .active)
+        XCTAssertEqual(model.activeProfileID, second.id)
+        XCTAssertEqual(model.savedConfiguration, second.configuration)
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, second.id)
+    }
+
+    func testProfileSelectionReenabledAfterSaveRestartsExactlyOnce() async throws {
+        let state = readyState(receiver: "Fake")
+        let (document, _, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let session = GatedSession(blockedStops: [2])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await session.waitForStop(2)
+        model.isEnabled = false
+        await session.waitForStop(3)
+        await session.releaseStop(2)
+        await waitUntil { state.saveCallCount == 1 }
+        saveGate.signal()
+        await waitUntil(model: model) { model.activeProfileID == second.id }
+
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+
+        let startCount = await session.startCount
+        let stopCount = await session.stopCount
+        XCTAssertEqual(startCount, 2)
+        XCTAssertEqual(stopCount, 4)
+        XCTAssertTrue(model.isEnabled)
+        XCTAssertTrue(model.isRunning)
+        XCTAssertEqual(model.status, .active)
+        XCTAssertEqual(model.savedConfiguration, second.configuration)
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, second.id)
+    }
+
+    func testTerminationDuringProfileSelectionPreventsStalePersistenceAndRestart() async throws {
+        let state = readyState(receiver: "Fake")
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let session = GatedSession(blockedStops: [2])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await session.waitForStop(2)
+        var didComplete = false
+        XCTAssertTrue(model.stopForTermination { didComplete = true })
+        await session.waitForStop(3)
+        await session.releaseStop(2)
+        await waitUntil(model: model) { didComplete }
+
+        let startCount = await session.startCount
+        XCTAssertEqual(state.saveCallCount, 0)
+        XCTAssertEqual(startCount, 1)
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .releasingOutputs)
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertEqual(model.configuration, first.configuration)
+        XCTAssertNil(state.savedProfileDocument)
+    }
+
+    func testEnabledProfileSelectionRejectsOldSessionEventsAndReestablishesLivenessAuthority() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, _, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let session = RetainedEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.send(.waitingForController("Fake puck"), to: 0)
+        await session.send(.controllerConnected, to: 0)
+        await session.send(.outputArmed, to: 0)
+        await waitUntil(model: model) { model.status == .active }
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await waitUntil { state.saveCallCount == 1 }
+
+        XCTAssertEqual(model.status, .releasingOutputs)
+        XCTAssertEqual(model.receiverDescription, "Fake puck")
+        XCTAssertFalse(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+
+        await session.waitForTermination(of: 0)
+        await session.send(.failed("stale session"), to: 0)
+        XCTAssertTrue(model.isEnabled)
+        XCTAssertEqual(model.status, .releasingOutputs)
+
+        saveGate.signal()
+        await waitUntil(model: model) { await session.startCount == 2 }
+        XCTAssertEqual(model.activeProfileID, second.id)
+        XCTAssertEqual(model.status, .connecting)
+        XCTAssertFalse(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+
+        await session.send(.waitingForController("Fake puck"), to: 1)
+        await waitUntil(model: model) { model.status == .waitingForController }
+        XCTAssertEqual(model.receiverDescription, "Fake puck")
+        XCTAssertFalse(model.controllerConnected)
+
+        model.configuration.left.sensitivity = 3
+        await session.send(.controllerConnected, to: 1)
+        await waitUntil(model: model) { model.status == .waitingForNeutral }
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+
+        await session.send(.outputArmed, to: 1)
+        await waitUntil(model: model) { model.status == .active }
+        XCTAssertTrue(model.isRunning)
+        await session.finishAll()
+    }
+
+    func testProfileRenameCompletionPreservesCurrentSessionLivenessAuthority() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, _, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.connect(receiver: "Fake puck")
+        await waitUntil(model: model) { model.status == .active }
+
+        XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
+        await waitUntil { state.saveCallCount == 1 }
+        await session.send(.controllerLost(.init(reportCount: 1, actionCount: 0)))
+        await waitUntil(model: model) { model.status == .waitingForController }
+
+        saveGate.signal()
+        await waitUntil(model: model) { model.activeProfile.name == "Renamed" }
+        XCTAssertEqual(model.status, .waitingForController)
+        XCTAssertFalse(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+
+        model.configuration.right.sensitivity = 7
+        await session.send(.controllerConnected)
+        await waitUntil(model: model) { model.status == .waitingForNeutral }
+        await session.send(.outputArmed)
+        await waitUntil(model: model) { model.status == .active }
+        XCTAssertTrue(model.isRunning)
+    }
+
+    func testProfileSelectionRejectsSecondRequestWhileActivationWorkIsPending() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        XCTAssertEqual(
+            model.requestProfileSelection(id: first.id, source: .menu),
+            .operationInProgress
+        )
+        saveGate.signal()
+        await waitUntil(model: model) { model.activeProfileID == second.id }
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, second.id)
+    }
+
+    func testProfileSelectionRejectsMutationsWhileActivationWorkIsPendingThenReenablesEditing() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await waitUntil { state.saveCallCount == 1 }
+
+        XCTAssertFalse(model.canEditActiveProfile)
+        XCTAssertFalse(model.canManageProfiles)
+        XCTAssertFalse(model.canSaveAndApply)
+        model.configuration.left.sensitivity = 9
+        model.restoreDefaults()
+        model.saveAndApply()
+        XCTAssertFalse(model.createProfile(named: "Racing"))
+        XCTAssertFalse(model.duplicateActiveProfile())
+        XCTAssertFalse(model.renameActiveProfile(to: "Renamed"))
+        XCTAssertFalse(model.deleteProfile(id: first.id, confirmed: true))
+        XCTAssertEqual(
+            model.requestProfileSelection(id: first.id, source: .menu),
+            .operationInProgress
+        )
+        XCTAssertEqual(model.configuration, first.configuration)
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertEqual(model.profiles, document.profiles)
+        XCTAssertEqual(state.saveCallCount, 1)
+
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) { model.activeProfileID == second.id }
+
+        XCTAssertTrue(model.canEditActiveProfile)
+        XCTAssertTrue(model.canManageProfiles)
+        XCTAssertEqual(model.configuration, second.configuration)
+        model.configuration.left.sensitivity = 7
+        model.saveAndApply()
+        await waitUntil { state.saveCallCount == 2 }
+        await waitUntil(model: model) { !model.hasUnsavedChanges }
+        XCTAssertEqual(state.savedProfileDocument?.activeProfile?.configuration.left.sensitivity, 7)
+    }
+
+    func testDocumentOnlyProfileSaveDoesNotFreezeOrOverwritePadEditing() async throws {
+        let state = readyState(receiver: nil)
+        let (document, _, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
+        await waitUntil { state.saveCallCount == 1 }
+        XCTAssertTrue(model.canEditActiveProfile)
+        XCTAssertFalse(model.canManageProfiles)
+        model.configuration.left.sensitivity = 8
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) { model.activeProfile.name == "Renamed" }
+        XCTAssertEqual(model.configuration.left.sensitivity, 8)
+        XCTAssertTrue(model.hasUnsavedChanges)
+
+        let inactiveID = second.id
+        let deleteGate = DispatchSemaphore(value: 0)
+        state.saveGate = deleteGate
+        XCTAssertTrue(model.deleteProfile(id: inactiveID, confirmed: true))
+        await waitUntil { state.saveCallCount == 2 }
+        XCTAssertTrue(model.canEditActiveProfile)
+        XCTAssertFalse(model.canManageProfiles)
+        model.configuration.left.sensitivity = 9
+        state.saveGate = nil
+        deleteGate.signal()
+        await waitUntil(model: model) { !model.profiles.contains(where: { $0.id == inactiveID }) }
+        XCTAssertEqual(model.configuration.left.sensitivity, 9)
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
+    func testPendingRenameBlocksPersistenceSupersessionWhilePadEditingRemainsAvailable() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let session = ScriptedSession(events: [])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
+        await waitUntil { state.saveCallCount == 1 }
+        model.configuration.left.sensitivity = 8
+
+        XCTAssertTrue(model.canEditActiveProfile)
+        XCTAssertFalse(model.canSaveAndApply)
+        model.saveAndApply()
+        model.isEnabled = true
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .operationInProgress
+        )
+        XCTAssertEqual(state.saveCallCount, 1)
+
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) { model.canManageProfiles }
+
+        XCTAssertEqual(state.saveCallCount, 1)
+        XCTAssertEqual(state.savedProfileDocument?.profile(id: first.id)?.name, "Renamed")
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
+            first.configuration.left.sensitivity
+        )
+        XCTAssertEqual(model.configuration.left.sensitivity, 8)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertTrue(model.canSaveAndApply)
+        let startCount = await session.startCount
+        XCTAssertEqual(startCount, 0)
+
+        model.saveAndApply()
+        await waitUntil(model: model) { !model.hasUnsavedChanges }
+        XCTAssertEqual(state.saveCallCount, 2)
+        XCTAssertEqual(state.savedProfileDocument?.profile(id: first.id)?.name, "Renamed")
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
+            8
+        )
+    }
+
+    func testEnabledDirtyActivationCommitSerializesRenameWithoutStaleOverwrite() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let session = GatedSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.left.sensitivity = 9
+
+        model.isEnabled = true
+        await waitUntil { state.saveCallCount == 1 }
+
+        XCTAssertFalse(model.canManageProfiles)
+        XCTAssertFalse(model.createProfile(named: "New profile"))
+        XCTAssertFalse(model.duplicateActiveProfile())
+        XCTAssertFalse(model.renameActiveProfile(to: "Renamed"))
+        XCTAssertFalse(model.deleteProfile(id: second.id, confirmed: true))
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .operationInProgress
+        )
+        XCTAssertEqual(model.profiles, document.profiles)
+        XCTAssertEqual(state.saveCallCount, 1)
+
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) {
+            model.isRunning && !model.hasUnsavedChanges && model.canManageProfiles
+        }
+
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 9)
+        XCTAssertEqual(model.configuration.left.sensitivity, 9)
+        XCTAssertEqual(model.activeProfile.name, first.name)
+        XCTAssertEqual(model.activeProfile.configuration.left.sensitivity, 9)
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
+            9
+        )
+
+        XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
+        await waitUntil(model: model) {
+            model.activeProfile.name == "Renamed" && state.saveCompletionCount == 2
+        }
+
+        XCTAssertTrue(model.canManageProfiles)
+        XCTAssertTrue(model.canEditActiveProfile)
+        XCTAssertTrue(model.canToggleOutput)
+        XCTAssertTrue(model.isEnabled)
+        XCTAssertTrue(model.isRunning)
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 9)
+        XCTAssertEqual(model.configuration.left.sensitivity, 9)
+        XCTAssertEqual(model.activeProfile.configuration.left.sensitivity, 9)
+        XCTAssertEqual(state.savedProfileDocument?.profile(id: first.id)?.name, "Renamed")
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
+            9
+        )
+    }
+
+    func testPendingInactiveDeleteCannotBeRestoredBySaveAndApply() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertTrue(model.deleteProfile(id: second.id, confirmed: true))
+        await waitUntil { state.saveCallCount == 1 }
+        model.configuration.right.sensitivity = 9
+
+        XCTAssertFalse(model.canSaveAndApply)
+        model.saveAndApply()
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .configurationWindow),
+            .operationInProgress
+        )
+        XCTAssertEqual(state.saveCallCount, 1)
+
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) { model.canManageProfiles }
+
+        XCTAssertEqual(state.saveCallCount, 1)
+        XCTAssertNil(state.savedProfileDocument?.profile(id: second.id))
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.right.sensitivity,
+            first.configuration.right.sensitivity
+        )
+        XCTAssertEqual(model.configuration.right.sensitivity, 9)
+        XCTAssertTrue(model.hasUnsavedChanges)
+
+        model.saveAndApply()
+        await waitUntil(model: model) { !model.hasUnsavedChanges }
+        XCTAssertEqual(state.saveCallCount, 2)
+        XCTAssertNil(state.savedProfileDocument?.profile(id: second.id))
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.right.sensitivity,
+            9
+        )
+    }
+
+    func testFailedDocumentOnlySavePreservesDraftAndCanRetryMetadataBeforeApplying() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        state.saveFailure = "simulated metadata save failure"
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.configuration.left.sensitivity = 9
+        XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
+        await waitUntil(model: model) {
+            if case .failure(.configurationSave) = model.status {
+                return model.canManageProfiles
+            }
+            return false
+        }
+
+        XCTAssertEqual(state.saveCompletionCount, 1)
+        XCTAssertEqual(model.activeProfile.name, first.name)
+        XCTAssertEqual(model.configuration.left.sensitivity, 9)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertNil(state.savedProfileDocument)
+        guard case let .failure(.configurationSave(diagnostic)) = model.status else {
+            return XCTFail("Expected the metadata save failure, got \(model.status)")
+        }
+        XCTAssertTrue(diagnostic.contains("simulated metadata save failure"))
+
+        state.saveFailure = nil
+        XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
+        await waitUntil(model: model) { model.activeProfile.name == "Renamed" }
+        XCTAssertEqual(state.saveCompletionCount, 2)
+        XCTAssertEqual(model.configuration.left.sensitivity, 9)
+        XCTAssertTrue(model.hasUnsavedChanges)
+
+        model.saveAndApply()
+        await waitUntil(model: model) { !model.hasUnsavedChanges }
+        XCTAssertEqual(state.saveCompletionCount, 3)
+        XCTAssertEqual(state.savedProfileDocument?.profile(id: first.id)?.name, "Renamed")
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
+            9
+        )
+    }
+
+    private func twoProfileDocument() throws -> (
+        ConfigurationProfileDocument,
+        ConfigurationProfile,
+        ConfigurationProfile
+    ) {
+        var firstConfiguration = TrackIsBackConfiguration.default
+        firstConfiguration.left.sensitivity = 2
+        var secondConfiguration = TrackIsBackConfiguration.default
+        secondConfiguration.right.sensitivity = 6
+        var document = ConfigurationProfileDocument.default
+        let first = try document.createProfile(
+            named: "First",
+            configuration: firstConfiguration,
+            id: ConfigurationProfileID(rawValue: "00000000-0000-0000-0000-000000000201")
+        )
+        let second = try document.createProfile(
+            named: "Second",
+            configuration: secondConfiguration,
+            id: ConfigurationProfileID(rawValue: "00000000-0000-0000-0000-000000000202")
+        )
+        document.activeProfileID = first.id
+        return (document, first, second)
     }
 
     private func readyState(receiver: String?) -> ModelDependencyState {
@@ -1536,22 +2570,39 @@ final class MenuModelTests: XCTestCase {
     ) -> MenuDependencies {
         MenuDependencies(
             session: session,
-            loadConfiguration: {
+            loadProfiles: {
                 state.loadGate?.wait()
                 state.loadRanOnMainThread = Thread.isMainThread
                 if let failure = state.loadFailure {
                     throw TrackIsBackError.configuration(failure)
                 }
-                return state.loadedConfiguration
+                if let document = state.loadedProfileDocument {
+                    return ConfigurationProfileLoadResult(
+                        document: document,
+                        diagnostic: state.loadDiagnostic
+                    )
+                }
+                var document = ConfigurationProfileDocument.default
+                let profile = try document.createProfile(
+                    named: "Loaded",
+                    configuration: state.loadedConfiguration,
+                    id: ConfigurationProfileID(
+                        rawValue: "00000000-0000-0000-0000-000000000101"
+                    )
+                )
+                document.activeProfileID = profile.id
+                return ConfigurationProfileLoadResult(document: document)
             },
-            saveConfiguration: {
+            saveProfiles: {
                 state.saveCallCount += 1
                 defer { state.saveCompletionCount += 1 }
                 state.saveGate?.wait()
                 if let failure = state.saveFailure {
                     throw TrackIsBackError.configuration(failure)
                 }
-                state.savedConfiguration = $0
+                state.operationRecorder?.record("save")
+                state.savedProfileDocument = $0
+                state.savedConfiguration = $0.activeProfile?.configuration
             },
             probeReceiver: {
                 state.probeCallCount += 1
@@ -1732,6 +2783,41 @@ private actor ManualEventSession: TrackpadSessionControlling {
     }
 }
 
+private actor RetainedEventSession: TrackpadSessionControlling {
+    private let terminationGate = IndexedStopGate()
+    private var continuations: [AsyncStream<TrackpadSessionEvent>.Continuation] = []
+    private(set) var startCount = 0
+
+    func start(
+        configuration: TrackIsBackConfiguration,
+        observeOnly: Bool
+    ) async -> AsyncStream<TrackpadSessionEvent> {
+        startCount += 1
+        let index = continuations.count
+        let (stream, continuation) = AsyncStream<TrackpadSessionEvent>.makeStream()
+        continuation.onTermination = { [terminationGate] _ in
+            Task { await terminationGate.release(index) }
+        }
+        continuations.append(continuation)
+        return stream
+    }
+
+    func stop() async {}
+
+    func send(_ event: TrackpadSessionEvent, to index: Int) {
+        guard continuations.indices.contains(index) else { return }
+        continuations[index].yield(event)
+    }
+
+    func waitForTermination(of index: Int) async {
+        await terminationGate.wait(for: index)
+    }
+
+    func finishAll() {
+        for continuation in continuations { continuation.finish() }
+    }
+}
+
 private actor GatedSession: TrackpadSessionControlling {
     private let blockedStops: Set<Int>
     private let gate = IndexedStopGate()
@@ -1805,12 +2891,15 @@ private actor IndexedStopGate {
 private final class ModelDependencyState: Sendable {
     private struct State: ~Copyable {
         var loadedConfiguration = TrackIsBackConfiguration.default
+        var loadedProfileDocument: ConfigurationProfileDocument?
         var savedConfiguration: TrackIsBackConfiguration?
+        var savedProfileDocument: ConfigurationProfileDocument?
         var receiver: String?
         var openedPrivacySettingsAnchors: [String] = []
         var accessibilityGranted = false
         var accessibilityPromptValues: [Bool] = []
         var loadFailure: String?
+        var loadDiagnostic: String?
         var loadGate: DispatchSemaphore?
         var loadRanOnMainThread: Bool?
         var saveFailure: String?
@@ -1819,6 +2908,7 @@ private final class ModelDependencyState: Sendable {
         var saveCompletionCount = 0
         var probeCallCount = 0
         var probeGate: DispatchSemaphore?
+        var operationRecorder: OperationRecorder?
         var statusChangeCount = 0
     }
     private let state = Mutex(State())
@@ -1827,9 +2917,17 @@ private final class ModelDependencyState: Sendable {
         get { state.withLock { $0.loadedConfiguration } }
         set { state.withLock { $0.loadedConfiguration = newValue } }
     }
+    var loadedProfileDocument: ConfigurationProfileDocument? {
+        get { state.withLock { $0.loadedProfileDocument } }
+        set { state.withLock { $0.loadedProfileDocument = newValue } }
+    }
     var savedConfiguration: TrackIsBackConfiguration? {
         get { state.withLock { $0.savedConfiguration } }
         set { state.withLock { $0.savedConfiguration = newValue } }
+    }
+    var savedProfileDocument: ConfigurationProfileDocument? {
+        get { state.withLock { $0.savedProfileDocument } }
+        set { state.withLock { $0.savedProfileDocument = newValue } }
     }
     var receiver: String? {
         get { state.withLock { $0.receiver } }
@@ -1850,6 +2948,10 @@ private final class ModelDependencyState: Sendable {
     var loadFailure: String? {
         get { state.withLock { $0.loadFailure } }
         set { state.withLock { $0.loadFailure = newValue } }
+    }
+    var loadDiagnostic: String? {
+        get { state.withLock { $0.loadDiagnostic } }
+        set { state.withLock { $0.loadDiagnostic = newValue } }
     }
     var loadGate: DispatchSemaphore? {
         get { state.withLock { $0.loadGate } }
@@ -1883,9 +2985,62 @@ private final class ModelDependencyState: Sendable {
         get { state.withLock { $0.probeGate } }
         set { state.withLock { $0.probeGate = newValue } }
     }
+    var operationRecorder: OperationRecorder? {
+        get { state.withLock { $0.operationRecorder } }
+        set { state.withLock { $0.operationRecorder = newValue } }
+    }
     var statusChangeCount: Int {
         get { state.withLock { $0.statusChangeCount } }
         set { state.withLock { $0.statusChangeCount = newValue } }
+    }
+}
+
+private final class OperationRecorder: Sendable {
+    private let valuesState = Mutex<[String]>([])
+
+    var values: [String] { valuesState.withLock { $0 } }
+
+    func record(_ value: String) {
+        valuesState.withLock { $0.append(value) }
+    }
+
+    func removeAll() {
+        valuesState.withLock { $0.removeAll() }
+    }
+}
+
+private actor RecordingSession: TrackpadSessionControlling {
+    private let recorder: OperationRecorder
+    private var continuation: AsyncStream<TrackpadSessionEvent>.Continuation?
+    private var workerCount = 0
+    private(set) var maximumWorkerCount = 0
+    private(set) var startedConfigurations: [TrackIsBackConfiguration] = []
+
+    init(recorder: OperationRecorder) {
+        self.recorder = recorder
+    }
+
+    func start(
+        configuration: TrackIsBackConfiguration,
+        observeOnly: Bool
+    ) async -> AsyncStream<TrackpadSessionEvent> {
+        recorder.record("start")
+        workerCount += 1
+        maximumWorkerCount = max(maximumWorkerCount, workerCount)
+        startedConfigurations.append(configuration)
+        let (stream, continuation) = AsyncStream<TrackpadSessionEvent>.makeStream()
+        self.continuation = continuation
+        continuation.yield(.waitingForController("Fake puck"))
+        continuation.yield(.controllerConnected)
+        continuation.yield(.outputArmed)
+        return stream
+    }
+
+    func stop() async {
+        recorder.record("stop")
+        continuation?.finish()
+        continuation = nil
+        workerCount = 0
     }
 }
 

@@ -1,6 +1,7 @@
 import AppKit
 import PaddrAppSupport
 import SwiftUI
+import TrackIsBackCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
@@ -55,6 +56,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         showConfigurationWindow()
     }
 
+    @objc private func selectProfile(_ sender: NSMenuItem) {
+        guard let rawID = sender.representedObject as? String else { return }
+        let result = model.requestProfileSelection(
+            id: ConfigurationProfileID(rawValue: rawID),
+            source: .menu
+        )
+        if result == .blockedByUnsavedChanges { showConfigurationWindow() }
+        rebuildStatusMenu()
+    }
+
     @objc private func quit() {
         NSApplication.shared.terminate(nil)
     }
@@ -68,13 +79,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             keyEquivalent: ""
         )
         outputItem.target = self
+        outputItem.isEnabled = model.canToggleOutput
         outputItem.state = model.isEnabled ? .on : .off
         outputItem.image = NSImage(
             systemSymbolName: model.isEnabled ? "wave.3.right.circle.fill" : "pause.circle",
             accessibilityDescription: String(localized: "Trackpad Output")
         )
         statusMenu.addItem(outputItem)
+        statusMenu.addItem(.separator())
 
+        let profileHeader = NSMenuItem(title: String(localized: "Profiles"), action: nil, keyEquivalent: "")
+        profileHeader.isEnabled = false
+        statusMenu.addItem(profileHeader)
+        if model.canSelectProfileFromMenu {
+            for profile in model.profiles {
+                let item = NSMenuItem(
+                    title: profile.name,
+                    action: #selector(selectProfile(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.representedObject = profile.id.rawValue
+                item.state = profile.id == model.activeProfileID ? .on : .off
+                statusMenu.addItem(item)
+            }
+        } else {
+            let item = NSMenuItem(
+                title: String(localized: "Open Configuration to switch profiles…"),
+                action: #selector(openConfiguration),
+                keyEquivalent: ""
+            )
+            item.target = self
+            statusMenu.addItem(item)
+        }
+
+        statusMenu.addItem(.separator())
         let configurationItem = NSMenuItem(
             title: String(localized: "Open Configuration…"),
             action: #selector(openConfiguration),

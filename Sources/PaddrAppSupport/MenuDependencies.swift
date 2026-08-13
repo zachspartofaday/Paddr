@@ -11,8 +11,8 @@ public struct MenuDependencies: Sendable {
 
     public init(
         session: any TrackpadSessionControlling,
-        loadConfiguration: @escaping @Sendable () throws -> TrackIsBackConfiguration,
-        saveConfiguration: @escaping @Sendable (TrackIsBackConfiguration) throws -> Void,
+        loadProfiles: @escaping @Sendable () throws -> ConfigurationProfileLoadResult,
+        saveProfiles: @escaping @Sendable (ConfigurationProfileDocument) throws -> Void,
         probeReceiver: @escaping @Sendable () -> String?,
         accessibilityTrusted: @escaping @Sendable (_ prompt: Bool) -> Bool,
         openPrivacySettings: @escaping @MainActor @Sendable (_ anchor: String) -> Void,
@@ -20,8 +20,8 @@ public struct MenuDependencies: Sendable {
     ) {
         self.session = session
         background = BackgroundMenuDependencies(
-            loadConfiguration: loadConfiguration,
-            saveConfiguration: saveConfiguration,
+            loadProfiles: loadProfiles,
+            saveProfiles: saveProfiles,
             probeReceiver: probeReceiver
         )
         self.accessibilityTrusted = accessibilityTrusted
@@ -29,12 +29,12 @@ public struct MenuDependencies: Sendable {
         self.sleep = sleep
     }
 
-    func loadConfiguration() async throws -> TrackIsBackConfiguration {
-        try await background.loadConfiguration()
+    func loadProfiles() async throws -> ConfigurationProfileLoadResult {
+        try await background.loadProfiles()
     }
 
-    func saveConfiguration(_ configuration: TrackIsBackConfiguration) async throws {
-        try await background.saveConfiguration(configuration)
+    func saveProfiles(_ document: ConfigurationProfileDocument) async throws {
+        try await background.saveProfiles(document)
     }
 
     func probeReceiver() async -> String? {
@@ -43,8 +43,8 @@ public struct MenuDependencies: Sendable {
 
     public static let live = MenuDependencies(
         session: TrackpadSession(),
-        loadConfiguration: { try ConfigurationStore.load() },
-        saveConfiguration: { try ConfigurationStore.save($0) },
+        loadProfiles: { try ConfigurationProfileStore.load() },
+        saveProfiles: { try ConfigurationProfileStore.save($0) },
         probeReceiver: { TritonHIDDevice.probe()?.description },
         accessibilityTrusted: Permissions.accessibilityTrusted,
         openPrivacySettings: { anchor in
@@ -58,26 +58,26 @@ public struct MenuDependencies: Sendable {
 }
 
 private actor BackgroundMenuDependencies {
-    private let load: @Sendable () throws -> TrackIsBackConfiguration
-    private let save: @Sendable (TrackIsBackConfiguration) throws -> Void
+    private let load: @Sendable () throws -> ConfigurationProfileLoadResult
+    private let save: @Sendable (ConfigurationProfileDocument) throws -> Void
     private let probe: @Sendable () -> String?
 
     init(
-        loadConfiguration: @escaping @Sendable () throws -> TrackIsBackConfiguration,
-        saveConfiguration: @escaping @Sendable (TrackIsBackConfiguration) throws -> Void,
+        loadProfiles: @escaping @Sendable () throws -> ConfigurationProfileLoadResult,
+        saveProfiles: @escaping @Sendable (ConfigurationProfileDocument) throws -> Void,
         probeReceiver: @escaping @Sendable () -> String?
     ) {
-        load = loadConfiguration
-        save = saveConfiguration
+        load = loadProfiles
+        save = saveProfiles
         probe = probeReceiver
     }
 
-    func loadConfiguration() throws -> TrackIsBackConfiguration {
+    func loadProfiles() throws -> ConfigurationProfileLoadResult {
         try load()
     }
 
-    func saveConfiguration(_ configuration: TrackIsBackConfiguration) throws {
-        try save(configuration)
+    func saveProfiles(_ document: ConfigurationProfileDocument) throws {
+        try save(document)
     }
 
     func probeReceiver() -> String? {

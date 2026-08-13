@@ -165,6 +165,7 @@
         }
       }
     },
+    "Cancel": {},
     "Center": {
       "localizations": {
         "en": {
@@ -320,6 +321,7 @@
         }
       }
     },
+    "Create profile": {},
     "Defaults": {
       "localizations": {
         "en": {
@@ -350,6 +352,12 @@
         }
       }
     },
+    "Delete %arg?": {},
+    "Delete Profile": {},
+    "Delete profile": {},
+    "Deleting the active profile activates Default first. This cannot be undone.": {},
+    "Discard Changes": {},
+    "Discard unsaved changes?": {},
     "Down arrow": {
       "localizations": {
         "en": {
@@ -360,6 +368,9 @@
         }
       }
     },
+    "Duplicate Default to customize it.": {},
+    "Duplicate Profile": {},
+    "Duplicate profile": {},
     "Enable Paddr in Accessibility, then return to the app.": {
       "localizations": {
         "en": {
@@ -535,6 +546,7 @@
         }
       }
     },
+    "New Profile": {},
     "None": {
       "localizations": {
         "en": {
@@ -587,6 +599,7 @@
         }
       }
     },
+    "Open Configuration to switch profiles…": {},
     "Open Configuration…": {
       "localizations": {
         "en": {
@@ -722,6 +735,10 @@
         }
       }
     },
+    "Profile": {},
+    "Profile name": {},
+    "Profile names must be nonempty and unique, ignoring case.": {},
+    "Profiles": {},
     "Quit Paddr": {
       "localizations": {
         "en": {
@@ -792,6 +809,8 @@
         }
       }
     },
+    "Rename Profile": {},
+    "Rename profile": {},
     "Request": {
       "comment": "Button that requests a macOS privacy permission.",
       "localizations": {
@@ -996,6 +1015,7 @@
         }
       }
     },
+    "Switching profiles replaces the current draft. Unsaved changes will not be copied.": {},
     "System access": {
       "localizations": {
         "en": {

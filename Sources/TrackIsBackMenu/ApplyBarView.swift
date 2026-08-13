@@ -120,10 +120,11 @@ struct ApplyBarView: View {
             HStack(spacing: 10) {
                 Button("Defaults", systemImage: "arrow.counterclockwise", action: model.restoreDefaults)
                     .paddrActionButton()
+                    .disabled(!model.canEditActiveProfile)
 
                 Button("Save & Apply", systemImage: "checkmark", action: model.saveAndApply)
                     .paddrActionButton(prominent: true)
-                    .disabled(!model.hasUnsavedChanges && !model.isEnabled)
+                    .disabled(!model.canSaveAndApply)
                     .keyboardShortcut("s", modifiers: .command)
             }
         }

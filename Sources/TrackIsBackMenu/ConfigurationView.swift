@@ -13,6 +13,7 @@ struct ConfigurationView: View {
             VStack(spacing: 0) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: PaddrStyle.sectionSpacing) {
+                        ProfileBarView(model: model)
                         if !model.hasSystemAccess { SystemAccessView(model: model) }
                         ViewThatFits(in: .horizontal) {
                             HStack(alignment: .top, spacing: PaddrStyle.sectionSpacing) {
@@ -41,6 +42,7 @@ struct ConfigurationView: View {
                                 )
                             }
                         }
+                        .disabled(!model.canEditActiveProfile)
                     }
                     .padding(PaddrStyle.panelPadding)
                     .onGeometryChange(
@@ -90,6 +92,7 @@ struct ConfigurationView: View {
 
                 Toggle("Trackpad output", isOn: $model.isEnabled)
                     .labelsHidden()
+                    .disabled(!model.canToggleOutput)
                     .toggleStyle(.switch)
                     .accessibilityValue(
                         model.isEnabled

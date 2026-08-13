@@ -1,13 +1,23 @@
 import Foundation
 
 public enum ConfigurationStore {
-    public static var defaultURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/Paddr/config.json")
-    }
+    public static var defaultURL: URL { ConfigurationProfileStore.defaultURL }
 
     public static func load(from url: URL? = nil) throws -> TrackIsBackConfiguration {
         try load(
+            from: url,
+            fileManager: .default,
+            homeDirectory: FileManager.default.homeDirectoryForCurrentUser
+        )
+    }
+
+    package static func loadInput(
+        from url: URL
+    ) throws -> (
+        configuration: TrackIsBackConfiguration,
+        profileDocument: ConfigurationProfileDocument?
+    ) {
+        try loadInput(
             from: url,
             fileManager: .default,
             homeDirectory: FileManager.default.homeDirectoryForCurrentUser
@@ -19,6 +29,21 @@ public enum ConfigurationStore {
         fileManager: FileManager,
         homeDirectory: URL
     ) throws -> TrackIsBackConfiguration {
+        try loadInput(
+            from: url,
+            fileManager: fileManager,
+            homeDirectory: homeDirectory
+        ).configuration
+    }
+
+    private static func loadInput(
+        from url: URL?,
+        fileManager: FileManager,
+        homeDirectory: URL
+    ) throws -> (
+        configuration: TrackIsBackConfiguration,
+        profileDocument: ConfigurationProfileDocument?
+    ) {
         let isExplicitURL = url != nil
         let candidate = url ?? defaultCandidateURL(
             fileManager: fileManager,
@@ -30,7 +55,7 @@ public enum ConfigurationStore {
                     "Configuration file does not exist at \(candidate.path)."
                 )
             }
-            return .default
+            return (.default, nil)
         }
         do {
             let values = try candidate.resourceValues(forKeys: [.isRegularFileKey])
@@ -40,7 +65,7 @@ public enum ConfigurationStore {
                 )
             }
             let data = try Data(contentsOf: candidate)
-            return try JSONDecoder().decode(TrackIsBackConfiguration.self, from: data).validated()
+            return try ConfigurationProfileStore.decodeConfigurationInput(from: data)
         } catch let error as TrackIsBackError {
             throw error
         } catch {
@@ -55,7 +80,19 @@ public enum ConfigurationStore {
     }
 
     public static func save(_ configuration: TrackIsBackConfiguration, to url: URL? = nil) throws {
-        let destination = url ?? defaultURL
+        guard let destination = url else {
+            throw TrackIsBackError.configuration(
+                "Legacy raw configuration saves require an explicit destination. The default path is owned by the profile store."
+            )
+        }
+        if FileManager.default.fileExists(atPath: destination.path) {
+            let existing = try Data(contentsOf: destination)
+            if (try? ConfigurationProfileStore.isProfileDocument(existing)) == true {
+                throw TrackIsBackError.configuration(
+                    "Legacy raw configuration cannot replace a profile document at \(destination.path)."
+                )
+            }
+        }
         try FileManager.default.createDirectory(
             at: destination.deletingLastPathComponent(),
             withIntermediateDirectories: true
