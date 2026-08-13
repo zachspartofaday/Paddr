@@ -57,6 +57,7 @@ enum PaddrStyle {
     static let defaultWindowSize = NSSize(width: 1_120, height: 600)
     static let minimumWindowSize = NSSize(width: 640, height: 360)
     static let padColumnWidth: CGFloat = 530
+    static let padConfigurationCardHeight: CGFloat = 380
     static let zoneMapWidth: CGFloat = 190
     static let zoneMapHeight: CGFloat = 182
     static let padPreviewCornerRadius: CGFloat = 30
@@ -147,6 +148,10 @@ extension View {
     }
 
     func paddrCard() -> some View { modifier(PaddrCardModifier()) }
+
+    func paddrMenuSelector() -> some View {
+        tint(Color(nsColor: .labelColor))
+    }
 
     func paddrActionButton(prominent: Bool = false) -> some View {
         modifier(PaddrActionButtonModifier(prominent: prominent))

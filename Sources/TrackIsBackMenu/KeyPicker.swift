@@ -25,6 +25,7 @@ struct OutputBindingPicker: View {
         }
         .labelsHidden()
         .pickerStyle(.menu)
+        .paddrMenuSelector()
         .controlSize(.regular)
         .frame(width: width, alignment: .trailing)
         .accessibilityLabel("Zone action")

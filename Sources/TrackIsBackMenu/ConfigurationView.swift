@@ -13,8 +13,7 @@ struct ConfigurationView: View {
             VStack(spacing: 0) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: PaddrStyle.sectionSpacing) {
-                        ProfileBarView(model: model)
-                        if !model.hasSystemAccess { SystemAccessView(model: model) }
+                        TopControlsView(model: model)
                         ViewThatFits(in: .horizontal) {
                             HStack(alignment: .top, spacing: PaddrStyle.sectionSpacing) {
                                 PadConfigurationView(
@@ -42,7 +41,9 @@ struct ConfigurationView: View {
                                 )
                             }
                         }
-                        .disabled(!model.canEditActiveProfile)
+                        .disabled(!model.activeProfileControlsAppearEnabled)
+                        .allowsHitTesting(model.canEditActiveProfile)
+                        .accessibilityRespondsToUserInteraction(model.canEditActiveProfile)
                     }
                     .padding(PaddrStyle.panelPadding)
                     .onGeometryChange(

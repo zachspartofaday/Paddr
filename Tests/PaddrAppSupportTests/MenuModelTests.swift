@@ -1730,6 +1730,8 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(receiver: "Fake puck")
         state.loadedProfileDocument = .default
         state.loadDiagnostic = "Missing active profile; Default is active."
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
         let recorder = OperationRecorder()
         state.operationRecorder = recorder
         let session = RecordingSession(recorder: recorder)
@@ -1739,6 +1741,10 @@ final class MenuModelTests: XCTestCase {
         model.isEnabled = true
         XCTAssertTrue(model.canSaveAndApply)
         model.saveAndApply()
+        await waitUntil { state.saveCallCount == 1 }
+        XCTAssertEqual(model.profileSelectionPresentation, .active(.default))
+        state.saveGate = nil
+        saveGate.signal()
         await waitUntil(model: model) { model.isRunning && !model.needsInitialSave }
 
         XCTAssertEqual(recorder.values, ["stop", "save", "start"])
@@ -1761,10 +1767,12 @@ final class MenuModelTests: XCTestCase {
             model.requestProfileSelection(id: second.id, source: .configurationWindow),
             .confirmationRequired(second.id)
         )
+        XCTAssertEqual(model.profileSelectionPresentation, .active(first.id))
         XCTAssertEqual(
             model.resolveProfileSelection(id: second.id, discardChanges: false),
             .cancelled
         )
+        XCTAssertEqual(model.profileSelectionPresentation, .active(first.id))
         XCTAssertEqual(model.activeProfileID, first.id)
         XCTAssertEqual(model.configuration.left.sensitivity, 9)
 
@@ -1772,9 +1780,160 @@ final class MenuModelTests: XCTestCase {
             model.resolveProfileSelection(id: second.id, discardChanges: true),
             .accepted
         )
+        XCTAssertEqual(model.profileSelectionPresentation, .switching(to: second.id, named: second.name))
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertEqual(model.configuration.left.sensitivity, 9)
         await waitUntil(model: model) { model.activeProfileID == second.id }
+        XCTAssertEqual(model.profileSelectionPresentation, .active(second.id))
         XCTAssertEqual(model.configuration, second.configuration)
         XCTAssertFalse(model.hasUnsavedChanges)
+    }
+
+    func testProfileControlAppearancePreservesCommittedEditabilityUntilSelectionCommits() async throws {
+        do {
+            let state = readyState(receiver: nil)
+            let (document, _, second) = try twoProfileDocument()
+            state.loadedProfileDocument = document
+            let saveGate = DispatchSemaphore(value: 0)
+            state.saveGate = saveGate
+            let model = PaddrMenuModel(dependencies: dependencies(state: state))
+            await waitUntil(model: model) { model.isInitialized }
+
+            XCTAssertTrue(model.activeProfileControlsAppearEnabled)
+            XCTAssertEqual(model.requestProfileSelection(id: second.id, source: .menu), .accepted)
+            XCTAssertFalse(model.canEditActiveProfile)
+            XCTAssertTrue(model.activeProfileControlsAppearEnabled)
+            state.saveGate = nil
+            saveGate.signal()
+            await waitUntil(model: model) { model.activeProfileID == second.id }
+            XCTAssertTrue(model.canEditActiveProfile)
+            XCTAssertTrue(model.activeProfileControlsAppearEnabled)
+        }
+
+        do {
+            let state = readyState(receiver: nil)
+            let (document, _, _) = try twoProfileDocument()
+            state.loadedProfileDocument = document
+            let saveGate = DispatchSemaphore(value: 0)
+            state.saveGate = saveGate
+            let model = PaddrMenuModel(dependencies: dependencies(state: state))
+            await waitUntil(model: model) { model.isInitialized }
+
+            XCTAssertTrue(model.activeProfileControlsAppearEnabled)
+            XCTAssertEqual(model.requestProfileSelection(id: .default, source: .menu), .accepted)
+            XCTAssertFalse(model.canEditActiveProfile)
+            XCTAssertTrue(model.activeProfileControlsAppearEnabled)
+            state.saveGate = nil
+            saveGate.signal()
+            await waitUntil(model: model) { model.activeProfileID == .default }
+            XCTAssertFalse(model.canEditActiveProfile)
+            XCTAssertFalse(model.activeProfileControlsAppearEnabled)
+        }
+
+        do {
+            let state = readyState(receiver: nil)
+            var (document, _, second) = try twoProfileDocument()
+            document.activeProfileID = .default
+            state.loadedProfileDocument = document
+            let saveGate = DispatchSemaphore(value: 0)
+            state.saveGate = saveGate
+            let model = PaddrMenuModel(dependencies: dependencies(state: state))
+            await waitUntil(model: model) { model.isInitialized }
+
+            XCTAssertFalse(model.activeProfileControlsAppearEnabled)
+            XCTAssertEqual(model.requestProfileSelection(id: second.id, source: .menu), .accepted)
+            XCTAssertFalse(model.canEditActiveProfile)
+            XCTAssertFalse(model.activeProfileControlsAppearEnabled)
+            state.saveGate = nil
+            saveGate.signal()
+            await waitUntil(model: model) { model.activeProfileID == second.id }
+            XCTAssertTrue(model.canEditActiveProfile)
+            XCTAssertTrue(model.activeProfileControlsAppearEnabled)
+        }
+    }
+
+    func testActiveProfileReplacementPresentationCoversCreateDuplicateAndDelete() async throws {
+        do {
+            let state = readyState(receiver: nil)
+            let (document, first, _) = try twoProfileDocument()
+            state.loadedProfileDocument = document
+            let saveGate = DispatchSemaphore(value: 0)
+            state.saveGate = saveGate
+            let model = PaddrMenuModel(dependencies: dependencies(state: state))
+            await waitUntil(model: model) { model.isInitialized }
+
+            XCTAssertTrue(model.createProfile(named: "Third"))
+            guard case let .switching(to: pendingID, named: pendingName) = model.profileSelectionPresentation else {
+                state.saveGate = nil
+                saveGate.signal()
+                return XCTFail("Expected create to present its pending activation")
+            }
+            XCTAssertEqual(pendingName, "Third")
+            XCTAssertNotEqual(pendingID, first.id)
+            XCTAssertEqual(model.activeProfileID, first.id)
+            XCTAssertEqual(model.profiles, document.profiles)
+            XCTAssertTrue(model.activeProfileControlsAppearEnabled)
+            XCTAssertFalse(model.duplicateActiveProfile())
+
+            state.saveGate = nil
+            saveGate.signal()
+            await waitUntil(model: model) { model.activeProfileID == pendingID }
+            XCTAssertEqual(model.activeProfile.name, "Third")
+            XCTAssertEqual(model.profileSelectionPresentation, .active(pendingID))
+        }
+
+        do {
+            let state = readyState(receiver: nil)
+            let (document, first, _) = try twoProfileDocument()
+            state.loadedProfileDocument = document
+            let saveGate = DispatchSemaphore(value: 0)
+            state.saveGate = saveGate
+            let model = PaddrMenuModel(dependencies: dependencies(state: state))
+            await waitUntil(model: model) { model.isInitialized }
+
+            XCTAssertTrue(model.duplicateActiveProfile())
+            guard case let .switching(to: pendingID, named: pendingName) = model.profileSelectionPresentation else {
+                state.saveGate = nil
+                saveGate.signal()
+                return XCTFail("Expected duplicate to present its pending activation")
+            }
+            XCTAssertEqual(pendingName, "First Copy")
+            XCTAssertNotEqual(pendingID, first.id)
+            XCTAssertEqual(model.activeProfileID, first.id)
+            XCTAssertEqual(model.profiles, document.profiles)
+            XCTAssertTrue(model.activeProfileControlsAppearEnabled)
+
+            state.saveGate = nil
+            saveGate.signal()
+            await waitUntil(model: model) { model.activeProfileID == pendingID }
+            XCTAssertEqual(model.activeProfile.name, "First Copy")
+            XCTAssertEqual(model.profileSelectionPresentation, .active(pendingID))
+        }
+
+        do {
+            let state = readyState(receiver: nil)
+            let (document, first, _) = try twoProfileDocument()
+            state.loadedProfileDocument = document
+            let saveGate = DispatchSemaphore(value: 0)
+            state.saveGate = saveGate
+            let model = PaddrMenuModel(dependencies: dependencies(state: state))
+            await waitUntil(model: model) { model.isInitialized }
+
+            XCTAssertTrue(model.deleteProfile(id: first.id, confirmed: true))
+            XCTAssertEqual(
+                model.profileSelectionPresentation,
+                .switching(to: .default, named: ConfigurationProfile.default.name)
+            )
+            XCTAssertEqual(model.activeProfileID, first.id)
+            XCTAssertEqual(model.profiles, document.profiles)
+            XCTAssertTrue(model.activeProfileControlsAppearEnabled)
+
+            state.saveGate = nil
+            saveGate.signal()
+            await waitUntil(model: model) { model.activeProfileID == .default }
+            XCTAssertEqual(model.profileSelectionPresentation, .active(.default))
+            XCTAssertFalse(model.activeProfileControlsAppearEnabled)
+        }
     }
 
     func testMenuProfileSelectionIsBlockedWhileDraftIsUnsaved() async throws {
@@ -1877,6 +2036,9 @@ final class MenuModelTests: XCTestCase {
             model.requestProfileSelection(id: second.id, source: .menu),
             .accepted
         )
+        XCTAssertEqual(model.profileSelectionPresentation, .switching(to: second.id, named: second.name))
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertEqual(model.configuration, first.configuration)
         await waitUntil { state.saveCallCount == 1 }
         model.isEnabled = true
         XCTAssertTrue(model.isEnabled)
@@ -1897,6 +2059,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(stopCount, 1)
         XCTAssertFalse(model.isEnabled)
         XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.profileSelectionPresentation, .active(first.id))
         XCTAssertEqual(model.activeProfileID, first.id)
         XCTAssertEqual(model.configuration, first.configuration)
         XCTAssertEqual(model.savedConfiguration, first.configuration)
@@ -1953,12 +2116,14 @@ final class MenuModelTests: XCTestCase {
             model.requestProfileSelection(id: second.id, source: .menu),
             .accepted
         )
+        XCTAssertEqual(model.profileSelectionPresentation, .switching(to: second.id, named: second.name))
         await session.waitForStop(2)
         model.isEnabled = false
+        XCTAssertEqual(model.profileSelectionPresentation, .switching(to: second.id, named: second.name))
         await session.waitForStop(3)
         await session.releaseStop(2)
-        for _ in 0..<1_000 where state.saveCompletionCount == 0 {
-            await Task.yield()
+        await waitUntil(model: model) {
+            state.saveCompletionCount == 1 && model.activeProfileID == second.id
         }
 
         let startCount = await session.startCount
@@ -1967,6 +2132,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.isEnabled)
         XCTAssertFalse(model.isRunning)
         XCTAssertEqual(model.status, .off)
+        XCTAssertEqual(model.profileSelectionPresentation, .active(second.id))
         XCTAssertEqual(model.activeProfileID, second.id)
         XCTAssertEqual(model.configuration, second.configuration)
         XCTAssertEqual(model.savedConfiguration, second.configuration)
@@ -2106,11 +2272,13 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(state.savedProfileDocument?.activeProfileID, second.id)
     }
 
-    func testTerminationDuringProfileSelectionPreventsStalePersistenceAndRestart() async throws {
+    func testTerminationDuringProfileSelectionPreventsStalePublicationAndRestart() async throws {
         let state = readyState(receiver: "Fake")
         let (document, first, second) = try twoProfileDocument()
         state.loadedProfileDocument = document
-        let session = GatedSession(blockedStops: [2])
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let session = GatedSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
         model.isEnabled = true
@@ -2120,22 +2288,31 @@ final class MenuModelTests: XCTestCase {
             model.requestProfileSelection(id: second.id, source: .menu),
             .accepted
         )
-        await session.waitForStop(2)
+        await waitUntil { state.saveCallCount == 1 }
+        XCTAssertEqual(model.profileSelectionPresentation, .switching(to: second.id, named: second.name))
+
         var didComplete = false
         XCTAssertTrue(model.stopForTermination { didComplete = true })
-        await session.waitForStop(3)
-        await session.releaseStop(2)
+        XCTAssertEqual(model.profileSelectionPresentation, .switching(to: second.id, named: second.name))
+        state.saveGate = nil
+        saveGate.signal()
         await waitUntil(model: model) { didComplete }
 
         let startCount = await session.startCount
-        XCTAssertEqual(state.saveCallCount, 0)
+        XCTAssertEqual(state.saveCallCount, 1)
+        XCTAssertEqual(state.saveCompletionCount, 1)
         XCTAssertEqual(startCount, 1)
         XCTAssertFalse(model.isEnabled)
         XCTAssertFalse(model.isRunning)
         XCTAssertEqual(model.status, .releasingOutputs)
+        XCTAssertEqual(model.profileSelectionPresentation, .active(first.id))
         XCTAssertEqual(model.activeProfileID, first.id)
         XCTAssertEqual(model.configuration, first.configuration)
-        XCTAssertNil(state.savedProfileDocument)
+        XCTAssertEqual(model.savedConfiguration, first.configuration)
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, second.id)
+        await Task.yield()
+        XCTAssertEqual(model.profileSelectionPresentation, .active(first.id))
+        XCTAssertEqual(model.activeProfileID, first.id)
     }
 
     func testEnabledProfileSelectionRejectsOldSessionEventsAndReestablishesLivenessAuthority() async throws {
@@ -2265,6 +2442,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil { state.saveCallCount == 1 }
 
         XCTAssertFalse(model.canEditActiveProfile)
+        XCTAssertTrue(model.activeProfileControlsAppearEnabled)
         XCTAssertFalse(model.canManageProfiles)
         XCTAssertFalse(model.canSaveAndApply)
         model.configuration.left.sensitivity = 9

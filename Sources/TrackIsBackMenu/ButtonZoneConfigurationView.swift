@@ -133,6 +133,7 @@ struct ButtonZoneConfigurationView: View {
         }
         .labelsHidden()
         .pickerStyle(.menu)
+        .paddrMenuSelector()
         .frame(width: 160, alignment: .trailing)
         .help("Choose how the trackpad is divided into button areas.")
     }
@@ -151,6 +152,7 @@ struct ButtonZoneConfigurationView: View {
         }
         .labelsHidden()
         .pickerStyle(.menu)
+        .paddrMenuSelector()
         .frame(width: PaddrStyle.compactPickerWidth, alignment: .trailing)
         .accessibilityIdentifier("selected-area-picker")
         .help("Choose the trackpad area to configure.")
