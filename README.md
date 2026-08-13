@@ -7,7 +7,7 @@
 
 See [CHANGELOG.md](CHANGELOG.md) for release history and current compatibility notes.
 
-![Paddr configuration window with the left trackpad set to Scroll, the right trackpad set to Pointer, and status pills showing Controller Connected, Output Idle, and Access Ready](docs/images/paddr-overview.png)
+![Paddr configuration window showing the Everyday profile, the left trackpad set to Scroll, the right trackpad set to Pointer, and status showing Controller Not found, Output Idle, and Access Needed](docs/images/paddr-profile-overview.png)
 
 ## What Paddr adds
 
@@ -18,8 +18,6 @@ Apple's HID service continues to provide native buttons, sticks, triggers, and c
 - touch-taps mapped to a keyboard key, left click, or right click;
 - a pointer-mode center tap radius that reserves the pad center for tapping; and
 - named profiles for saving and quickly switching complete two-pad setups.
-
-![Paddr configuration window with the left trackpad set to Zones in Four corners mode, the Zone settings Mode row visible, the right trackpad set to Scroll, and status pills showing Controller Connected, Output Idle, and Access Ready](docs/images/paddr-zones.png)
 
 The interactive squircle map mirrors runtime hit-testing. Select a region on the map or with the **Selected area** pop-up, then assign its action. Radial, corner, and two-way layouts support an adjustable neutral region; the 3×3 layout dedicates the full pad to nine actions.
 
@@ -43,9 +41,12 @@ Puck mode is the only confirmed connection. Bluetooth and direct USB remain unva
 
 1. Download `Paddr.zip` from [Releases](https://github.com/zachspartofaday/Paddr/releases).
 2. Move `Paddr.app` to Applications and launch it. On first launch, the four-step guide walks through connection, Accessibility, pad setup, and everyday use; reopen it later from Help or the status menu.
+
+![Paddr Guide welcome page, step 1 of 4, explaining trackpad mouse, scrolling, and keyboard mappings without Steam Input](docs/images/paddr-onboarding.png)
+
 3. Grant Accessibility when prompted.
 
-![Paddr permission-request window showing one Accessibility tile with a Request button and Access Needed status](docs/images/paddr-permissions.png)
+![Paddr Guide Accessibility page, step 3 of 4, showing Access needed with Request and Open Settings buttons](docs/images/paddr-permissions.png)
 
 4. Duplicate the built-in **Default** profile, name the copy, configure both trackpads, and choose **Save & Apply**. Default always remains left Scroll/right Pointer and cannot be renamed, edited, or deleted.
 
@@ -61,6 +62,14 @@ Choose **Zones** independently for either trackpad:
 - **Four corners:** four diagonal quadrants;
 - **Left / right** or **Top / bottom:** two large regions; or
 - **3 × 3:** nine independent bindings.
+
+| Radial 4-way | Four corners |
+| --- | --- |
+| [![Paddr configuration window showing the Everyday profile, left trackpad Zones in Four-way radial mode with four directional regions, and right trackpad Scroll](docs/images/paddr-zones-radial-four-way.png)](docs/images/paddr-zones-radial-four-way.png) | [![Paddr configuration window showing the Everyday profile, left trackpad Zones in Four corners mode with four corner regions, and right trackpad Scroll](docs/images/paddr-zones-four-corners.png)](docs/images/paddr-zones-four-corners.png) |
+| Left / right | Top / bottom |
+| [![Paddr configuration window showing the Everyday profile, left trackpad Zones in Left/right mode with two vertical regions, and right trackpad Scroll](docs/images/paddr-zones-left-right.png)](docs/images/paddr-zones-left-right.png) | [![Paddr configuration window showing the Everyday profile, left trackpad Zones in Top/bottom mode with two horizontal regions, and right trackpad Scroll](docs/images/paddr-zones-top-bottom.png)](docs/images/paddr-zones-top-bottom.png) |
+| 3 × 3 | |
+| [![Paddr configuration window showing the Everyday profile, left trackpad Zones in 3 by 3 grid mode with nine regions, and right trackpad Scroll](docs/images/paddr-zones-three-by-three.png)](docs/images/paddr-zones-three-by-three.png) | |
 
 Each region can hold a keyboard key, left mouse button, or right mouse button until the touch moves or lifts. Crossing regions releases the previous action before pressing the next one. Non-grid layouts expose a **Neutral zone** control; 3×3 uses the complete pad.
 
