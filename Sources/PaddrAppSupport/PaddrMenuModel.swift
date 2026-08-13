@@ -118,7 +118,10 @@ public final class PaddrMenuModel {
             && (hasUnsavedChanges || isEnabled)
     }
     public var canSelectProfileFromMenu: Bool {
-        isInitialized && !hasUnsavedChanges && configurationTask == nil
+        isInitialized
+            && !hasUnsavedChanges
+            && configurationTask == nil
+            && !profileDocumentSaveInProgress
     }
 
     public init(dependencies: MenuDependencies = .live) {
@@ -331,7 +334,8 @@ public final class PaddrMenuModel {
         guard isInitialized else { return .operationInProgress }
         guard profileDocument.profile(id: id) != nil else { return .profileNotFound }
         guard !storageWriteBlocked else { return .storageUnavailable }
-        guard configurationTask == nil else { return .operationInProgress }
+        guard configurationTask == nil,
+              !profileDocumentSaveInProgress else { return .operationInProgress }
         guard id != activeProfileID else { return .unchanged }
         if hasUnsavedChanges {
             return source == .configurationWindow
@@ -351,7 +355,8 @@ public final class PaddrMenuModel {
         guard discardChanges else { return .cancelled }
         guard profileDocument.profile(id: id) != nil else { return .profileNotFound }
         guard !storageWriteBlocked else { return .storageUnavailable }
-        guard configurationTask == nil else { return .operationInProgress }
+        guard configurationTask == nil,
+              !profileDocumentSaveInProgress else { return .operationInProgress }
         beginProfileActivation(id: id)
         return .accepted
     }
@@ -449,7 +454,8 @@ public final class PaddrMenuModel {
     private func canBeginProfileMutation(discardingDraft: Bool) -> Bool {
         guard isInitialized,
               terminationState == .idle,
-              configurationTask == nil else { return false }
+              configurationTask == nil,
+              !profileDocumentSaveInProgress else { return false }
         guard !storageWriteBlocked else {
             publishProfileOperationFailure(
                 TrackIsBackError.configuration(
@@ -790,6 +796,13 @@ public final class PaddrMenuModel {
         operation: UInt64,
         statusGeneration: UInt64
     ) async -> Bool {
+        guard await acquireActivationPersistenceBoundary(operation: operation) else { return false }
+        defer {
+            profileOperationInProgress = false
+            profileDocumentSaveInProgress = false
+            statusDidChange?()
+        }
+
         while isCurrent(operation), isEnabled {
             let draft = configuration
             let revision = draftRevision
@@ -834,6 +847,20 @@ public final class PaddrMenuModel {
                 )
                 return false
             }
+        }
+        return false
+    }
+
+    private func acquireActivationPersistenceBoundary(operation: UInt64) async -> Bool {
+        while isCurrent(operation), isEnabled {
+            guard let pendingConfigurationTask = configurationTask else {
+                guard !profileDocumentSaveInProgress else { return false }
+                profileOperationInProgress = true
+                profileDocumentSaveInProgress = true
+                statusDidChange?()
+                return true
+            }
+            await pendingConfigurationTask.value
         }
         return false
     }

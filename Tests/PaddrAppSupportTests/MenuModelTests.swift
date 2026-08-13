@@ -1185,6 +1185,75 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.hasUnsavedChanges)
     }
 
+    func testEnableDrainsConfigurationTaskHandoffBeforeActivationCommit() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, first, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let recorder = OperationRecorder()
+        state.operationRecorder = recorder
+        let session = RecordingSession(recorder: recorder)
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.configuration.left.sensitivity = 3
+        let firstSaveGate = DispatchSemaphore(value: 0)
+        state.saveGate = firstSaveGate
+        model.saveAndApply()
+        await waitUntil { state.saveCallCount == 1 }
+
+        model.configuration.left.sensitivity = 5
+        model.isEnabled = true
+        let secondSaveGate = DispatchSemaphore(value: 0)
+        var didQueueRename = false
+        model.statusDidChange = {
+            guard !didQueueRename, state.saveCompletionCount == 1 else { return }
+            didQueueRename = true
+            state.saveGate = secondSaveGate
+            XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
+        }
+        state.saveGate = nil
+        firstSaveGate.signal()
+        await waitUntil { state.saveCallCount == 2 }
+
+        XCTAssertTrue(didQueueRename)
+        XCTAssertTrue(model.isEnabled)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertFalse(model.canManageProfiles)
+        let startedConfigurationsBeforeHandoff = await session.startedConfigurations
+        XCTAssertEqual(startedConfigurationsBeforeHandoff.count, 0)
+
+        state.saveGate = nil
+        secondSaveGate.signal()
+        for _ in 0..<1_000 {
+            if model.isRunning, state.saveCompletionCount == 3 { break }
+            await Task.yield()
+        }
+        model.statusDidChange = nil
+
+        let startedConfigurations = await session.startedConfigurations
+        let maximumWorkerCount = await session.maximumWorkerCount
+        XCTAssertEqual(state.saveCallCount, 3)
+        XCTAssertEqual(state.saveCompletionCount, 3)
+        XCTAssertEqual(recorder.values, ["save", "stop", "save", "save", "start"])
+        XCTAssertEqual(startedConfigurations.map(\.left.sensitivity), [5])
+        XCTAssertEqual(maximumWorkerCount, 1)
+        XCTAssertTrue(model.isEnabled)
+        XCTAssertTrue(model.isRunning)
+        XCTAssertTrue(model.canManageProfiles)
+        XCTAssertTrue(model.canEditActiveProfile)
+        XCTAssertTrue(model.canToggleOutput)
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertEqual(model.activeProfile.name, "Renamed")
+        XCTAssertEqual(model.configuration.left.sensitivity, 5)
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 5)
+        XCTAssertEqual(model.activeProfile.configuration.left.sensitivity, 5)
+        XCTAssertEqual(state.savedProfileDocument?.profile(id: first.id)?.name, "Renamed")
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
+            5
+        )
+    }
+
     func testEnableDuringOverlappingSaveCarriesCommitIntentToReplacementLifecycle() async {
         let state = readyState(receiver: "Fake")
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
@@ -2311,6 +2380,67 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(
             state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
             8
+        )
+    }
+
+    func testEnabledDirtyActivationCommitSerializesRenameWithoutStaleOverwrite() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let session = GatedSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.left.sensitivity = 9
+
+        model.isEnabled = true
+        await waitUntil { state.saveCallCount == 1 }
+
+        XCTAssertFalse(model.canManageProfiles)
+        XCTAssertFalse(model.createProfile(named: "New profile"))
+        XCTAssertFalse(model.duplicateActiveProfile())
+        XCTAssertFalse(model.renameActiveProfile(to: "Renamed"))
+        XCTAssertFalse(model.deleteProfile(id: second.id, confirmed: true))
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .operationInProgress
+        )
+        XCTAssertEqual(model.profiles, document.profiles)
+        XCTAssertEqual(state.saveCallCount, 1)
+
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) {
+            model.isRunning && !model.hasUnsavedChanges && model.canManageProfiles
+        }
+
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 9)
+        XCTAssertEqual(model.configuration.left.sensitivity, 9)
+        XCTAssertEqual(model.activeProfile.name, first.name)
+        XCTAssertEqual(model.activeProfile.configuration.left.sensitivity, 9)
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
+            9
+        )
+
+        XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
+        await waitUntil(model: model) {
+            model.activeProfile.name == "Renamed" && state.saveCompletionCount == 2
+        }
+
+        XCTAssertTrue(model.canManageProfiles)
+        XCTAssertTrue(model.canEditActiveProfile)
+        XCTAssertTrue(model.canToggleOutput)
+        XCTAssertTrue(model.isEnabled)
+        XCTAssertTrue(model.isRunning)
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 9)
+        XCTAssertEqual(model.configuration.left.sensitivity, 9)
+        XCTAssertEqual(model.activeProfile.configuration.left.sensitivity, 9)
+        XCTAssertEqual(state.savedProfileDocument?.profile(id: first.id)?.name, "Renamed")
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
+            9
         )
     }
 
