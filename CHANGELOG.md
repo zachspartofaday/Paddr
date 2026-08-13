@@ -1,0 +1,45 @@
+# Changelog
+
+User-visible changes to Paddr are recorded here. Release entries describe confirmed behavior at the time of each release; later entries may supersede earlier limitations.
+
+## 0.9.9 — Unreleased
+
+### Profiles and setup
+
+- Added named profiles for complete left- and right-pad configurations. Profiles can be created, duplicated, renamed, selected, and deleted from the configuration window, with quick switching between saved profiles from the status menu.
+- Kept the built-in **Default** profile immutable: it always provides left Scroll and right Pointer, and it cannot be renamed, edited, or deleted. Duplicate it to create an editable profile.
+- Existing configurations migrate automatically. An unchanged configuration selects Default, while customized settings become a **Previous configuration** profile; a failed migration leaves the original file intact.
+- Protected unsaved work during profile changes. Window switching asks before discarding edits, and status-menu switching pauses until the draft is saved or explicitly discarded.
+- Added a native four-step first-launch guide covering connection, Accessibility, pad setup, and everyday use. The guide can be reopened from Help or the status menu and does not request permission, enable output, or change a profile on its own.
+
+### Trackpads and controller status
+
+- Added an independent **Pointer acceleration** control for each pad, alongside the existing per-pad pointer and scroll sensitivity controls. The default of zero preserves the previous pointer response.
+- Confirmed that both pads can use **Zones** at the same time, including independent layouts and bindings.
+- Made **Controller Connected** reflect live controller reports rather than receiver presence alone. Turning off or losing the controller now releases held mapped keys and mouse buttons, marks the controller unavailable, and waits for neutral pad input before safely resuming after reconnect.
+- Kept direct-launch use independent of Steam: Paddr does not require Steam, Steam Input, or Steam Overlay, so mapped trackpad input remains available to games launched normally.
+
+### Interface
+
+- Showed Paddr in the Dock and Command-Tab while the guide or configuration window is open, then returned it to menu-bar-only operation after both windows close.
+- Refined the top card around profiles and status: profile controls remain in a stable location, selectors use a fixed width and stronger adaptive contrast, and Default presents a clear **Duplicate to Edit** path.
+- Kept both expanded pad cards equal in height across their different modes, while preserving a compact collapsed layout and smooth profile switching without control flicker.
+
+### Compatibility and validation notes
+
+- macOS 27 Developer Beta 5 remains the confirmed environment. macOS 27 Public Beta 3 has been released and is likely compatible; public betas typically correspond to the preceding developer beta, but this specific build identity and Paddr compatibility have not yet been confirmed.
+- Puck-connected Steam Controller 2 hardware using the tested receiver remains the confirmed connection. Bluetooth, direct USB, and the alternate receiver product remain unvalidated.
+- Final attended coverage is still needed for pointer-acceleration feel; held outputs across controller loss, profile changes, sleep/wake, and reconnect; keyboard and VoiceOver navigation; the largest Zones layout; and a broader range of games and hardware.
+- Paddr emits mouse, scroll, and keyboard events rather than native gamepad axes. Games that switch prompts according to the most recent input may alternate between controller and keyboard/mouse glyphs.
+
+## 0.9 — 2026-08-12
+
+Paddr 0.9 was the first Developer ID-signed, notarized, and stapled release.
+
+- Reduced setup to one Accessibility grant for reading pad reports and emitting mapped input.
+- Added independent per-pad scroll and pointer sensitivity, with matching command-line controls.
+- Refined the compact two-card configuration window and its connection, output, and access status guidance.
+- Improved everyday safety and reliability: quitting or losing a session releases held input, directional Zones follow the pressed direction, and delayed loads, saves, or device checks cannot replace newer user choices.
+- Strengthened archive and checksum verification for the distributed app.
+
+At the time of the 0.9 release, controller status tracked the receiver, only one pad was documented for Zones, and the configuration window did not appear in the Dock. Those limitations are superseded by 0.9.9.

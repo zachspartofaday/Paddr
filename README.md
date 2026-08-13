@@ -1,9 +1,11 @@
 # Paddr
 
-> **TL;DR:** macOS 27 Beta 5 added native Steam Controller 2 support through Apple's `SteamControllerHIDServicePlugin`, allowing a puck-connected controller to appear in the system controller picker and native game APIs. Apple currently omits usable trackpad input. Paddr adds the trackpads back as pointer, scroll, touch-tap, and configurable button-zone input. This depends on an early macOS beta implementation that Apple may change at any time, potentially breaking Paddr until it is updated.
+> **TL;DR:** macOS 27 Developer Beta 5 added native Steam Controller 2 support through Apple's `SteamControllerHIDServicePlugin`, allowing a puck-connected controller to appear in the system controller picker and native game APIs. Apple currently omits usable trackpad input. Paddr adds the trackpads back as pointer, scroll, touch-tap, and configurable button-zone input. This depends on an early macOS beta implementation that Apple may change at any time, potentially breaking Paddr until it is updated.
 
 > [!WARNING]
-> Paddr is an early, hardware-specific beta built quickly after macOS 27 Beta 5 shipped. Expect bugs and compatibility changes. Please report reproducible problems in [Issues](https://github.com/zachspartofaday/Paddr/issues).
+> Paddr is an early, hardware-specific beta confirmed on macOS 27 Developer Beta 5. macOS 27 Public Beta 3 has been released and is likely compatible: a public beta typically corresponds to the preceding developer beta, but the exact build identity and Paddr compatibility have not yet been confirmed. Expect bugs and compatibility changes, and please report reproducible problems in [Issues](https://github.com/zachspartofaday/Paddr/issues).
+
+See [CHANGELOG.md](CHANGELOG.md) for release history and current compatibility notes.
 
 ![Paddr configuration window with the left trackpad set to Scroll, the right trackpad set to Pointer, and status pills showing Controller Connected, Output Idle, and Access Ready](docs/images/paddr-overview.png)
 
@@ -11,16 +13,17 @@
 
 Apple's HID service continues to provide native buttons, sticks, triggers, and controller identity. Paddr passively reads the puck reports and adds:
 
-- **Button Zones:** radial four-way, four-corner, left/right, top/bottom, and 3×3 layouts with an independent keyboard key or mouse button for every region;
-- pointer and scroll modes with independent sensitivity;
-- touch-taps mapped to a keyboard key, left click, or right click; and
-- a pointer-mode center tap radius that reserves the pad center for tapping.
+- **Button Zones:** independently available on either or both pads, with radial four-way, four-corner, left/right, top/bottom, and 3×3 layouts and a separate keyboard key or mouse button for every region;
+- pointer mode with independent sensitivity and acceleration for each pad, plus independently adjustable scroll sensitivity;
+- touch-taps mapped to a keyboard key, left click, or right click;
+- a pointer-mode center tap radius that reserves the pad center for tapping; and
+- named profiles for saving and quickly switching complete two-pad setups.
 
 ![Paddr configuration window with the left trackpad set to Zones in Four corners mode, the Zone settings Mode row visible, the right trackpad set to Scroll, and status pills showing Controller Connected, Output Idle, and Access Ready](docs/images/paddr-zones.png)
 
 The interactive squircle map mirrors runtime hit-testing. Select a region on the map or with the **Selected area** pop-up, then assign its action. Radial, corner, and two-way layouts support an adjustable neutral region; the 3×3 layout dedicates the full pad to nine actions.
 
-Paddr does not send controller feature reports or alter lizard mode, firmware, IMU, haptics, rumble, or Apple's native gamepad mappings.
+Paddr does not send controller feature reports or alter lizard mode, firmware, IMU, haptics, rumble, or Apple's native gamepad mappings. **Controller Connected** reflects fresh reports from the controller rather than receiver presence alone; if those reports stop, Paddr releases held mapped input and waits for neutral pad input before resuming after reconnect.
 
 ## Use the trackpads without Steam Input
 
@@ -32,14 +35,14 @@ Paddr does not require Steam to be installed or running. Apple's native controll
 
 Requirements:
 
-- macOS 27 Beta 5 with `SteamControllerHIDServicePlugin.plugin`;
+- macOS 27 Developer Beta 5 with `SteamControllerHIDServicePlugin.plugin` (confirmed); macOS 27 Public Beta 3 is likely compatible but remains unconfirmed;
 - Steam Controller 2 connected through the puck; and
 - Accessibility permission to read trackpad reports and emit mapped mouse and keyboard events.
 
 Puck mode is the only confirmed connection. Bluetooth and direct USB remain unvalidated.
 
 1. Download `Paddr.zip` from [Releases](https://github.com/zachspartofaday/Paddr/releases).
-2. Move `Paddr.app` to Applications and launch it.
+2. Move `Paddr.app` to Applications and launch it. On first launch, the four-step guide walks through connection, Accessibility, pad setup, and everyday use; reopen it later from Help or the status menu.
 3. Grant Accessibility when prompted.
 
 ![Paddr permission-request window showing one Accessibility tile with a Request button and Access Needed status](docs/images/paddr-permissions.png)
@@ -48,7 +51,7 @@ Puck mode is the only confirmed connection. Bluetooth and direct USB remain unva
 
 Profiles own the complete left/right configuration and keep a stable internal ID when renamed. Use the configuration-window picker to create, duplicate, rename, select, or delete profiles; profile names cannot themselves be UUIDs, keeping name-or-ID selection unambiguous. Switching with unsaved edits asks before discarding them. Deleting the active user profile confirms and activates Default first.
 
-Closing the configuration window leaves Paddr in the menu bar with quick actions for output and saved-profile switching. Menu switching is unavailable while the configuration window has an unsaved draft; open the window to save or explicitly discard it. The window remains ordinarily resizable but does not support full screen.
+Closing the guide and configuration window leaves Paddr in the menu bar with quick actions for output and saved-profile switching. Paddr appears in the Dock and Command-Tab only while either window is open. Menu switching is unavailable while the configuration window has an unsaved draft; open the window to save or explicitly discard it. The configuration window remains ordinarily resizable but does not support full screen.
 
 ## Button Zones
 
