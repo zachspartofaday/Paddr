@@ -65,9 +65,13 @@ struct PadConfigurationView: View {
             .contentShape(.rect)
         }
         .padding(PaddrStyle.cardPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: PaddrStyle.padConfigurationCardHeight,
+            maxHeight: PaddrStyle.padConfigurationCardHeight,
+            alignment: .topLeading
+        )
         .paddrCard()
-        .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
     }

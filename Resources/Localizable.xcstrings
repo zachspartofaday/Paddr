@@ -321,7 +321,8 @@
         }
       }
     },
-    "Create profile": {},
+    "Create, duplicate, rename, or delete profiles": {},
+    "Default is read-only": {},
     "Defaults": {
       "localizations": {
         "en": {
@@ -354,7 +355,6 @@
     },
     "Delete %arg?": {},
     "Delete Profile": {},
-    "Delete profile": {},
     "Deleting the active profile activates Default first. This cannot be undone.": {},
     "Discard Changes": {},
     "Discard unsaved changes?": {},
@@ -368,9 +368,11 @@
         }
       }
     },
-    "Duplicate Default to customize it.": {},
+    "Duplicate Default to Edit": {},
+    "Duplicate Default to create an editable profile": {},
     "Duplicate Profile": {},
-    "Duplicate profile": {},
+    "Duplicate to Edit": {},
+    "Editable profile": {},
     "Enable Paddr in Accessibility, then return to the app.": {
       "localizations": {
         "en": {
@@ -736,6 +738,7 @@
       }
     },
     "Profile": {},
+    "Profile actions": {},
     "Profile name": {},
     "Profile names must be nonempty and unique, ignoring case.": {},
     "Profiles": {},
@@ -810,7 +813,6 @@
       }
     },
     "Rename Profile": {},
-    "Rename profile": {},
     "Request": {
       "comment": "Button that requests a macOS privacy permission.",
       "localizations": {
@@ -942,6 +944,7 @@
         }
       }
     },
+    "Select the active profile": {},
     "Selected area": {
       "localizations": {
         "en": {

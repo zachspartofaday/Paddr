@@ -2,7 +2,7 @@ import PaddrAppSupport
 import SwiftUI
 import TrackIsBackCore
 
-struct ProfileBarView: View {
+struct ProfileControlsView: View {
     @Bindable var model: PaddrMenuModel
     @State private var pendingSelectionID: ConfigurationProfileID?
     @State private var showsDiscardConfirmation = false
@@ -12,45 +12,70 @@ struct ProfileBarView: View {
 
     var body: some View {
         HStack(spacing: 8) {
+            Text("Profile")
+                .paddrTypography(.headline)
+                .fixedSize(horizontal: true, vertical: false)
+
             Picker("Profile", selection: profileSelection) {
                 ForEach(model.profiles) { profile in
                     Text(profile.name).tag(profile.id)
                 }
             }
             .pickerStyle(.menu)
-            .frame(maxWidth: 260)
+            .labelsHidden()
+            .paddrMenuSelector()
+            .frame(width: 220)
+            .accessibilityLabel("Profile")
             .accessibilityValue(model.activeProfile.name)
+            .help("Select the active profile")
 
-            Button("New Profile", systemImage: "plus", action: promptForCreate)
-                .labelStyle(.iconOnly)
-                .help("Create profile")
-                .disabled(model.hasUnsavedChanges)
+            Menu {
+                if isDefaultProfile {
+                    Button(
+                        "Duplicate Default to Edit",
+                        systemImage: "plus.square.on.square",
+                        action: duplicateActiveProfile
+                    )
+                    .disabled(model.hasUnsavedChanges)
 
-            Button("Duplicate Profile", systemImage: "plus.square.on.square") {
-                _ = model.duplicateActiveProfile()
+                    Button("New Profile", systemImage: "plus", action: promptForCreate)
+                        .disabled(model.hasUnsavedChanges)
+                } else {
+                    Button("New Profile", systemImage: "plus", action: promptForCreate)
+                        .disabled(model.hasUnsavedChanges)
+
+                    Button(
+                        "Duplicate Profile",
+                        systemImage: "plus.square.on.square",
+                        action: duplicateActiveProfile
+                    )
+                    .disabled(model.hasUnsavedChanges)
+                }
+
+                Divider()
+
+                Button("Rename Profile", systemImage: "pencil", action: promptForRename)
+                    .disabled(!model.canEditActiveProfile)
+
+                Button("Delete Profile", systemImage: "trash", role: .destructive) {
+                    pendingDeleteID = model.activeProfileID
+                }
+                .disabled(!model.canEditActiveProfile || model.hasUnsavedChanges)
+            } label: {
+                if isDefaultProfile {
+                    Label("Duplicate to Edit", systemImage: "plus.square.on.square")
+                        .labelStyle(.titleAndIcon)
+                        .fixedSize(horizontal: true, vertical: false)
+                } else {
+                    Label("Profile actions", systemImage: "ellipsis.circle")
+                        .labelStyle(.iconOnly)
+                }
             }
-            .labelStyle(.iconOnly)
-            .help("Duplicate profile")
-            .disabled(model.hasUnsavedChanges)
-
-            Button("Rename Profile", systemImage: "pencil", action: promptForRename)
-                .labelStyle(.iconOnly)
-                .help("Rename profile")
-                .disabled(!model.canEditActiveProfile)
-
-            Button("Delete Profile", systemImage: "trash", role: .destructive) {
-                pendingDeleteID = model.activeProfileID
-            }
-            .labelStyle(.iconOnly)
-            .help("Delete profile")
-            .disabled(!model.canEditActiveProfile || model.hasUnsavedChanges)
-
-            if !model.canEditActiveProfile {
-                Text("Duplicate Default to customize it.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+            .fixedSize(horizontal: true, vertical: false)
+            .paddrMenuSelector()
+            .accessibilityLabel(profileActionsAccessibilityLabel)
+            .accessibilityValue(profileActionsAccessibilityValue)
+            .help(profileActionsHelp)
         }
         .disabled(!model.canManageProfiles)
         .alert("Discard unsaved changes?", isPresented: $showsDiscardConfirmation) {
@@ -103,19 +128,26 @@ struct ProfileBarView: View {
         }
     }
 
+    private var isDefaultProfile: Bool { model.activeProfileID == .default }
+
+    private var profileActionsAccessibilityLabel: LocalizedStringResource {
+        isDefaultProfile ? "Duplicate Default to Edit" : "Profile actions"
+    }
+
+    private var profileActionsAccessibilityValue: LocalizedStringResource {
+        isDefaultProfile ? "Default is read-only" : "Editable profile"
+    }
+
+    private var profileActionsHelp: LocalizedStringResource {
+        isDefaultProfile
+            ? "Duplicate Default to create an editable profile"
+            : "Create, duplicate, rename, or delete profiles"
+    }
+
     private var profileSelection: Binding<ConfigurationProfileID> {
         Binding(
             get: { model.activeProfileID },
-            set: { id in
-                switch model.requestProfileSelection(id: id, source: .configurationWindow) {
-                case .confirmationRequired:
-                    pendingSelectionID = id
-                    showsDiscardConfirmation = true
-                case .accepted, .blockedByUnsavedChanges, .cancelled, .operationInProgress,
-                     .profileNotFound, .storageUnavailable, .unchanged:
-                    break
-                }
-            }
+            set: requestProfileSelection
         )
     }
 
@@ -133,9 +165,24 @@ struct ProfileBarView: View {
         )
     }
 
+    private func requestProfileSelection(id: ConfigurationProfileID) {
+        switch model.requestProfileSelection(id: id, source: .configurationWindow) {
+        case .confirmationRequired:
+            pendingSelectionID = id
+            showsDiscardConfirmation = true
+        case .accepted, .blockedByUnsavedChanges, .cancelled, .operationInProgress,
+             .profileNotFound, .storageUnavailable, .unchanged:
+            break
+        }
+    }
+
     private func promptForCreate() {
         nameDraft = "New Profile"
         namePrompt = .create
+    }
+
+    private func duplicateActiveProfile() {
+        _ = model.duplicateActiveProfile()
     }
 
     private func promptForRename() {
