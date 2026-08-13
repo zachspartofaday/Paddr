@@ -75,6 +75,21 @@ final class OnboardingTests: XCTestCase {
         XCTAssertEqual(presentation.requestPresentation(), .create)
     }
 
+    func testMinimizedCompanionWindowRetainsRegularActivation() {
+        let state = CompanionWindowState(isVisible: false, isMiniaturized: true)
+
+        XCTAssertTrue(state.requiresRegularActivation)
+    }
+
+    func testCompanionWindowReleasesRegularActivationOnlyAfterClosing() {
+        XCTAssertTrue(
+            CompanionWindowState(isVisible: true, isMiniaturized: false).requiresRegularActivation
+        )
+        XCTAssertFalse(
+            CompanionWindowState(isVisible: false, isMiniaturized: false).requiresRegularActivation
+        )
+    }
+
     func testPagerAdvancesAndBacktracksWithinFourPageBounds() {
         var pager = OnboardingPager()
         XCTAssertEqual(pager.pageIndex, 0)

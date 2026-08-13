@@ -415,12 +415,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             onboardingPreferences.record(.skipped)
             guidePresentation.didClose()
             guideWindowController = nil
-            if configurationWindowController?.window?.isVisible != true {
-                NSApplication.shared.setActivationPolicy(.accessory)
-            }
-        } else if window === configurationWindowController?.window,
-                  guideWindowController?.window?.isVisible != true {
-            NSApplication.shared.setActivationPolicy(.accessory)
+        } else if window !== configurationWindowController?.window {
+            return
         }
+        updateActivationPolicy(afterClosing: window)
+    }
+
+    private func updateActivationPolicy(afterClosing closingWindow: NSWindow) {
+        let companionWindows = [
+            configurationWindowController?.window,
+            guideWindowController?.window
+        ]
+        .compactMap { $0 }
+        .filter { $0 !== closingWindow }
+        let requiresRegularActivation = companionWindows.contains { window in
+            CompanionWindowState(
+                isVisible: window.isVisible,
+                isMiniaturized: window.isMiniaturized
+            ).requiresRegularActivation
+        }
+        NSApplication.shared.setActivationPolicy(
+            requiresRegularActivation ? .regular : .accessory
+        )
     }
 }

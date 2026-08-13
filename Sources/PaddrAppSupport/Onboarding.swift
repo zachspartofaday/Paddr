@@ -67,6 +67,20 @@ package struct OnboardingWindowPresentation: Equatable, Sendable {
     }
 }
 
+package struct CompanionWindowState: Equatable, Sendable {
+    package let isVisible: Bool
+    package let isMiniaturized: Bool
+
+    package init(isVisible: Bool, isMiniaturized: Bool) {
+        self.isVisible = isVisible
+        self.isMiniaturized = isMiniaturized
+    }
+
+    package var requiresRegularActivation: Bool {
+        isVisible || isMiniaturized
+    }
+}
+
 package struct OnboardingPager: Equatable, Sendable {
     package static let pageCount = 4
 
