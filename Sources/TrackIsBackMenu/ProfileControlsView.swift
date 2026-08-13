@@ -11,14 +11,16 @@ struct ProfileControlsView: View {
     @State private var pendingDeleteID: ConfigurationProfileID?
 
     var body: some View {
+        let pickerPresentation = profilePickerPresentation
+
         HStack(spacing: 8) {
             Text("Profile")
                 .paddrTypography(.headline)
                 .fixedSize(horizontal: true, vertical: false)
 
             Picker("Profile", selection: profileSelection) {
-                ForEach(model.profiles) { profile in
-                    profileLabel(for: profile).tag(profile.id)
+                ForEach(pickerPresentation.options) { option in
+                    Text(verbatim: option.label).tag(option.id)
                 }
             }
             .pickerStyle(.menu)
@@ -26,7 +28,7 @@ struct ProfileControlsView: View {
             .paddrMenuSelector()
             .frame(width: 220)
             .accessibilityLabel("Profile")
-            .accessibilityValue(profileSelectionAccessibilityValue)
+            .accessibilityValue(Text(verbatim: pickerPresentation.accessibilityValue))
             .help("Select the active profile")
 
             Menu {
@@ -130,33 +132,12 @@ struct ProfileControlsView: View {
 
     private var isDefaultProfile: Bool { model.activeProfileID == .default }
 
-    @ViewBuilder
-    private func profileLabel(for profile: ConfigurationProfile) -> some View {
-        if case let .switching(to: pendingID) = model.profileSelectionPresentation,
-           pendingID == profile.id {
-            Text(
-                "Switching to \(profile.name)…",
-                comment: "Profile selector value while the selected profile is being saved"
-            )
-        } else {
-            Text(verbatim: profile.name)
-        }
-    }
-
-    private var profileSelectionAccessibilityValue: Text {
-        switch model.profileSelectionPresentation {
-        case .active:
-            Text(verbatim: model.activeProfile.name)
-        case let .switching(to: id):
-            Text(
-                "Switching to \(profileName(for: id))",
-                comment: "Profile selector accessibility value while the selected profile is being saved"
-            )
-        }
-    }
-
-    private func profileName(for id: ConfigurationProfileID) -> String {
-        model.profiles.first { $0.id == id }?.name ?? model.activeProfile.name
+    var profilePickerPresentation: ProfilePickerPresentation {
+        ProfilePickerPresentation(
+            profiles: model.profiles,
+            activeProfileName: model.activeProfile.name,
+            selection: model.profileSelectionPresentation
+        )
     }
 
     private var profileActionsAccessibilityLabel: LocalizedStringResource {
@@ -217,6 +198,48 @@ struct ProfileControlsView: View {
     private func promptForRename() {
         nameDraft = model.activeProfile.name
         namePrompt = .rename
+    }
+}
+
+struct ProfilePickerPresentation: Equatable {
+    struct Option: Identifiable, Equatable {
+        let id: ConfigurationProfileID
+        let label: String
+    }
+
+    let options: [Option]
+    let accessibilityValue: String
+
+    init(
+        profiles: [ConfigurationProfile],
+        activeProfileName: String,
+        selection: ProfileSelectionPresentation
+    ) {
+        switch selection {
+        case .active:
+            options = profiles.map { Option(id: $0.id, label: $0.name) }
+            accessibilityValue = activeProfileName
+
+        case let .switching(to: pendingID, named: pendingName):
+            let pendingLabel = String(
+                localized: "Switching to \(pendingName)…",
+                comment: "Profile selector value while the selected profile is being saved"
+            )
+            var presentedOptions = profiles.map { profile in
+                Option(
+                    id: profile.id,
+                    label: profile.id == pendingID ? pendingLabel : profile.name
+                )
+            }
+            if !presentedOptions.contains(where: { $0.id == pendingID }) {
+                presentedOptions.append(Option(id: pendingID, label: pendingLabel))
+            }
+            options = presentedOptions
+            accessibilityValue = String(
+                localized: "Switching to \(pendingName)",
+                comment: "Profile selector accessibility value while the selected profile is being saved"
+            )
+        }
     }
 }
 

@@ -20,11 +20,11 @@ public enum ProfileSelectionRequestResult: Equatable, Sendable {
 
 public enum ProfileSelectionPresentation: Equatable, Sendable {
     case active(ConfigurationProfileID)
-    case switching(to: ConfigurationProfileID)
+    case switching(to: ConfigurationProfileID, named: String)
 
     public var selectedProfileID: ConfigurationProfileID {
         switch self {
-        case let .active(id), let .switching(to: id): id
+        case let .active(id), let .switching(to: id, named: _): id
         }
     }
 }
@@ -93,7 +93,7 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var isRejectingConfigurationEdit = false
     @ObservationIgnored private var isRejectingEnabledChange = false
     private var profileOperationInProgress = false
-    private var pendingProfileSelectionID: ConfigurationProfileID?
+    private var pendingProfileActivation: ConfigurationProfile?
     @ObservationIgnored private var profileDocumentSaveInProgress = false
     private var replacesActiveConfiguration = false
     @ObservationIgnored private var activationCommitPending = false
@@ -118,8 +118,11 @@ public final class PaddrMenuModel {
         isInitialized && !replacesActiveConfiguration && activeProfileID != .default
     }
     public var profileSelectionPresentation: ProfileSelectionPresentation {
-        if let pendingProfileSelectionID {
-            return .switching(to: pendingProfileSelectionID)
+        if let pendingProfileActivation {
+            return .switching(
+                to: pendingProfileActivation.id,
+                named: pendingProfileActivation.name
+            )
         }
         return .active(activeProfileID)
     }
@@ -507,16 +510,17 @@ public final class PaddrMenuModel {
             var document = profileDocument
             try document.activateProfile(id: id)
             beginProfileDocumentActivation(document)
-            if profileOperationInProgress {
-                pendingProfileSelectionID = id
-            }
         } catch {
             publishProfileOperationFailure(error)
         }
     }
 
     private func beginProfileDocumentActivation(_ document: ConfigurationProfileDocument) {
-        beginProfileDocumentSave(document, replacingActiveConfiguration: true)
+        beginProfileDocumentSave(
+            document,
+            replacingActiveConfiguration: true,
+            profileActivation: document.activeProfile
+        )
     }
 
     private func beginProfileDocumentSave(_ document: ConfigurationProfileDocument) {
@@ -526,6 +530,7 @@ public final class PaddrMenuModel {
     private func beginProfileDocumentSave(
         _ document: ConfigurationProfileDocument,
         replacingActiveConfiguration: Bool,
+        profileActivation: ConfigurationProfile? = nil,
         clearsInitialSave: Bool = false
     ) {
         guard isInitialized,
@@ -543,6 +548,7 @@ public final class PaddrMenuModel {
         configurationEpoch &+= 1
         let operation = configurationEpoch
         profileOperationInProgress = true
+        pendingProfileActivation = profileActivation
         profileDocumentSaveInProgress = true
         replacesActiveConfiguration = replacingActiveConfiguration
         let shouldRestart = replacingActiveConfiguration && isEnabled
@@ -1190,7 +1196,7 @@ public final class PaddrMenuModel {
         guard configurationEpoch == operation else { return }
         configurationTask = nil
         profileOperationInProgress = false
-        pendingProfileSelectionID = nil
+        pendingProfileActivation = nil
         profileDocumentSaveInProgress = false
         replacesActiveConfiguration = false
     }
@@ -1207,7 +1213,7 @@ public final class PaddrMenuModel {
         initializationTask = nil
         configurationTask = nil
         profileOperationInProgress = false
-        pendingProfileSelectionID = nil
+        pendingProfileActivation = nil
         profileDocumentSaveInProgress = false
         replacesActiveConfiguration = false
         activationCommitPending = false

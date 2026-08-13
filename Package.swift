@@ -24,7 +24,7 @@ let package = Package(
         .testTarget(name: "TrackIsBackTests", dependencies: ["TrackIsBackCore"]),
         .testTarget(
             name: "PaddrAppSupportTests",
-            dependencies: ["PaddrAppSupport", "TrackIsBackCore"]
+            dependencies: ["PaddrAppSupport", "TrackIsBackCore", "TrackIsBackMenu"]
         )
     ]
 )

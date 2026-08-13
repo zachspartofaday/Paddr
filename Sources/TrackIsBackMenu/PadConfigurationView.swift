@@ -5,7 +5,17 @@ import TrackIsBackCore
 struct PadConfigurationView: View {
     let side: PadSide
     @Binding var configuration: PadConfiguration
-    @State private var isExpanded = true
+    @State private var isExpanded: Bool
+
+    init(
+        side: PadSide,
+        configuration: Binding<PadConfiguration>,
+        initiallyExpanded: Bool = true
+    ) {
+        self.side = side
+        _configuration = configuration
+        _isExpanded = State(initialValue: initiallyExpanded)
+    }
 
     private var title: LocalizedStringResource { side == .left ? "Left trackpad" : "Right trackpad" }
     private var summary: LocalizedStringResource {
@@ -65,10 +75,9 @@ struct PadConfigurationView: View {
             .contentShape(.rect)
         }
         .padding(PaddrStyle.cardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .frame(
-            maxWidth: .infinity,
-            minHeight: PaddrStyle.padConfigurationCardHeight,
-            maxHeight: PaddrStyle.padConfigurationCardHeight,
+            height: isExpanded ? PaddrStyle.padConfigurationCardHeight : nil,
             alignment: .topLeading
         )
         .paddrCard()
