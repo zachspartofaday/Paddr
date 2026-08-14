@@ -2861,6 +2861,97 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.status, .active)
     }
 
+    func testEnableIsRejectedWhileOutputReleaseIsPending() async {
+        let state = readyState(receiver: "Fake receiver")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await session.connect(receiver: "Fake receiver")
+        await waitUntil(model: model) { model.isRunning }
+
+        model.isEnabled = false
+        XCTAssertTrue(model.isReleasingOutput)
+        XCTAssertFalse(model.canToggleOutput)
+
+        model.isEnabled = true
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertEqual(model.status, .releasingOutputs)
+
+        await session.send(.outputReleased)
+        await waitUntil(model: model) { !model.isReleasingOutput }
+        XCTAssertEqual(model.status, .off)
+        XCTAssertTrue(model.canToggleOutput)
+
+        model.isEnabled = true
+        XCTAssertTrue(model.isEnabled)
+        XCTAssertEqual(model.status, .waitingForNeutral)
+        let startCount = await session.startCount
+        XCTAssertEqual(startCount, 1)
+    }
+
+    func testOutputFailureKeepsObservationAliveThroughReconnect() async {
+        let state = readyState(receiver: "Fake receiver")
+        let reconnectSleeper = ManualSleeper()
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(
+            dependencies: dependencies(
+                state: state,
+                session: session,
+                reconnectSleeper: reconnectSleeper
+            )
+        )
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await session.connect(receiver: "Fake receiver")
+        await waitUntil(model: model) { model.isRunning }
+
+        await session.send(.failed("dispatch failed"))
+        await waitUntil(model: model) { !model.isEnabled }
+        guard case .failure(.output) = model.status else {
+            return XCTFail("Expected the output failure to publish")
+        }
+
+        reconnectSleeper.wake()
+        await waitUntil(model: model) { await session.startCount == 2 }
+        await session.send(.controllerConnected)
+        await waitUntil(model: model) { model.controllerConnected }
+
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertFalse(model.isRunning)
+        guard case .failure(.output) = model.status else {
+            return XCTFail("Expected the failure diagnostic to survive the observation restart")
+        }
+    }
+
+    func testControllerLossDuringReleaseCompletesToIdle() async {
+        let state = readyState(receiver: "Fake receiver")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await session.connect(receiver: "Fake receiver")
+        await waitUntil(model: model) { model.isRunning }
+
+        model.isEnabled = false
+        XCTAssertEqual(model.status, .releasingOutputs)
+
+        await session.send(.controllerLost(.init(reportCount: 4, actionCount: 2)))
+        await waitUntil(model: model) { !model.controllerConnected }
+
+        XCTAssertFalse(model.isReleasingOutput)
+        XCTAssertEqual(model.status, .off)
+        XCTAssertNotNil(model.receiverDescription)
+
+        await session.send(.outputReleased)
+        await session.send(.progress(.init(reportCount: 9, actionCount: 0)))
+        await waitUntil(model: model) { model.reportCount == 9 }
+        XCTAssertEqual(model.status, .off)
+    }
+
     func testNoPuckStartupDetectsHotPlugWhileDisabled() async {
         let state = readyState(receiver: nil)
         let reconnectSleeper = ManualSleeper()

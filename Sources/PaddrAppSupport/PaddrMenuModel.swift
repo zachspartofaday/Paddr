@@ -54,7 +54,9 @@ public final class PaddrMenuModel {
         didSet {
             guard !isRejectingEnabledChange, isEnabled != oldValue else { return }
             guard isInitialized,
-                  isEnabled == false || !profileDocumentSaveInProgress || replacesActiveConfiguration
+                  isEnabled == false
+                      || ((!profileDocumentSaveInProgress || replacesActiveConfiguration)
+                          && !isReleasingOutput)
             else {
                 isRejectingEnabledChange = true
                 isEnabled = oldValue
@@ -140,7 +142,9 @@ public final class PaddrMenuModel {
     }
     public var canManageProfiles: Bool { isInitialized && !profileOperationInProgress }
     public var canToggleOutput: Bool {
-        isInitialized && (!profileDocumentSaveInProgress || replacesActiveConfiguration || isEnabled)
+        isInitialized
+            && (!profileDocumentSaveInProgress || replacesActiveConfiguration || isEnabled)
+            && (isEnabled || !isReleasingOutput)
     }
     public var canSaveAndApply: Bool {
         isInitialized
@@ -1109,9 +1113,8 @@ public final class PaddrMenuModel {
                 publishStatus(.active)
             case .outputReleased:
                 isRunning = false
-                let wasReleasing = isReleasingOutput
                 isReleasingOutput = false
-                if !isEnabled, wasReleasing {
+                if !isEnabled, status == .releasingOutputs {
                     publishStatus(.off)
                 }
             case let .progress(summary):
@@ -1121,7 +1124,11 @@ public final class PaddrMenuModel {
                 controllerConnected = false
                 isRunning = false
                 isReleasingOutput = false
-                if isEnabled { publishStatus(.waitingForController) }
+                if isEnabled {
+                    publishStatus(.waitingForController)
+                } else if status == .releasingOutputs {
+                    publishStatus(.off)
+                }
             case let .stopped(summary):
                 update(summary)
                 controllerConnected = false
@@ -1171,6 +1178,7 @@ public final class PaddrMenuModel {
                 let failure = MenuFailure.output(diagnostic: message)
                 if isEnabled { isEnabled = false }
                 publishStatus(.failure(failure))
+                shouldScheduleReconnect = true
             }
         }
         if sessionID == identifier {
