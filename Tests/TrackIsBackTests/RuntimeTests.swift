@@ -520,6 +520,9 @@ final class RuntimeTests: XCTestCase {
 
         XCTAssertTrue(events.events.contains(.controllerConnected))
         XCTAssertFalse(events.events.contains(.outputArmed))
+        XCTAssertEqual(events.events.filter { $0 == .outputReleased }.count, 1)
+        XCTAssertEqual(events.events.first, .waitingForController("Fake receiver"))
+        XCTAssertEqual(events.events.dropFirst().first, .outputReleased)
         XCTAssertEqual(output.actions, [])
         XCTAssertEqual(result.summary, TrackpadRunSummary(reportCount: 3, actionCount: 0))
     }

@@ -184,6 +184,9 @@ public enum TrackpadRuntime {
         }
 
         onEvent?(.waitingForController(device.summaryDescription))
+        if outputGate != nil, !outputWasEnabled {
+            onEvent?(.outputReleased)
+        }
         let streamOutcome: Result<TrackpadStreamTermination, any Error>
         do {
             streamOutcome = .success(try device.stream(
