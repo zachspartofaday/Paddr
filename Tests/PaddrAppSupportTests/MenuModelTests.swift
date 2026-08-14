@@ -2935,6 +2935,27 @@ final class MenuModelTests: XCTestCase {
         XCTAssertTrue(model.hasUnsavedChanges)
     }
 
+    func testEnableRechecksAccessibilityBeforeOpeningTheGateInPlace() async {
+        let state = readyState(receiver: "Fake receiver")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        XCTAssertTrue(model.hasSystemAccess)
+
+        state.accessibilityGranted = false
+        model.isEnabled = true
+        await waitUntil(model: model) { !model.isEnabled }
+
+        XCTAssertFalse(model.hasSystemAccess)
+        XCTAssertFalse(model.isRunning)
+        guard case .failure(.accessibilityRequired) = model.status else {
+            return XCTFail("Expected the revoked-access failure")
+        }
+        await waitUntil(model: model) { await session.startCount == 2 }
+        XCTAssertFalse(model.isEnabled)
+    }
+
     func testOutputFailureKeepsObservationAliveThroughReconnect() async {
         let state = readyState(receiver: "Fake receiver")
         let reconnectSleeper = ManualSleeper()

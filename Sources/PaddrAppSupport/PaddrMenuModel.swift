@@ -734,6 +734,7 @@ public final class PaddrMenuModel {
     private func beginEnabledTransition(statusGeneration: UInt64) {
         guard isInitialized, terminationState == .idle else { return }
         if isEnabled {
+            accessibilityTrusted = dependencies.accessibilityTrusted(false)
             if canEnableOutputInPlace {
                 enableOutputInPlace()
             } else {
