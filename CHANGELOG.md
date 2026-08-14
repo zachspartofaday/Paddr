@@ -2,7 +2,7 @@
 
 User-visible changes to Paddr are recorded here. Release entries describe confirmed behavior at the time of each release; later entries may supersede earlier limitations.
 
-## 0.9.11 — Unreleased
+## 0.9.11 — 2026-08-14
 
 ### Controller status and output
 
@@ -18,7 +18,7 @@ User-visible changes to Paddr are recorded here. Release entries describe confir
 - Moved **Save & Apply** and the saved-state indicator into the top profile card, and moved **Restore Defaults** into the profile actions menu. The bottom bar is now a stable status-only row, so it no longer reflows when statuses change.
 - **Save & Apply** is enabled only while there are unsaved changes.
 
-## 0.9.9 — Unreleased
+## 0.9.9 — 2026-08-13
 
 ### Profiles and setup
 
