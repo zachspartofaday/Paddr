@@ -85,6 +85,7 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var storageWriteBlocked = false
     @ObservationIgnored private var sessionID: UUID?
     @ObservationIgnored private var sessionConfiguration: TrackIsBackConfiguration?
+    @ObservationIgnored private var sessionTeardownPending = false
     @ObservationIgnored private var lifecycleEpoch: UInt64 = 0
     @ObservationIgnored private var initializationTask: Task<Void, Never>?
     @ObservationIgnored private var configurationTask: Task<Void, Never>?
@@ -601,7 +602,9 @@ public final class PaddrMenuModel {
                 return
             }
             if shouldRestart {
+                sessionTeardownPending = true
                 await dependencies.session.stop()
+                sessionTeardownPending = false
                 guard configurationEpoch == operation,
                       terminationState == .idle else {
                     clearConfigurationTask(operation: operation)
@@ -768,7 +771,7 @@ public final class PaddrMenuModel {
         outputGate.setEnabled(false)
         isReleasingOutput = sessionID != nil || isReleasingOutput
         isRunning = false
-        if isReleasingOutput {
+        if isReleasingOutput || sessionTeardownPending {
             publishStatus(.releasingOutputs)
             sessionStatusGeneration = currentStatusGeneration
         } else {
@@ -831,14 +834,14 @@ public final class PaddrMenuModel {
         controllerConnected = false
         isRunning = false
         if !sessionAlreadyStopped {
+            sessionTeardownPending = true
             await dependencies.session.stop()
+            sessionTeardownPending = false
             guard isCurrent(operation) else { return nil }
         }
-        if isReleasingOutput {
-            isReleasingOutput = false
-            if !isEnabled, status == .releasingOutputs {
-                publishStatus(.off)
-            }
+        isReleasingOutput = false
+        if !isEnabled, status == .releasingOutputs {
+            publishStatus(.off)
         }
 
         if commitDraft {
@@ -1346,6 +1349,7 @@ public final class PaddrMenuModel {
         reconnectStatusGeneration = nil
         permissionRefreshTask = nil
         terminationTask = nil
+        sessionTeardownPending = false
         let completions = terminationCompletions
         terminationCompletions.removeAll()
         for completion in completions { completion() }

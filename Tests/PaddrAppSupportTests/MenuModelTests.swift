@@ -2956,6 +2956,28 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.isEnabled)
     }
 
+    func testDisableWhileReplacementStopIsSuspendedShowsReleasingUntilStopCompletes() async {
+        let state = readyState(receiver: nil)
+        let session = GatedSession(blockedStops: [1])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        state.receiver = "Fake"
+        model.isEnabled = true
+        await session.waitForStop(1)
+
+        model.isEnabled = false
+
+        XCTAssertEqual(model.status, .releasingOutputs)
+        XCTAssertFalse(model.isReleasingOutput)
+        XCTAssertTrue(model.canToggleOutput)
+
+        await session.releaseStop(1)
+        await waitUntil(model: model) { model.status == .off }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertFalse(model.isRunning)
+    }
+
     func testOutputFailureKeepsObservationAliveThroughReconnect() async {
         let state = readyState(receiver: "Fake receiver")
         let reconnectSleeper = ManualSleeper()
