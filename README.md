@@ -7,7 +7,7 @@
 
 See [CHANGELOG.md](CHANGELOG.md) for release history and current compatibility notes.
 
-![Paddr configuration window showing the Everyday profile, the left trackpad set to Scroll, the right trackpad set to Pointer, and status showing Controller Not found, Output Idle, and Access Needed](docs/images/paddr-profile-overview.png)
+![Paddr configuration window showing the World of Warcraft profile, the left trackpad Zones in Four-way radial mode, the right trackpad set to Pointer, and status showing Puck Connected, Controller Not found, Output Idle, and Access Ready](docs/images/paddr-profile-overview.png)
 
 ## What Paddr adds
 
@@ -21,7 +21,7 @@ Apple's HID service continues to provide native buttons, sticks, triggers, and c
 
 The interactive squircle map mirrors runtime hit-testing. Select a region on the map or with the **Selected area** pop-up, then assign its action. Radial, corner, and two-way layouts support an adjustable neutral region; the 3×3 layout dedicates the full pad to nine actions.
 
-Paddr does not send controller feature reports or alter lizard mode, firmware, IMU, haptics, rumble, or Apple's native gamepad mappings. **Controller Connected** reflects fresh reports from the controller rather than receiver presence alone; if those reports stop, Paddr releases held mapped input and waits for neutral pad input before resuming after reconnect.
+Paddr does not send controller feature reports or alter lizard mode, firmware, IMU, haptics, rumble, or Apple's native gamepad mappings. The status bar reports the receiver and the controller separately: **Puck Connected** reflects passive receiver discovery alone, while **Controller Connected** reflects fresh reports from the controller. Both stay accurate while Trackpad Output is off — the toggle controls mapped mouse, scroll, and keyboard emission only, never controller observation. Disabling output releases held mapped keys and mouse buttons before **Output** reads **Idle**, and if controller reports stop, Paddr releases held mapped input and waits for neutral pad input before resuming after reconnect.
 
 ## Use the trackpads without Steam Input
 

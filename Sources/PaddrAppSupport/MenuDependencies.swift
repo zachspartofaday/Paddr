@@ -8,6 +8,7 @@ public struct MenuDependencies: Sendable {
     public var accessibilityTrusted: @Sendable (_ prompt: Bool) -> Bool
     public var openPrivacySettings: @MainActor @Sendable (_ anchor: String) -> Void
     public var sleep: @Sendable (Duration) async throws -> Void
+    public var reconnectDelay: @Sendable (Duration) async throws -> Void
 
     public init(
         session: any TrackpadSessionControlling,
@@ -16,7 +17,8 @@ public struct MenuDependencies: Sendable {
         probeReceiver: @escaping @Sendable () -> String?,
         accessibilityTrusted: @escaping @Sendable (_ prompt: Bool) -> Bool,
         openPrivacySettings: @escaping @MainActor @Sendable (_ anchor: String) -> Void,
-        sleep: @escaping @Sendable (Duration) async throws -> Void
+        sleep: @escaping @Sendable (Duration) async throws -> Void,
+        reconnectDelay: (@Sendable (Duration) async throws -> Void)? = nil
     ) {
         self.session = session
         background = BackgroundMenuDependencies(
@@ -27,6 +29,7 @@ public struct MenuDependencies: Sendable {
         self.accessibilityTrusted = accessibilityTrusted
         self.openPrivacySettings = openPrivacySettings
         self.sleep = sleep
+        self.reconnectDelay = reconnectDelay ?? sleep
     }
 
     func loadProfiles() async throws -> ConfigurationProfileLoadResult {

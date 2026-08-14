@@ -59,6 +59,13 @@ struct ProfileControlsView: View {
                 Button("Rename Profile", systemImage: "pencil", action: promptForRename)
                     .disabled(!model.canEditActiveProfile)
 
+                Button(
+                    "Restore Defaults",
+                    systemImage: "arrow.counterclockwise",
+                    action: model.restoreDefaults
+                )
+                .disabled(!model.canEditActiveProfile)
+
                 Button("Delete Profile", systemImage: "trash", role: .destructive) {
                     pendingDeleteID = model.activeProfileID
                 }

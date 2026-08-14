@@ -221,6 +221,7 @@ private final class ProgressPressureRuntime: Sendable {
     func run(
         configuration: TrackIsBackConfiguration,
         observeOnly: Bool,
+        outputGate: OutputGate?,
         stopToken: TrackpadStopToken,
         event: @escaping @Sendable (TrackpadSessionEvent) -> Void
     ) throws -> TrackpadRunResult {
@@ -283,6 +284,7 @@ private final class GatedRuntime: Sendable {
     func run(
         configuration: TrackIsBackConfiguration,
         observeOnly: Bool,
+        outputGate: OutputGate?,
         stopToken: TrackpadStopToken,
         event: @escaping @Sendable (TrackpadSessionEvent) -> Void
     ) throws -> TrackpadRunResult {

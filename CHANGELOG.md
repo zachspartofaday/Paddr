@@ -2,6 +2,22 @@
 
 User-visible changes to Paddr are recorded here. Release entries describe confirmed behavior at the time of each release; later entries may supersede earlier limitations.
 
+## 0.9.11 — Unreleased
+
+### Controller status and output
+
+- Fixed the bottom controller status staying **Not found** until Trackpad Output was enabled ([#46](https://github.com/zachspartofaday/Paddr/issues/46) — thanks to [@redeemer666](https://github.com/redeemer666) for reporting it). Paddr now observes the controller continuously from launch, so controller presence is accurate while output is off.
+- Split the bottom status into separate **Puck** and **Controller** indicators: **Puck Connected** comes from passive receiver discovery alone, and **Controller Connected** comes only from accepted live controller reports.
+- Made the Trackpad Output toggle control mapped mouse, scroll, and keyboard emission only. Disabling output releases held keys and mouse buttons before **Output** reads **Idle** (via a brief **Releasing** state), keeps observing the controller, and re-enabling waits for neutral pads before arming.
+- Kept the **Puck** indicator truthful when the receiver is visible but cannot be opened (for example while a permission is missing): passive discovery drives the indicator instead of the failed open.
+- Detected puck hot-plug while output is off, including when Paddr starts with no puck attached.
+- Because Paddr now opens the puck at launch rather than on first enable, any device-access prompt appears at first launch instead of when output is first enabled.
+
+### Interface
+
+- Moved **Save & Apply** and the saved-state indicator into the top profile card, and moved **Restore Defaults** into the profile actions menu. The bottom bar is now a stable status-only row, so it no longer reflows when statuses change.
+- **Save & Apply** is enabled only while there are unsaved changes.
+
 ## 0.9.9 — Unreleased
 
 ### Profiles and setup

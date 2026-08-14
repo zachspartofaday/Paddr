@@ -67,6 +67,7 @@ public final class PaddrMenuModel {
         }
     }
     public private(set) var isRunning = false
+    public private(set) var isReleasingOutput = false
     public private(set) var receiverDescription: String?
     public private(set) var controllerConnected = false
     public private(set) var accessibilityTrusted = false
@@ -77,6 +78,7 @@ public final class PaddrMenuModel {
     public private(set) var isInitialized = false
 
     @ObservationIgnored private let dependencies: MenuDependencies
+    @ObservationIgnored private let outputGate = OutputGate(enabled: false)
     @ObservationIgnored private var profileDocument = ConfigurationProfileDocument.default
     @ObservationIgnored private var storageWriteBlocked = false
     @ObservationIgnored private var sessionID: UUID?
@@ -102,6 +104,7 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var receiverStateGeneration: UInt64 = 0
     @ObservationIgnored private var lifecycleTask: Task<Void, Never>?
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
+    @ObservationIgnored private var reconnectGeneration: UInt64 = 0
     @ObservationIgnored private var reconnectStatusGeneration: UInt64?
     @ObservationIgnored private var permissionRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var terminationTask: Task<Void, Never>?
@@ -144,7 +147,7 @@ public final class PaddrMenuModel {
             && !profileDocumentSaveInProgress
             && !replacesActiveConfiguration
             && (canEditActiveProfile || needsInitialSave)
-            && (hasUnsavedChanges || isEnabled)
+            && hasUnsavedChanges
     }
     public var canSelectProfileFromMenu: Bool {
         isInitialized
@@ -276,6 +279,14 @@ public final class PaddrMenuModel {
         }
         isInitialized = true
         _ = await refreshStatusNow(statusGeneration: statusGeneration)
+        if terminationState == .idle {
+            startLifecycle(
+                commitDraft: false,
+                statusGeneration: currentStatusGeneration,
+                sessionAlreadyStopped: true,
+                statusAlreadyRefreshed: true
+            )
+        }
         initializationTask = nil
     }
 
@@ -568,6 +579,7 @@ public final class PaddrMenuModel {
             sessionStatusGeneration = nil
             controllerConnected = false
             isRunning = false
+            isReleasingOutput = false
         } else {
             preservingCurrentOperationalStatusAuthority {
                 advanceStatusGeneration()
@@ -616,7 +628,7 @@ public final class PaddrMenuModel {
                     }
                 }
                 clearConfigurationTask(operation: operation)
-                if shouldRestart, isEnabled {
+                if shouldRestart {
                     startLifecycle(
                         commitDraft: false,
                         statusGeneration: currentStatusGeneration,
@@ -640,6 +652,13 @@ public final class PaddrMenuModel {
                             )
                         }
                     }
+                }
+                if shouldRestart, terminationState == .idle {
+                    startLifecycle(
+                        commitDraft: false,
+                        statusGeneration: currentStatusGeneration,
+                        sessionAlreadyStopped: true
+                    )
                 }
             }
             statusDidChange?()
@@ -692,6 +711,7 @@ public final class PaddrMenuModel {
         sessionID = nil
         controllerConnected = false
         isRunning = false
+        isReleasingOutput = false
 
         terminationTask = Task { [self] in
             await dependencies.session.stop()
@@ -711,14 +731,29 @@ public final class PaddrMenuModel {
         if isEnabled {
             startLifecycle(commitDraft: true, statusGeneration: statusGeneration)
         } else {
-            stopLifecycle()
+            disableOutput()
+        }
+    }
+
+    private func disableOutput() {
+        guard terminationState == .idle else { return }
+        activationCommitPending = false
+        outputGate.setEnabled(false)
+        isReleasingOutput = isRunning && sessionID != nil
+        isRunning = false
+        if isReleasingOutput {
+            publishStatus(.releasingOutputs)
+            sessionStatusGeneration = currentStatusGeneration
+        } else {
+            publishStatus(.off)
         }
     }
 
     private func startLifecycle(
         commitDraft: Bool,
         statusGeneration: UInt64,
-        sessionAlreadyStopped: Bool = false
+        sessionAlreadyStopped: Bool = false,
+        statusAlreadyRefreshed: Bool = false
     ) {
         guard terminationState == .idle else { return }
         if commitDraft { activationCommitPending = true }
@@ -727,32 +762,26 @@ public final class PaddrMenuModel {
         let operation = lifecycleEpoch
         lifecycleTask?.cancel()
         lifecycleTask = Task { [weak self] in
-            guard let self else { return }
-            await self.start(
+            let context = await self?.start(
                 operation: operation,
                 commitDraft: shouldCommitDraft,
                 statusGeneration: statusGeneration,
-                sessionAlreadyStopped: sessionAlreadyStopped
+                sessionAlreadyStopped: sessionAlreadyStopped,
+                statusAlreadyRefreshed: statusAlreadyRefreshed
             )
-            self.clearLifecycleTask(operation: operation)
-        }
-    }
-
-    private func stopLifecycle() {
-        guard terminationState == .idle else { return }
-        activationCommitPending = false
-        lifecycleEpoch &+= 1
-        let operation = lifecycleEpoch
-        reconnectTask?.cancel()
-        reconnectTask = nil
-        reconnectStatusGeneration = nil
-        sessionID = nil
-        controllerConnected = false
-        isRunning = false
-        publishStatus(.off)
-        lifecycleTask?.cancel()
-        lifecycleTask = Task { [weak self, dependencies] in
-            await dependencies.session.stop()
+            if let context {
+                for await event in context.stream {
+                    guard let model = self else { return }
+                    guard model.isCurrent(operation),
+                          model.sessionID == context.sessionID else { break }
+                    model.handleSessionEvent(event, sessionID: context.sessionID)
+                }
+                if let model = self, model.isCurrent(operation),
+                   model.sessionID == context.sessionID {
+                    model.sessionID = nil
+                    model.statusDidChange?()
+                }
+            }
             self?.clearLifecycleTask(operation: operation)
         }
     }
@@ -761,70 +790,83 @@ public final class PaddrMenuModel {
         operation: UInt64,
         commitDraft: Bool,
         statusGeneration initiatingStatusGeneration: UInt64,
-        sessionAlreadyStopped: Bool
-    ) async {
+        sessionAlreadyStopped: Bool,
+        statusAlreadyRefreshed: Bool = false
+    ) async -> (stream: AsyncStream<TrackpadSessionEvent>, sessionID: UUID)? {
         var statusGeneration = initiatingStatusGeneration
         await initializationTask?.value
         await configurationTask?.value
-        guard isCurrent(operation), isEnabled else { return }
+        guard isCurrent(operation) else { return nil }
         reconnectTask?.cancel()
         reconnectTask = nil
         reconnectStatusGeneration = nil
         sessionID = nil
         controllerConnected = false
         isRunning = false
+        isReleasingOutput = false
         if !sessionAlreadyStopped {
             await dependencies.session.stop()
-            guard isCurrent(operation), isEnabled else { return }
+            guard isCurrent(operation) else { return nil }
         }
 
         if commitDraft {
-            guard await commitConfigurationForActivation(
+            let committed = await commitConfigurationForActivation(
                 operation: operation,
                 statusGeneration: statusGeneration
-            ) else { return }
-            guard isCurrent(operation), isEnabled else { return }
-            activationCommitPending = false
+            )
+            guard isCurrent(operation) else { return nil }
+            if committed { activationCommitPending = false }
         }
 
-        statusGeneration = await refreshStatusNow(statusGeneration: statusGeneration)
-        guard isCurrent(operation), isEnabled else { return }
+        if !statusAlreadyRefreshed {
+            statusGeneration = await refreshStatusNow(statusGeneration: statusGeneration)
+            guard isCurrent(operation) else { return nil }
+        }
 
-        guard accessibilityTrusted else {
+        if isEnabled, !accessibilityTrusted {
             failEnable(
                 .accessibilityRequired,
                 operation: operation,
                 statusGeneration: statusGeneration
             )
-            return
         }
         guard receiverDescription != nil else {
-            statusGeneration = withStatusPublicationGeneration(statusGeneration) {
-                publishStatus(.waitingForController)
+            if isEnabled {
+                statusGeneration = withStatusPublicationGeneration(statusGeneration) {
+                    publishStatus(.waitingForController)
+                }
             }
             scheduleReconnect(operation: operation, statusGeneration: statusGeneration)
             statusDidChange?()
-            return
+            return nil
         }
 
         let identifier = UUID()
         sessionID = identifier
         reportCount = 0
         actionCount = 0
-        statusGeneration = withStatusPublicationGeneration(statusGeneration) {
-            publishStatus(.connecting)
+        if isEnabled {
+            statusGeneration = withStatusPublicationGeneration(statusGeneration) {
+                publishStatus(.connecting)
+            }
         }
         sessionStatusGeneration = statusGeneration
-        let stream = await dependencies.session.start(configuration: savedConfiguration, observeOnly: false)
-        guard isCurrent(operation), sessionID == identifier else { return }
-        for await event in stream {
-            guard isCurrent(operation), sessionID == identifier else { return }
-            statusGeneration = handle(
-                event,
-                sessionID: identifier,
-                statusGeneration: statusGeneration
-            )
+        outputGate.setEnabled(isEnabled && accessibilityTrusted)
+        let stream = await dependencies.session.start(
+            configuration: savedConfiguration,
+            observeOnly: false,
+            outputGate: outputGate
+        )
+        guard isCurrent(operation), sessionID == identifier else {
+            return nil
         }
+        return (stream, identifier)
+    }
+
+    private func handleSessionEvent(_ event: TrackpadSessionEvent, sessionID identifier: UUID) {
+        guard terminationState == .idle, sessionID == identifier else { return }
+        let generation = sessionStatusGeneration ?? currentStatusGeneration
+        _ = handle(event, sessionID: identifier, statusGeneration: generation)
     }
 
     private func commitConfigurationForActivation(
@@ -916,22 +958,35 @@ public final class PaddrMenuModel {
 
     private func scheduleReconnect(operation: UInt64, statusGeneration: UInt64) {
         reconnectTask?.cancel()
+        reconnectGeneration &+= 1
+        let token = reconnectGeneration
         reconnectStatusGeneration = statusGeneration
-        reconnectTask = Task { [weak self] in
-            guard let self else { return }
-            while self.isCurrent(operation), self.isEnabled, !self.isRunning {
-                do { try await self.dependencies.sleep(.seconds(1)) }
-                catch { return }
-                guard self.isCurrent(operation), self.isEnabled, !self.isRunning else { return }
-                let receiverDescription = await self.dependencies.probeReceiver()
-                guard self.isCurrent(operation), self.isEnabled, !self.isRunning else { return }
-                self.receiverStateGeneration &+= 1
-                self.receiverDescription = receiverDescription
+        reconnectTask = Task { [weak self, dependencies] in
+            while true {
+                guard self?.isReconnectCurrent(operation, token: token) == true else {
+                    self?.clearReconnect(token: token)
+                    return
+                }
+                do { try await dependencies.reconnectDelay(.seconds(1)) }
+                catch {
+                    self?.clearReconnect(token: token)
+                    return
+                }
+                guard self?.isReconnectCurrent(operation, token: token) == true else {
+                    self?.clearReconnect(token: token)
+                    return
+                }
+                let receiverDescription = await dependencies.probeReceiver()
+                guard let model = self, model.isReconnectCurrent(operation, token: token) else {
+                    self?.clearReconnect(token: token)
+                    return
+                }
+                model.receiverStateGeneration &+= 1
+                model.receiverDescription = receiverDescription
                 if receiverDescription != nil {
-                    let reconnectStatusGeneration = self.reconnectStatusGeneration ?? statusGeneration
-                    self.reconnectTask = nil
-                    self.reconnectStatusGeneration = nil
-                    self.startLifecycle(
+                    let reconnectStatusGeneration = model.reconnectStatusGeneration ?? statusGeneration
+                    model.clearReconnect(token: token)
+                    model.startLifecycle(
                         commitDraft: false,
                         statusGeneration: reconnectStatusGeneration
                     )
@@ -939,6 +994,17 @@ public final class PaddrMenuModel {
                 }
             }
         }
+    }
+
+    private func isReconnectCurrent(_ operation: UInt64, token: UInt64) -> Bool {
+        isCurrent(operation) && sessionID == nil && reconnectGeneration == token
+    }
+
+    private func clearReconnect(token: UInt64) {
+        guard reconnectGeneration == token, reconnectTask != nil else { return }
+        reconnectTask = nil
+        reconnectStatusGeneration = nil
+        statusDidChange?()
     }
 
     private func schedulePermissionRefresh() {
@@ -954,6 +1020,7 @@ public final class PaddrMenuModel {
     private var operationalStatus: MenuStatus {
         if isRunning { return .active }
         if isEnabled { return controllerConnected ? .waitingForNeutral : .waitingForController }
+        if isReleasingOutput { return .releasingOutputs }
         return .off
     }
 
@@ -991,7 +1058,7 @@ public final class PaddrMenuModel {
         case .stopped, .receiverRemoved, .receiverUnavailable, .failed:
             isSessionEnding = true
         case .connecting, .waitingForController, .controllerConnected, .outputArmed,
-             .progress, .controllerLost:
+             .outputReleased, .progress, .controllerLost:
             isSessionEnding = false
         }
         var shouldScheduleReconnect = false
@@ -1001,35 +1068,49 @@ public final class PaddrMenuModel {
         ) {
             switch event {
             case .connecting:
-                publishStatus(.connecting)
+                if isEnabled { publishStatus(.connecting) }
             case let .waitingForController(description):
                 receiverStateGeneration &+= 1
                 receiverDescription = description
                 controllerConnected = false
                 isRunning = false
-                publishStatus(.waitingForController)
+                if isEnabled { publishStatus(.waitingForController) }
             case .controllerConnected:
                 controllerConnected = true
                 isRunning = false
-                publishStatus(.waitingForNeutral)
+                if isEnabled { publishStatus(.waitingForNeutral) }
             case .outputArmed:
-                guard controllerConnected else { break }
+                guard controllerConnected, isEnabled else { break }
                 isRunning = true
+                isReleasingOutput = false
                 publishStatus(.active)
+            case .outputReleased:
+                isRunning = false
+                let wasReleasing = isReleasingOutput
+                isReleasingOutput = false
+                if !isEnabled, wasReleasing {
+                    publishStatus(.off)
+                }
             case let .progress(summary):
                 update(summary)
             case let .controllerLost(summary):
                 update(summary)
                 controllerConnected = false
                 isRunning = false
-                publishStatus(.waitingForController)
+                isReleasingOutput = false
+                if isEnabled { publishStatus(.waitingForController) }
             case let .stopped(summary):
                 update(summary)
                 controllerConnected = false
                 isRunning = false
+                isReleasingOutput = false
                 sessionID = nil
-                if isEnabled, terminationState == .idle {
-                    publishStatus(.waitingForController)
+                if terminationState == .idle {
+                    if isEnabled {
+                        publishStatus(.waitingForController)
+                    } else if status == .releasingOutputs {
+                        publishStatus(.off)
+                    }
                     shouldScheduleReconnect = true
                 } else {
                     publishStatus(.stopped)
@@ -1040,25 +1121,30 @@ public final class PaddrMenuModel {
                 receiverDescription = nil
                 controllerConnected = false
                 isRunning = false
+                isReleasingOutput = false
                 sessionID = nil
-                publishStatus(.waitingForController)
                 if isEnabled {
-                    shouldScheduleReconnect = true
+                    publishStatus(.waitingForController)
+                } else if status == .releasingOutputs {
+                    publishStatus(.off)
                 }
+                shouldScheduleReconnect = true
             case .receiverUnavailable:
-                receiverStateGeneration &+= 1
-                receiverDescription = nil
                 controllerConnected = false
                 isRunning = false
+                isReleasingOutput = false
                 sessionID = nil
-                publishStatus(.waitingForController)
                 if isEnabled {
-                    shouldScheduleReconnect = true
+                    publishStatus(.waitingForController)
+                } else if status == .releasingOutputs {
+                    publishStatus(.off)
                 }
+                shouldScheduleReconnect = true
             case let .failed(message):
                 sessionID = nil
                 controllerConnected = false
                 isRunning = false
+                isReleasingOutput = false
                 let failure = MenuFailure.output(diagnostic: message)
                 if isEnabled { isEnabled = false }
                 publishStatus(.failure(failure))

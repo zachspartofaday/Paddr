@@ -495,6 +495,248 @@ final class RuntimeTests: XCTestCase {
         XCTAssertEqual(events.events.filter { $0 == .outputArmed }.count, 2)
     }
 
+    func testGateDisabledReportsConnectControllerWithoutAnyOutput() throws {
+        let clock = ManualUptimeClock()
+        let output = RecordingOutput()
+        let events = EventRecorder()
+        let gate = OutputGate(enabled: false)
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .report(heldLeftReport(), at: 10),
+            .report(neutralReport(), at: 20)
+        ])
+        var configuration = TrackIsBackConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+
+        let result = try run(
+            configuration: configuration,
+            outputGate: gate,
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: events
+        )
+
+        XCTAssertTrue(events.events.contains(.controllerConnected))
+        XCTAssertFalse(events.events.contains(.outputArmed))
+        XCTAssertEqual(output.actions, [])
+        XCTAssertEqual(result.summary, TrackpadRunSummary(reportCount: 3, actionCount: 0))
+    }
+
+    func testGateEnableWhileHeldWaitsForFreshNeutralBeforeArming() throws {
+        let clock = ManualUptimeClock()
+        let output = RecordingOutput()
+        let events = EventRecorder()
+        let gate = OutputGate(enabled: false)
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(heldLeftReport(), at: 0),
+            .perform { gate.setEnabled(true) },
+            .report(heldLeftReport(), at: 10),
+            .report(heldLeftReport(), at: 20),
+            .report(neutralReport(), at: 30),
+            .report(heldLeftReport(), at: 40),
+            .report(neutralReport(), at: 50)
+        ])
+        var configuration = TrackIsBackConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+
+        _ = try run(
+            configuration: configuration,
+            outputGate: gate,
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: events
+        )
+
+        let space = try KeyCatalog.resolve("space")
+        XCTAssertEqual(output.actions, [
+            .key(space, isPressed: true),
+            .key(space, isPressed: false)
+        ])
+        XCTAssertEqual(events.events.filter { $0 == .outputArmed }.count, 1)
+    }
+
+    func testGateDisableReleasesHeldOutputBeforeEmittingOutputReleased() throws {
+        let clock = ManualUptimeClock()
+        let timeline = TimelineRecorder()
+        let output = RecordingOutput { action in
+            timeline.append("action:\(action.description)")
+        }
+        let events = EventRecorder { event in
+            switch event {
+            case .outputReleased: timeline.append("event:outputReleased")
+            case .controllerConnected: timeline.append("event:controllerConnected")
+            case .controllerLost: timeline.append("event:controllerLost")
+            default: break
+            }
+        }
+        let gate = OutputGate(enabled: true)
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .report(heldLeftReport(), at: 10),
+            .perform { gate.setEnabled(false) },
+            .wake(at: 20),
+            .report(neutralReport(), at: 30),
+            .report(heldLeftReport(), at: 40)
+        ])
+        var configuration = TrackIsBackConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+
+        let result = try run(
+            configuration: configuration,
+            outputGate: gate,
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: events
+        )
+
+        let space = try KeyCatalog.resolve("space")
+        XCTAssertEqual(output.actions, [
+            .key(space, isPressed: true),
+            .key(space, isPressed: false)
+        ])
+        XCTAssertEqual(timeline.entries, [
+            "event:controllerConnected",
+            "action:\(TrackpadOutputAction.key(space, isPressed: true).description)",
+            "action:\(TrackpadOutputAction.key(space, isPressed: false).description)",
+            "event:outputReleased"
+        ])
+        XCTAssertFalse(events.events.contains { event in
+            if case .controllerLost = event { return true }
+            return false
+        })
+        XCTAssertEqual(events.events.filter { $0 == .controllerConnected }.count, 1)
+        XCTAssertEqual(result.termination, .stopped)
+    }
+
+    func testGateReenableAfterDisableArmsOnlyOnFreshNeutral() throws {
+        let clock = ManualUptimeClock()
+        let output = RecordingOutput()
+        let events = EventRecorder()
+        let gate = OutputGate(enabled: true)
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .report(heldLeftReport(), at: 10),
+            .perform { gate.setEnabled(false) },
+            .wake(at: 20),
+            .perform { gate.setEnabled(true) },
+            .report(heldLeftReport(), at: 30),
+            .report(neutralReport(), at: 40),
+            .report(heldLeftReport(), at: 50),
+            .report(neutralReport(), at: 60)
+        ])
+        var configuration = TrackIsBackConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+
+        _ = try run(
+            configuration: configuration,
+            outputGate: gate,
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: events
+        )
+
+        let space = try KeyCatalog.resolve("space")
+        XCTAssertEqual(output.actions, [
+            .key(space, isPressed: true),
+            .key(space, isPressed: false),
+            .key(space, isPressed: true),
+            .key(space, isPressed: false)
+        ])
+        XCTAssertEqual(events.events.filter { $0 == .outputArmed }.count, 2)
+        XCTAssertEqual(events.events.filter { $0 == .outputReleased }.count, 1)
+    }
+
+    func testGateDisableWithNothingHeldStillEmitsOutputReleasedAndKeepsLiveness() throws {
+        let clock = ManualUptimeClock()
+        let output = RecordingOutput()
+        let events = EventRecorder()
+        let gate = OutputGate(enabled: true)
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .perform { gate.setEnabled(false) },
+            .wake(at: 10),
+            .report(neutralReport(), at: 20)
+        ])
+
+        _ = try run(
+            configuration: .default,
+            outputGate: gate,
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: events
+        )
+
+        XCTAssertEqual(output.actions, [])
+        XCTAssertEqual(events.events.filter { $0 == .outputReleased }.count, 1)
+        XCTAssertEqual(events.events.filter { $0 == .controllerConnected }.count, 1)
+    }
+
+    func testControllerLossWhileGateDisabledPublishesLostWithoutOutput() throws {
+        let clock = ManualUptimeClock()
+        let output = RecordingOutput()
+        let events = EventRecorder()
+        let gate = OutputGate(enabled: false)
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .wake(at: 1_000_000_000),
+            .report(neutralReport(), at: 1_500_000_000)
+        ])
+
+        _ = try run(
+            configuration: .default,
+            outputGate: gate,
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: events
+        )
+
+        XCTAssertEqual(output.actions, [])
+        XCTAssertEqual(
+            events.events.filter { event in
+                if case .controllerLost = event { return true }
+                return false
+            }.count,
+            1
+        )
+        XCTAssertEqual(events.events.filter { $0 == .controllerConnected }.count, 2)
+    }
+
+    func testObserveOnlyStaysHardNoOutputEvenWithGateEnabled() throws {
+        let clock = ManualUptimeClock()
+        let output = RecordingOutput()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .report(heldLeftReport(), at: 10),
+            .report(neutralReport(), at: 20)
+        ])
+        var configuration = TrackIsBackConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+
+        let result = try run(
+            configuration: configuration,
+            observeOnly: true,
+            outputGate: OutputGate(enabled: true),
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: EventRecorder()
+        )
+
+        XCTAssertEqual(output.actions, [])
+        XCTAssertEqual(result.summary.actionCount, 2)
+    }
+
     func testReappearanceRequiresFreshEvidenceAndNeutralBeforeHeldInputCanPressAgain() throws {
         let clock = ManualUptimeClock()
         let output = RecordingOutput()
@@ -534,6 +776,7 @@ final class RuntimeTests: XCTestCase {
     private func run(
         configuration: TrackIsBackConfiguration = .default,
         observeOnly: Bool = false,
+        outputGate: OutputGate? = nil,
         hid: ScriptedHID,
         clock: ManualUptimeClock,
         output: any TrackpadOutputDispatching = RecordingOutput(),
@@ -542,6 +785,7 @@ final class RuntimeTests: XCTestCase {
         try TrackpadRuntime.run(
             configuration: configuration,
             observeOnly: observeOnly,
+            outputGate: outputGate,
             stopToken: TrackpadStopToken(),
             dependencies: TrackpadRuntimeDependencies(
                 openHID: { hid },
@@ -564,6 +808,7 @@ private final class ScriptedHID: TrackpadHIDStreaming, Sendable {
         case report([UInt8], at: UInt64)
         case delayedReport([UInt8], receivedAt: UInt64, processedAt: UInt64)
         case wake(at: UInt64)
+        case perform(@Sendable () -> Void)
         case remove
         case stop
     }
@@ -594,6 +839,8 @@ private final class ScriptedHID: TrackpadHIDStreaming, Sendable {
             case let .wake(uptime):
                 clock.set(uptime)
                 try onWake()
+            case let .perform(action):
+                action()
             case .remove:
                 return .deviceRemoved
             case .stop:

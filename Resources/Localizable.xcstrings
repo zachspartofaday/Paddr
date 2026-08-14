@@ -972,6 +972,17 @@
         }
       }
     },
+    "Puck": {
+      "comment": "Short receiver status title for the puck indicator.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Puck"
+          }
+        }
+      }
+    },
     "Quit Paddr": {
       "localizations": {
         "en": {
@@ -1042,6 +1053,17 @@
         }
       }
     },
+    "Releasing": {
+      "comment": "Short status value while held outputs are being released.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Releasing"
+          }
+        }
+      }
+    },
     "Releasing mapped keys and mouse buttons…": {
       "localizations": {
         "en": {
@@ -1070,6 +1092,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Required"
+          }
+        }
+      }
+    },
+    "Restore Defaults": {
+      "comment": "Profile actions menu item that resets the draft configuration to defaults.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore Defaults"
           }
         }
       }

@@ -12,17 +12,42 @@ struct TopControlsView: View {
                     Spacer(minLength: 12)
                     permissionsContent
                 }
+                Spacer(minLength: 12)
+                saveState
+                actions
             }
             .frame(minHeight: 40)
 
             VStack(alignment: .leading, spacing: 12) {
                 ProfileControlsView(model: model)
                 if !model.hasSystemAccess { permissionsContent }
+                HStack(spacing: 12) {
+                    saveState
+                    Spacer(minLength: 12)
+                    actions
+                }
             }
         }
         .padding(PaddrStyle.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .paddrCard()
+    }
+
+    private var saveState: some View {
+        Label(
+            model.hasUnsavedChanges ? "Unsaved changes" : "Saved",
+            systemImage: model.hasUnsavedChanges ? "circle.fill" : "checkmark.circle.fill"
+        )
+        .paddrTypography(.callout)
+        .foregroundStyle(model.hasUnsavedChanges ? PaddrStyle.warningText : PaddrStyle.accentText)
+        .fixedSize()
+    }
+
+    private var actions: some View {
+        Button("Save & Apply", systemImage: "checkmark", action: model.saveAndApply)
+            .paddrActionButton(prominent: true)
+            .disabled(!model.canSaveAndApply)
+            .keyboardShortcut("s", modifiers: .command)
     }
 
     private var permissionsContent: some View {

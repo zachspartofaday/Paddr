@@ -155,8 +155,10 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.configuration.left.sensitivity, 4)
         XCTAssertEqual(model.savedConfiguration.left.sensitivity, 4)
         XCTAssertEqual(state.saveCallCount, 0)
-        let postInitializationStartCount = await session.startCount
-        XCTAssertEqual(postInitializationStartCount, 0)
+        await waitUntil(model: model) { await session.startCount == 1 }
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(state.saveCallCount, 0)
     }
 
     func testInitializationFailurePreservesNewerPermissionGuidanceAndReconcilesIt() async {
@@ -197,11 +199,12 @@ final class MenuModelTests: XCTestCase {
 
         loadGate.signal()
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
         model.configuration.left.sensitivity = 7
         model.isEnabled = true
-        await waitUntil(model: model) { await session.startCount == 1 }
+        await waitUntil(model: model) { await session.startCount == 2 }
 
-        let startedSensitivity = await session.startedConfigurations.first?.left.sensitivity
+        let startedSensitivity = await session.startedConfigurations.last?.left.sensitivity
         XCTAssertEqual(model.configuration.left.sensitivity, 7)
         XCTAssertEqual(model.savedConfiguration.left.sensitivity, 7)
         XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 7)
@@ -254,6 +257,7 @@ final class MenuModelTests: XCTestCase {
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
         XCTAssertTrue(model.hasSystemAccess)
 
         model.isEnabled = true
@@ -264,8 +268,9 @@ final class MenuModelTests: XCTestCase {
 
         let startCount = await session.startCount
         XCTAssertTrue(model.isEnabled)
-        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(startCount, 2)
         XCTAssertTrue(model.isRunning)
+        XCTAssertFalse(model.canSaveAndApply)
     }
 
     func testDisconnectedEnableStaysOnAndWaits() async {
@@ -286,13 +291,14 @@ final class MenuModelTests: XCTestCase {
         let session = ManualEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
 
         XCTAssertEqual(model.receiverDescription, "Fake receiver")
         XCTAssertFalse(model.controllerConnected)
         XCTAssertFalse(model.isRunning)
 
         model.isEnabled = true
-        await waitUntil(model: model) { await session.startCount == 1 }
+        await waitUntil(model: model) { await session.startCount == 2 }
 
         XCTAssertFalse(model.controllerConnected)
         XCTAssertFalse(model.isRunning)
@@ -304,8 +310,9 @@ final class MenuModelTests: XCTestCase {
         let session = ManualEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
-        model.isEnabled = true
         await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 2 }
 
         await session.send(.waitingForController("Fake receiver"))
         await waitUntil(model: model) { model.status == .waitingForController }
@@ -331,7 +338,7 @@ final class MenuModelTests: XCTestCase {
 
         model.isEnabled = true
         await waitUntil(model: model) {
-            model.reportCount == 80 && model.actionCount == 8
+            model.isRunning && model.reportCount == 80 && model.actionCount == 8
         }
 
         XCTAssertTrue(model.controllerConnected)
@@ -341,6 +348,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.actionCount, 8)
 
         model.isEnabled = false
+        await session.stop()
         await waitUntil(model: model) { !model.hasPendingLifecycleWork }
     }
 
@@ -349,8 +357,9 @@ final class MenuModelTests: XCTestCase {
         let session = ManualEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
-        model.isEnabled = true
         await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 2 }
         await session.connect(receiver: "Fake receiver")
         await waitUntil(model: model) { model.isRunning }
 
@@ -361,7 +370,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.isRunning)
         XCTAssertEqual(model.status, .waitingForController)
         var startCount = await session.startCount
-        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(startCount, 2)
 
         await session.send(.controllerConnected)
         await waitUntil(model: model) { model.controllerConnected }
@@ -369,7 +378,7 @@ final class MenuModelTests: XCTestCase {
         await session.send(.outputArmed)
         await waitUntil(model: model) { model.isRunning }
         startCount = await session.startCount
-        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(startCount, 2)
     }
 
     func testDraftEditKeepsCurrentSessionControllerTransitionsAuthoritative() async {
@@ -377,8 +386,9 @@ final class MenuModelTests: XCTestCase {
         let session = ManualEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
-        model.isEnabled = true
         await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 2 }
         await session.connect(receiver: "Fake receiver")
         await waitUntil(model: model) { model.status == .active }
 
@@ -405,8 +415,9 @@ final class MenuModelTests: XCTestCase {
         let session = ManualEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
-        model.isEnabled = true
         await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 2 }
         await session.connect(receiver: "Fake receiver")
         await waitUntil(model: model) { model.status == .active }
 
@@ -437,7 +448,7 @@ final class MenuModelTests: XCTestCase {
 
         state.saveGate = nil
         saveGate.signal()
-        await waitUntil(model: model) { await session.startCount == 2 }
+        await waitUntil(model: model) { await session.startCount == 3 }
         await session.send(.waitingForController("Fake receiver"))
         await session.send(.controllerConnected)
         await waitUntil(model: model) { model.controllerConnected }
@@ -448,6 +459,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.isRunning }
         XCTAssertEqual(model.status, .active)
         model.isEnabled = false
+        await session.stop()
         await waitUntil(model: model) { !model.hasPendingLifecycleWork }
     }
 
@@ -456,8 +468,9 @@ final class MenuModelTests: XCTestCase {
         let session = ManualEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
-        model.isEnabled = true
         await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 2 }
         await session.connect(receiver: "Fake receiver")
         await waitUntil(model: model) { model.status == .active }
 
@@ -483,14 +496,15 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.isRunning)
         XCTAssertEqual(model.status, .waitingForController)
         let startCountBeforeLatestCompletion = await session.startCount
-        XCTAssertEqual(startCountBeforeLatestCompletion, 1)
+        XCTAssertEqual(startCountBeforeLatestCompletion, 2)
 
         state.saveGate = nil
         secondSaveGate.signal()
         await waitUntil(model: model) {
-            await session.startCount == 2 && state.saveCompletionCount == 2
+            await session.startCount == 3 && state.saveCompletionCount == 2
         }
         model.isEnabled = false
+        await session.stop()
         await waitUntil(model: model) { !model.hasPendingLifecycleWork }
     }
 
@@ -499,8 +513,9 @@ final class MenuModelTests: XCTestCase {
         let session = ManualEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
-        model.isEnabled = true
         await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 2 }
         await session.connect(receiver: "Fake receiver")
         await waitUntil(model: model) { model.status == .active }
 
@@ -522,12 +537,13 @@ final class MenuModelTests: XCTestCase {
 
         let startCount = await session.startCount
         XCTAssertEqual(state.saveCompletionCount, 1)
-        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(startCount, 2)
         XCTAssertFalse(model.controllerConnected)
         XCTAssertFalse(model.isRunning)
         XCTAssertTrue(model.hasUnsavedChanges)
         XCTAssertEqual(model.status, .waitingForController)
         model.isEnabled = false
+        await session.stop()
         await waitUntil(model: model) { !model.hasPendingLifecycleWork }
     }
 
@@ -536,7 +552,12 @@ final class MenuModelTests: XCTestCase {
         let sleeper = ManualSleeper()
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
         let model = PaddrMenuModel(
-            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+            dependencies: dependencies(
+                state: state,
+                session: session,
+                sleeper: sleeper,
+                reconnectSleeper: sleeper
+            )
         )
         await waitUntil(model: model) { model.isInitialized }
 
@@ -557,7 +578,12 @@ final class MenuModelTests: XCTestCase {
         let sleeper = ManualSleeper()
         let session = ManualEventSession()
         let model = PaddrMenuModel(
-            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+            dependencies: dependencies(
+                state: state,
+                session: session,
+                sleeper: sleeper,
+                reconnectSleeper: sleeper
+            )
         )
         await waitUntil(model: model) { model.isInitialized }
         model.isEnabled = true
@@ -583,6 +609,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertTrue(model.isRunning)
         XCTAssertEqual(model.status, .active)
         model.isEnabled = false
+        await session.stop()
         await waitUntil(model: model) { !model.hasPendingLifecycleWork }
     }
 
@@ -591,7 +618,12 @@ final class MenuModelTests: XCTestCase {
         let sleeper = ManualSleeper()
         let session = ManualEventSession()
         let model = PaddrMenuModel(
-            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+            dependencies: dependencies(
+                state: state,
+                session: session,
+                sleeper: sleeper,
+                reconnectSleeper: sleeper
+            )
         )
         await waitUntil(model: model) { model.isInitialized }
         model.isEnabled = true
@@ -614,6 +646,7 @@ final class MenuModelTests: XCTestCase {
             return XCTFail("Expected reconnect to preserve the newer validation failure")
         }
         model.isEnabled = false
+        await session.stop()
         await waitUntil(model: model) { !model.hasPendingLifecycleWork }
     }
 
@@ -622,7 +655,12 @@ final class MenuModelTests: XCTestCase {
         let sleeper = ManualSleeper()
         let session = ManualEventSession()
         let model = PaddrMenuModel(
-            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+            dependencies: dependencies(
+                state: state,
+                session: session,
+                sleeper: sleeper,
+                reconnectSleeper: sleeper
+            )
         )
         await waitUntil(model: model) { model.isInitialized }
         model.isEnabled = true
@@ -658,6 +696,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertTrue(model.isRunning)
         XCTAssertEqual(model.status, .active)
         model.isEnabled = false
+        await session.stop()
         await waitUntil(model: model) { !model.hasPendingLifecycleWork }
     }
 
@@ -666,7 +705,12 @@ final class MenuModelTests: XCTestCase {
         let sleeper = ManualSleeper()
         let session = ManualEventSession()
         let model = PaddrMenuModel(
-            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+            dependencies: dependencies(
+                state: state,
+                session: session,
+                sleeper: sleeper,
+                reconnectSleeper: sleeper
+            )
         )
         await waitUntil(model: model) { model.isInitialized }
         model.isEnabled = true
@@ -707,6 +751,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertTrue(model.isRunning)
         XCTAssertEqual(model.status, .accessibilitySettings)
         model.isEnabled = false
+        await session.stop()
         await waitUntil(model: model) { !model.hasPendingLifecycleWork }
     }
 
@@ -733,8 +778,9 @@ final class MenuModelTests: XCTestCase {
         let session = ManualEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
-        model.isEnabled = true
         await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 2 }
         await session.connect(receiver: "Fake puck")
         await waitUntil(model: model) { model.status == .active }
         let probeCount = state.probeCallCount
@@ -753,8 +799,9 @@ final class MenuModelTests: XCTestCase {
         let session = ManualEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
-        model.isEnabled = true
         await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 2 }
         await session.connect(receiver: "Initial session puck")
         await waitUntil(model: model) { model.status == .active }
 
@@ -783,8 +830,9 @@ final class MenuModelTests: XCTestCase {
         let session = ManualEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
-        model.isEnabled = true
         await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 2 }
         await session.connect(receiver: "Session receiver")
         await waitUntil(model: model) { model.isRunning }
 
@@ -814,8 +862,9 @@ final class MenuModelTests: XCTestCase {
         let session = ManualEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
-        model.isEnabled = true
         await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 2 }
         await session.connect(receiver: "Session puck")
         await waitUntil(model: model) { model.status == .active }
 
@@ -844,8 +893,9 @@ final class MenuModelTests: XCTestCase {
         let session = ManualEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
-        model.isEnabled = true
         await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 2 }
         await session.connect(receiver: "Fake puck")
         await waitUntil(model: model) { model.status == .active }
 
@@ -866,11 +916,17 @@ final class MenuModelTests: XCTestCase {
         let sleeper = ManualSleeper()
         let session = ManualEventSession()
         let model = PaddrMenuModel(
-            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+            dependencies: dependencies(
+                state: state,
+                session: session,
+                sleeper: sleeper,
+                reconnectSleeper: sleeper
+            )
         )
         await waitUntil(model: model) { model.isInitialized }
-        model.isEnabled = true
         await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 2 }
         await session.connect(receiver: "Fake puck")
         await waitUntil(model: model) { model.status == .active }
         let probeCount = state.probeCallCount
@@ -881,7 +937,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { !model.isRunning && model.receiverDescription == nil }
         XCTAssertEqual(model.status, .waitingForController)
         sleeper.wake()
-        await waitUntil(model: model) { await session.startCount == 2 }
+        await waitUntil(model: model) { await session.startCount == 3 }
 
         XCTAssertEqual(model.status, .connecting)
         await session.connect(receiver: "Reconnected puck")
@@ -1003,8 +1059,9 @@ final class MenuModelTests: XCTestCase {
         let session = ManualEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
-        model.isEnabled = true
         await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 2 }
         await session.connect(receiver: "Fake receiver")
         await waitUntil(model: model) { model.status == .active }
 
@@ -1073,12 +1130,18 @@ final class MenuModelTests: XCTestCase {
         let sleeper = ManualSleeper()
         let session = ManualEventSession()
         let model = PaddrMenuModel(
-            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+            dependencies: dependencies(
+                state: state,
+                session: session,
+                sleeper: sleeper,
+                reconnectSleeper: sleeper
+            )
         )
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
 
         model.isEnabled = true
-        await waitUntil(model: model) { await session.startCount == 1 }
+        await waitUntil(model: model) { await session.startCount == 2 }
         state.accessibilityGranted = false
         model.requestAccessibility()
         model.openAccessibilitySettings()
@@ -1104,12 +1167,18 @@ final class MenuModelTests: XCTestCase {
         let sleeper = ManualSleeper()
         let session = ManualEventSession()
         let model = PaddrMenuModel(
-            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+            dependencies: dependencies(
+                state: state,
+                session: session,
+                sleeper: sleeper,
+                reconnectSleeper: sleeper
+            )
         )
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
 
         model.isEnabled = true
-        await waitUntil(model: model) { await session.startCount == 1 }
+        await waitUntil(model: model) { await session.startCount == 2 }
         await session.connect(receiver: "Fake puck")
         await waitUntil(model: model) { model.status == .active }
         XCTAssertTrue(model.controllerConnected)
@@ -1149,12 +1218,13 @@ final class MenuModelTests: XCTestCase {
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
         model.configuration.left.sensitivity = 7
 
         model.isEnabled = true
-        await waitUntil(model: model) { await session.startCount == 1 }
+        await waitUntil(model: model) { await session.startCount == 2 }
 
-        let startedSensitivity = await session.startedConfigurations.first?.left.sensitivity
+        let startedSensitivity = await session.startedConfigurations.last?.left.sensitivity
         XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 7)
         XCTAssertEqual(startedSensitivity, 7)
         XCTAssertFalse(model.hasUnsavedChanges)
@@ -1165,6 +1235,7 @@ final class MenuModelTests: XCTestCase {
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
         model.configuration.left.sensitivity = 3
         let saveGate = DispatchSemaphore(value: 0)
         state.saveGate = saveGate
@@ -1174,9 +1245,9 @@ final class MenuModelTests: XCTestCase {
         model.configuration.left.sensitivity = 5
         state.saveGate = nil
         saveGate.signal()
-        await waitUntil(model: model) { await session.startCount == 1 }
+        await waitUntil(model: model) { await session.startCount == 2 }
 
-        let startedSensitivity = await session.startedConfigurations.first?.left.sensitivity
+        let startedSensitivity = await session.startedConfigurations.last?.left.sensitivity
         XCTAssertEqual(state.saveCallCount, 2)
         XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 5)
         XCTAssertEqual(model.savedConfiguration.left.sensitivity, 5)
@@ -1194,6 +1265,7 @@ final class MenuModelTests: XCTestCase {
         let session = RecordingSession(recorder: recorder)
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil { recorder.values.contains("start") }
 
         model.configuration.left.sensitivity = 3
         let firstSaveGate = DispatchSemaphore(value: 0)
@@ -1220,7 +1292,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.isRunning)
         XCTAssertFalse(model.canManageProfiles)
         let startedConfigurationsBeforeHandoff = await session.startedConfigurations
-        XCTAssertEqual(startedConfigurationsBeforeHandoff.count, 0)
+        XCTAssertEqual(startedConfigurationsBeforeHandoff.count, 1)
 
         state.saveGate = nil
         secondSaveGate.signal()
@@ -1234,8 +1306,8 @@ final class MenuModelTests: XCTestCase {
         let maximumWorkerCount = await session.maximumWorkerCount
         XCTAssertEqual(state.saveCallCount, 3)
         XCTAssertEqual(state.saveCompletionCount, 3)
-        XCTAssertEqual(recorder.values, ["save", "stop", "save", "save", "start"])
-        XCTAssertEqual(startedConfigurations.map(\.left.sensitivity), [5])
+        XCTAssertEqual(recorder.values, ["start", "save", "stop", "save", "save", "start"])
+        XCTAssertEqual(startedConfigurations.map(\.left.sensitivity), [2, 5])
         XCTAssertEqual(maximumWorkerCount, 1)
         XCTAssertTrue(model.isEnabled)
         XCTAssertTrue(model.isRunning)
@@ -1259,6 +1331,7 @@ final class MenuModelTests: XCTestCase {
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
         model.configuration.left.sensitivity = 3
         let saveGate = DispatchSemaphore(value: 0)
         state.saveGate = saveGate
@@ -1269,9 +1342,9 @@ final class MenuModelTests: XCTestCase {
         model.configuration.left.sensitivity = 5
         state.saveGate = nil
         saveGate.signal()
-        await waitUntil(model: model) { await session.startCount == 1 }
+        await waitUntil(model: model) { await session.startCount == 2 }
 
-        let startedSensitivity = await session.startedConfigurations.first?.left.sensitivity
+        let startedSensitivity = await session.startedConfigurations.last?.left.sensitivity
         XCTAssertEqual(state.saveCallCount, 2)
         XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 5)
         XCTAssertEqual(model.savedConfiguration.left.sensitivity, 5)
@@ -1288,6 +1361,7 @@ final class MenuModelTests: XCTestCase {
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
 
         model.configuration.left.sensitivity = 5
         let saveGate = DispatchSemaphore(value: 0)
@@ -1305,9 +1379,9 @@ final class MenuModelTests: XCTestCase {
         }
 
         XCTAssertEqual(model.savedConfiguration.left.sensitivity, 5)
-        let startCount = await session.startCount
-        XCTAssertEqual(startCount, 0)
+        await waitUntil(model: model) { await session.startCount == 2 }
         XCTAssertFalse(model.isRunning)
+        XCTAssertFalse(model.isEnabled)
     }
 
     func testInvalidDraftPreventsSaveAndStart() async {
@@ -1315,14 +1389,14 @@ final class MenuModelTests: XCTestCase {
         let session = ScriptedSession(events: [])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
         model.configuration.left.sensitivity = 21
 
         model.isEnabled = true
         await waitUntil(model: model) { !model.isEnabled }
 
-        let startCount = await session.startCount
+        await waitUntil(model: model) { await session.startCount == 2 }
         XCTAssertNil(state.savedConfiguration)
-        XCTAssertEqual(startCount, 0)
         XCTAssertEqual(model.configuration.left.sensitivity, 21)
         guard case .failure(.configurationInvalid) = model.status else {
             return XCTFail("Expected a typed validation failure")
@@ -1335,13 +1409,13 @@ final class MenuModelTests: XCTestCase {
         let session = ScriptedSession(events: [])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
         model.configuration.left.sensitivity = 6
 
         model.isEnabled = true
         await waitUntil(model: model) { !model.isEnabled }
 
-        let startCount = await session.startCount
-        XCTAssertEqual(startCount, 0)
+        await waitUntil(model: model) { await session.startCount == 2 }
         XCTAssertEqual(model.configuration.left.sensitivity, 6)
         XCTAssertTrue(model.hasUnsavedChanges)
         guard case .failure(.configurationSave) = model.status else {
@@ -1374,15 +1448,16 @@ final class MenuModelTests: XCTestCase {
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed], keepsStreamOpen: true)
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
         model.isEnabled = true
         await waitUntil(model: model) { model.isRunning }
 
         model.configuration.right.sensitivity = 9
         model.saveAndApply()
-        await waitUntil(model: model) { await session.startCount == 2 && model.isRunning }
+        await waitUntil(model: model) { await session.startCount == 3 && model.isRunning }
 
         let configurations = await session.startedConfigurations
-        XCTAssertEqual(configurations.map(\.right.sensitivity), [1, 9])
+        XCTAssertEqual(configurations.map(\.right.sensitivity), [1, 1, 9])
         XCTAssertEqual(state.savedConfiguration?.right.sensitivity, 9)
         XCTAssertFalse(model.hasUnsavedChanges)
     }
@@ -1392,7 +1467,12 @@ final class MenuModelTests: XCTestCase {
         let sleeper = ManualSleeper()
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
         let model = PaddrMenuModel(
-            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+            dependencies: dependencies(
+                state: state,
+                session: session,
+                sleeper: sleeper,
+                reconnectSleeper: sleeper
+            )
         )
         await waitUntil(model: model) { model.isInitialized }
         model.isEnabled = true
@@ -1403,9 +1483,9 @@ final class MenuModelTests: XCTestCase {
         sleeper.wake()
         await waitUntil(model: model) { model.status == .off }
 
-        let startCount = await session.startCount
-        XCTAssertEqual(startCount, 0)
+        await waitUntil(model: model) { await session.startCount == 1 }
         XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .off)
     }
 
     func testDisconnectedEnableSavesThenReconnectsWithSavedSnapshot() async {
@@ -1413,7 +1493,12 @@ final class MenuModelTests: XCTestCase {
         let sleeper = ManualSleeper()
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
         let model = PaddrMenuModel(
-            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+            dependencies: dependencies(
+                state: state,
+                session: session,
+                sleeper: sleeper,
+                reconnectSleeper: sleeper
+            )
         )
         await waitUntil(model: model) { model.isInitialized }
         model.configuration.left.sensitivity = 3
@@ -1504,6 +1589,7 @@ final class MenuModelTests: XCTestCase {
         let session = GatedSession(blockedStops: [2])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
         model.isEnabled = true
         await waitUntil(model: model) { model.isRunning }
 
@@ -1526,7 +1612,7 @@ final class MenuModelTests: XCTestCase {
         let stopCount = await session.stopCount
         XCTAssertEqual(firstReplyCount, 1)
         XCTAssertEqual(secondReplyCount, 1)
-        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(startCount, 2)
         XCTAssertEqual(stopCount, 2)
         XCTAssertFalse(model.isEnabled)
         XCTAssertFalse(model.hasPendingLifecycleWork)
@@ -1537,6 +1623,7 @@ final class MenuModelTests: XCTestCase {
         let session = GatedSession(blockedStops: [1])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
         model.isEnabled = true
         await session.waitForStop(1)
 
@@ -1550,29 +1637,29 @@ final class MenuModelTests: XCTestCase {
 
         let startCount = await session.startCount
         let stopCount = await session.stopCount
-        XCTAssertEqual(startCount, 0)
+        XCTAssertEqual(startCount, 1)
         XCTAssertEqual(stopCount, 2)
     }
 
     func testTerminationDuringDisableDrainsThePendingStop() async {
-        let state = readyState(receiver: nil)
+        let state = readyState(receiver: "Fake")
         let session = GatedSession(blockedStops: [2])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
         model.isEnabled = true
-        await waitUntil(model: model) { model.status == .waitingForController }
+        await waitUntil(model: model) { model.isRunning }
 
         model.isEnabled = false
-        await session.waitForStop(2)
         var didReply = false
         XCTAssertTrue(model.stopForTermination { didReply = true })
-        await session.waitForStop(3)
+        await session.waitForStop(2)
         XCTAssertFalse(didReply)
 
         await session.releaseStop(2)
         await waitUntil(model: model) { didReply }
         let stopCount = await session.stopCount
-        XCTAssertEqual(stopCount, 3)
+        XCTAssertEqual(stopCount, 2)
     }
 
     func testTerminationCancelsPendingReconnect() async {
@@ -1580,7 +1667,12 @@ final class MenuModelTests: XCTestCase {
         let sleeper = ManualSleeper()
         let session = GatedSession()
         let model = PaddrMenuModel(
-            dependencies: dependencies(state: state, session: session, sleeper: sleeper)
+            dependencies: dependencies(
+                state: state,
+                session: session,
+                sleeper: sleeper,
+                reconnectSleeper: sleeper
+            )
         )
         await waitUntil(model: model) { model.isInitialized }
         model.isEnabled = true
@@ -1603,6 +1695,7 @@ final class MenuModelTests: XCTestCase {
         let session = GatedSession(blockedStops: [2])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
         model.isEnabled = true
         await waitUntil(model: model) { model.isRunning }
 
@@ -1617,7 +1710,7 @@ final class MenuModelTests: XCTestCase {
         await session.releaseStop(2)
         await waitUntil(model: model) { didReply }
         let startCount = await session.startCount
-        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(startCount, 2)
         XCTAssertEqual(state.savedConfiguration?.right.sensitivity, 6)
     }
 
@@ -1630,7 +1723,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.status == .waitingForController }
 
         model.isEnabled = false
-        await session.waitForStop(2)
+        await waitUntil(model: model) { model.status == .off }
         await waitUntil(model: model) { !model.hasPendingLifecycleWork }
 
         var didReply = false
@@ -1737,6 +1830,7 @@ final class MenuModelTests: XCTestCase {
         let session = RecordingSession(recorder: recorder)
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil { recorder.values.contains("start") }
 
         model.isEnabled = true
         XCTAssertTrue(model.canSaveAndApply)
@@ -1747,7 +1841,7 @@ final class MenuModelTests: XCTestCase {
         saveGate.signal()
         await waitUntil(model: model) { model.isRunning && !model.needsInitialSave }
 
-        XCTAssertEqual(recorder.values, ["stop", "save", "start"])
+        XCTAssertEqual(recorder.values, ["start", "stop", "save", "start"])
         let maximumWorkerCount = await session.maximumWorkerCount
         XCTAssertEqual(maximumWorkerCount, 1)
         XCTAssertEqual(model.status, .active)
@@ -2031,6 +2125,7 @@ final class MenuModelTests: XCTestCase {
         let session = GatedSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
 
         XCTAssertEqual(
             model.requestProfileSelection(id: second.id, source: .menu),
@@ -2045,17 +2140,13 @@ final class MenuModelTests: XCTestCase {
 
         saveGate.signal()
         await waitUntil(model: model) {
-            guard state.saveCompletionCount == 1, model.canManageProfiles else { return false }
-            if !model.isEnabled { return true }
-            return await session.startCount > 0
+            state.saveCompletionCount == 1 && model.canManageProfiles && !model.isEnabled
         }
-        if !model.isEnabled {
-            await waitUntil(model: model) { !model.hasPendingLifecycleWork }
-        }
+        await waitUntil(model: model) { await session.startCount == 2 }
 
         let startCount = await session.startCount
         let stopCount = await session.stopCount
-        XCTAssertEqual(startCount, 0)
+        XCTAssertEqual(startCount, 2)
         XCTAssertEqual(stopCount, 1)
         XCTAssertFalse(model.isEnabled)
         XCTAssertFalse(model.isRunning)
@@ -2068,7 +2159,7 @@ final class MenuModelTests: XCTestCase {
             return XCTFail("Expected the profile activation save failure, got \(model.status)")
         }
         XCTAssertTrue(diagnostic.contains("simulated profile activation save failure"))
-        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+        await session.stop()
         guard case .failure(.configurationSave) = model.status else {
             return XCTFail("Expected the profile activation save failure to remain authoritative")
         }
@@ -2109,6 +2200,7 @@ final class MenuModelTests: XCTestCase {
         let session = GatedSession(blockedStops: [2])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
         model.isEnabled = true
         await waitUntil(model: model) { model.isRunning }
 
@@ -2120,15 +2212,13 @@ final class MenuModelTests: XCTestCase {
         await session.waitForStop(2)
         model.isEnabled = false
         XCTAssertEqual(model.profileSelectionPresentation, .switching(to: second.id, named: second.name))
-        await session.waitForStop(3)
         await session.releaseStop(2)
         await waitUntil(model: model) {
             state.saveCompletionCount == 1 && model.activeProfileID == second.id
         }
+        await waitUntil(model: model) { await session.startCount == 3 }
 
-        let startCount = await session.startCount
         XCTAssertEqual(state.saveCompletionCount, 1)
-        XCTAssertEqual(startCount, 1)
         XCTAssertFalse(model.isEnabled)
         XCTAssertFalse(model.isRunning)
         XCTAssertEqual(model.status, .off)
@@ -2146,21 +2236,20 @@ final class MenuModelTests: XCTestCase {
         let session = GatedSession(blockedStops: [2])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
         model.isEnabled = true
         await waitUntil(model: model) { model.isRunning }
 
         XCTAssertTrue(model.deleteProfile(id: first.id, confirmed: true))
         await session.waitForStop(2)
         model.isEnabled = false
-        await session.waitForStop(3)
         await session.releaseStop(2)
         for _ in 0..<1_000 where state.saveCompletionCount == 0 {
             await Task.yield()
         }
 
-        let startCount = await session.startCount
+        await waitUntil(model: model) { await session.startCount == 3 }
         XCTAssertEqual(state.saveCompletionCount, 1)
-        XCTAssertEqual(startCount, 1)
         XCTAssertFalse(model.isEnabled)
         XCTAssertFalse(model.isRunning)
         XCTAssertEqual(model.status, .off)
@@ -2178,20 +2267,19 @@ final class MenuModelTests: XCTestCase {
         let session = GatedSession(blockedStops: [1])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
 
         model.isEnabled = true
         model.saveAndApply()
         await session.waitForStop(1)
         model.isEnabled = false
-        await session.waitForStop(2)
         await session.releaseStop(1)
         for _ in 0..<1_000 where state.saveCompletionCount == 0 {
             await Task.yield()
         }
 
-        let startCount = await session.startCount
+        await waitUntil(model: model) { await session.startCount == 2 }
         XCTAssertEqual(state.saveCompletionCount, 1)
-        XCTAssertEqual(startCount, 0)
         XCTAssertFalse(model.isEnabled)
         XCTAssertFalse(model.isRunning)
         XCTAssertEqual(model.status, .off)
@@ -2208,6 +2296,7 @@ final class MenuModelTests: XCTestCase {
         let session = GatedSession(blockedStops: [2])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
         model.isEnabled = true
         await waitUntil(model: model) { model.isRunning }
 
@@ -2217,15 +2306,16 @@ final class MenuModelTests: XCTestCase {
         )
         await session.waitForStop(2)
         model.isEnabled = false
-        await session.waitForStop(3)
         model.isEnabled = true
         await session.releaseStop(2)
-        await waitUntil(model: model) { model.isRunning && state.saveCompletionCount == 1 }
+        await waitUntil(model: model) { state.saveCompletionCount == 1 }
+        await waitUntil(model: model) { await session.startCount == 3 }
+        await waitUntil(model: model) { model.isRunning }
 
         let startCount = await session.startCount
         let stopCount = await session.stopCount
-        XCTAssertEqual(startCount, 2)
-        XCTAssertEqual(stopCount, 3)
+        XCTAssertEqual(startCount, 3)
+        XCTAssertEqual(stopCount, 2)
         XCTAssertTrue(model.isEnabled)
         XCTAssertTrue(model.isRunning)
         XCTAssertEqual(model.status, .active)
@@ -2243,6 +2333,7 @@ final class MenuModelTests: XCTestCase {
         let session = GatedSession(blockedStops: [2])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
         model.isEnabled = true
         await waitUntil(model: model) { model.isRunning }
 
@@ -2252,19 +2343,19 @@ final class MenuModelTests: XCTestCase {
         )
         await session.waitForStop(2)
         model.isEnabled = false
-        await session.waitForStop(3)
         await session.releaseStop(2)
         await waitUntil { state.saveCallCount == 1 }
         saveGate.signal()
         await waitUntil(model: model) { model.activeProfileID == second.id }
+        await waitUntil(model: model) { await session.startCount == 3 }
 
         model.isEnabled = true
         await waitUntil(model: model) { model.isRunning }
 
         let startCount = await session.startCount
         let stopCount = await session.stopCount
-        XCTAssertEqual(startCount, 2)
-        XCTAssertEqual(stopCount, 4)
+        XCTAssertEqual(startCount, 4)
+        XCTAssertEqual(stopCount, 3)
         XCTAssertTrue(model.isEnabled)
         XCTAssertTrue(model.isRunning)
         XCTAssertEqual(model.status, .active)
@@ -2281,6 +2372,7 @@ final class MenuModelTests: XCTestCase {
         let session = GatedSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
         model.isEnabled = true
         await waitUntil(model: model) { model.isRunning }
 
@@ -2301,7 +2393,7 @@ final class MenuModelTests: XCTestCase {
         let startCount = await session.startCount
         XCTAssertEqual(state.saveCallCount, 1)
         XCTAssertEqual(state.saveCompletionCount, 1)
-        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(startCount, 2)
         XCTAssertFalse(model.isEnabled)
         XCTAssertFalse(model.isRunning)
         XCTAssertEqual(model.status, .releasingOutputs)
@@ -2324,11 +2416,12 @@ final class MenuModelTests: XCTestCase {
         let session = RetainedEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
-        model.isEnabled = true
         await waitUntil(model: model) { await session.startCount == 1 }
-        await session.send(.waitingForController("Fake puck"), to: 0)
-        await session.send(.controllerConnected, to: 0)
-        await session.send(.outputArmed, to: 0)
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 2 }
+        await session.send(.waitingForController("Fake puck"), to: 1)
+        await session.send(.controllerConnected, to: 1)
+        await session.send(.outputArmed, to: 1)
         await waitUntil(model: model) { model.status == .active }
 
         XCTAssertEqual(
@@ -2342,30 +2435,30 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.controllerConnected)
         XCTAssertFalse(model.isRunning)
 
-        await session.waitForTermination(of: 0)
-        await session.send(.failed("stale session"), to: 0)
+        await session.waitForTermination(of: 1)
+        await session.send(.failed("stale session"), to: 1)
         XCTAssertTrue(model.isEnabled)
         XCTAssertEqual(model.status, .releasingOutputs)
 
         saveGate.signal()
-        await waitUntil(model: model) { await session.startCount == 2 }
+        await waitUntil(model: model) { await session.startCount == 3 }
         XCTAssertEqual(model.activeProfileID, second.id)
         XCTAssertEqual(model.status, .connecting)
         XCTAssertFalse(model.controllerConnected)
         XCTAssertFalse(model.isRunning)
 
-        await session.send(.waitingForController("Fake puck"), to: 1)
+        await session.send(.waitingForController("Fake puck"), to: 2)
         await waitUntil(model: model) { model.status == .waitingForController }
         XCTAssertEqual(model.receiverDescription, "Fake puck")
         XCTAssertFalse(model.controllerConnected)
 
         model.configuration.left.sensitivity = 3
-        await session.send(.controllerConnected, to: 1)
+        await session.send(.controllerConnected, to: 2)
         await waitUntil(model: model) { model.status == .waitingForNeutral }
         XCTAssertTrue(model.controllerConnected)
         XCTAssertFalse(model.isRunning)
 
-        await session.send(.outputArmed, to: 1)
+        await session.send(.outputArmed, to: 2)
         await waitUntil(model: model) { model.status == .active }
         XCTAssertTrue(model.isRunning)
         await session.finishAll()
@@ -2380,8 +2473,9 @@ final class MenuModelTests: XCTestCase {
         let session = ManualEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
-        model.isEnabled = true
         await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 2 }
         await session.connect(receiver: "Fake puck")
         await waitUntil(model: model) { model.status == .active }
 
@@ -2519,6 +2613,7 @@ final class MenuModelTests: XCTestCase {
         let session = ScriptedSession(events: [])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
 
         XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
         await waitUntil { state.saveCallCount == 1 }
@@ -2549,7 +2644,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertTrue(model.hasUnsavedChanges)
         XCTAssertTrue(model.canSaveAndApply)
         let startCount = await session.startCount
-        XCTAssertEqual(startCount, 0)
+        XCTAssertEqual(startCount, 1)
 
         model.saveAndApply()
         await waitUntil(model: model) { !model.hasUnsavedChanges }
@@ -2710,6 +2805,124 @@ final class MenuModelTests: XCTestCase {
         )
     }
 
+    func testControllerReportsWhileDisabledShowControllerConnectedWithoutOutput() async {
+        let state = readyState(receiver: "Fake receiver")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+
+        await session.send(.controllerConnected)
+        await waitUntil(model: model) { model.controllerConnected }
+
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertNotNil(model.receiverDescription)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertFalse(model.isReleasingOutput)
+        XCTAssertEqual(model.status, .off)
+    }
+
+    func testDisableReleasesHeldOutputBeforeOutputBecomesIdleAndRetainsController() async {
+        let state = readyState(receiver: "Fake receiver")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await waitUntil(model: model) { await session.startCount == 2 }
+        await session.connect(receiver: "Fake receiver")
+        await waitUntil(model: model) { model.isRunning }
+
+        model.isEnabled = false
+
+        XCTAssertTrue(model.isReleasingOutput)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .releasingOutputs)
+        XCTAssertTrue(model.controllerConnected)
+
+        await session.send(.outputReleased)
+        await waitUntil(model: model) { !model.isReleasingOutput }
+
+        XCTAssertEqual(model.status, .off)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertNotNil(model.receiverDescription)
+        let startCount = await session.startCount
+        XCTAssertEqual(startCount, 2)
+    }
+
+    func testNoPuckStartupDetectsHotPlugWhileDisabled() async {
+        let state = readyState(receiver: nil)
+        let reconnectSleeper = ManualSleeper()
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(
+            dependencies: dependencies(
+                state: state,
+                session: session,
+                reconnectSleeper: reconnectSleeper
+            )
+        )
+        await waitUntil(model: model) { model.isInitialized }
+        XCTAssertNil(model.receiverDescription)
+        let preHotPlugStartCount = await session.startCount
+        XCTAssertEqual(preHotPlugStartCount, 0)
+
+        state.receiver = "Hot-plugged puck"
+        reconnectSleeper.wake()
+        await waitUntil(model: model) { await session.startCount == 1 }
+
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertEqual(model.receiverDescription, "Hot-plugged puck")
+        XCTAssertEqual(model.status, .off)
+
+        await session.send(.controllerConnected)
+        await waitUntil(model: model) { model.controllerConnected }
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .off)
+    }
+
+    func testReceiverOpenFailureKeepsProbeSourcedPuckPresence() async {
+        let state = readyState(receiver: "Probe-visible puck")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        XCTAssertEqual(model.receiverDescription, "Probe-visible puck")
+
+        await session.send(.receiverUnavailable("open failed"))
+        await session.stop()
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
+
+        XCTAssertEqual(model.receiverDescription, "Probe-visible puck")
+        XCTAssertFalse(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(model.status, .off)
+    }
+
+    func testDroppedModelIsNotRetainedByLiveSessionStream() async {
+        let state = readyState(receiver: "Fake receiver")
+        let session = ManualEventSession()
+        var model: PaddrMenuModel? = PaddrMenuModel(
+            dependencies: dependencies(state: state, session: session)
+        )
+        weak let droppedModel = model
+        if let model {
+            await waitUntil(model: model) { model.isInitialized }
+            await waitUntil(model: model) { await session.startCount == 1 }
+        }
+
+        model = nil
+        for _ in 0..<1_000 {
+            if droppedModel == nil { break }
+            await session.send(.progress(.init(reportCount: 1, actionCount: 0)))
+            await Task.yield()
+        }
+
+        XCTAssertNil(droppedModel)
+        await session.stop()
+    }
+
     private func twoProfileDocument() throws -> (
         ConfigurationProfileDocument,
         ConfigurationProfile,
@@ -2744,7 +2957,8 @@ final class MenuModelTests: XCTestCase {
     private func dependencies(
         state: ModelDependencyState,
         session: any TrackpadSessionControlling = ScriptedSession(events: []),
-        sleeper: ManualSleeper? = nil
+        sleeper: ManualSleeper? = nil,
+        reconnectSleeper: ManualSleeper? = nil
     ) -> MenuDependencies {
         MenuDependencies(
             session: session,
@@ -2795,6 +3009,10 @@ final class MenuModelTests: XCTestCase {
             sleep: { _ in
                 guard let sleeper else { throw CancellationError() }
                 try await sleeper.sleep()
+            },
+            reconnectDelay: { _ in
+                guard let reconnectSleeper else { throw CancellationError() }
+                try await reconnectSleeper.sleep()
             }
         )
     }
@@ -2835,7 +3053,8 @@ private actor ProgressPressureSession: TrackpadSessionControlling {
 
     func start(
         configuration: TrackIsBackConfiguration,
-        observeOnly: Bool
+        observeOnly: Bool,
+        outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {
         let stream = await session.start(configuration: configuration, observeOnly: observeOnly)
         await runtime.waitUntilProduced()
@@ -2862,6 +3081,7 @@ private final class MenuProgressPressureRuntime: Sendable {
     func run(
         configuration: TrackIsBackConfiguration,
         observeOnly: Bool,
+        outputGate: OutputGate?,
         stopToken: TrackpadStopToken,
         event: @escaping @Sendable (TrackpadSessionEvent) -> Void
     ) throws -> TrackpadRunResult {
@@ -2910,7 +3130,8 @@ private actor ScriptedSession: TrackpadSessionControlling {
 
     func start(
         configuration: TrackIsBackConfiguration,
-        observeOnly: Bool
+        observeOnly: Bool,
+        outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {
         startCount += 1
         startedConfigurations.append(configuration)
@@ -2937,7 +3158,8 @@ private actor ManualEventSession: TrackpadSessionControlling {
 
     func start(
         configuration: TrackIsBackConfiguration,
-        observeOnly: Bool
+        observeOnly: Bool,
+        outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {
         startCount += 1
         let (stream, continuation) = AsyncStream<TrackpadSessionEvent>.makeStream()
@@ -2968,7 +3190,8 @@ private actor RetainedEventSession: TrackpadSessionControlling {
 
     func start(
         configuration: TrackIsBackConfiguration,
-        observeOnly: Bool
+        observeOnly: Bool,
+        outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {
         startCount += 1
         let index = continuations.count
@@ -3014,7 +3237,8 @@ private actor GatedSession: TrackpadSessionControlling {
 
     func start(
         configuration: TrackIsBackConfiguration,
-        observeOnly: Bool
+        observeOnly: Bool,
+        outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {
         startCount += 1
         let (stream, continuation) = AsyncStream<TrackpadSessionEvent>.makeStream()
@@ -3200,7 +3424,8 @@ private actor RecordingSession: TrackpadSessionControlling {
 
     func start(
         configuration: TrackIsBackConfiguration,
-        observeOnly: Bool
+        observeOnly: Bool,
+        outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {
         recorder.record("start")
         workerCount += 1
@@ -3223,20 +3448,54 @@ private actor RecordingSession: TrackpadSessionControlling {
 }
 
 private final class ManualSleeper: Sendable {
-    private let stream: AsyncStream<Void>
-    private let continuation: AsyncStream<Void>.Continuation
-
-    init() {
-        (stream, continuation) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+    private struct State: ~Copyable {
+        var pendingWakes = 0
+        var nextID: UInt64 = 0
+        var waiters: [(id: UInt64, continuation: CheckedContinuation<Bool, Never>)] = []
     }
 
+    private let state = Mutex(State())
+
     func sleep() async throws {
-        var iterator = stream.makeAsyncIterator()
-        guard await iterator.next() != nil else { throw CancellationError() }
+        try Task.checkCancellation()
+        let id: UInt64 = state.withLock { state in
+            state.nextID &+= 1
+            return state.nextID
+        }
+        let woken = await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                let immediate: Bool? = state.withLock { state in
+                    if Task.isCancelled { return false }
+                    if state.pendingWakes > 0 {
+                        state.pendingWakes -= 1
+                        return true
+                    }
+                    state.waiters.append((id, continuation))
+                    return nil
+                }
+                if let immediate { continuation.resume(returning: immediate) }
+            }
+        } onCancel: {
+            let cancelled: CheckedContinuation<Bool, Never>? = state.withLock { state in
+                guard let index = state.waiters.firstIndex(where: { $0.id == id }) else {
+                    return nil
+                }
+                return state.waiters.remove(at: index).continuation
+            }
+            cancelled?.resume(returning: false)
+        }
+        guard woken else { throw CancellationError() }
         try Task.checkCancellation()
     }
 
     func wake() {
-        continuation.yield(())
+        let woken: CheckedContinuation<Bool, Never>? = state.withLock { state in
+            guard !state.waiters.isEmpty else {
+                state.pendingWakes = 1
+                return nil
+            }
+            return state.waiters.removeFirst().continuation
+        }
+        woken?.resume(returning: true)
     }
 }

@@ -52,7 +52,8 @@ final class MenuDependencyTests: XCTestCase {
 private actor InertSession: TrackpadSessionControlling {
     func start(
         configuration: TrackIsBackConfiguration,
-        observeOnly: Bool
+        observeOnly: Bool,
+        outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {
         AsyncStream { $0.finish() }
     }
