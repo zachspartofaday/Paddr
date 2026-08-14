@@ -407,6 +407,11 @@ public actor TrackpadSession: TrackpadSessionControlling {
             switch outcome {
             case .success:
                 return .clean
+            case let .failure(error as TrackIsBackError):
+                if case .output = error {
+                    return .failed(error.description)
+                }
+                return .clean
             case let .failure(error):
                 return .failed(String(describing: error))
             }

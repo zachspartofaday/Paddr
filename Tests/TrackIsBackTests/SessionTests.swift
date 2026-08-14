@@ -211,6 +211,16 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(delivered, ["current"])
     }
 
+    func testStopTreatsDeviceErrorsAsCleanTeardown() async {
+        let session = TrackpadSession { _, _, _, stopToken, _ in
+            while stopToken.shouldContinue {}
+            throw TrackIsBackError.device("No Steam Controller 2 puck interface was found.")
+        }
+        _ = await session.start(configuration: configuration(sensitivity: 1))
+        let outcome = await session.stop()
+        XCTAssertEqual(outcome, .clean)
+    }
+
     func testStopReportsWorkerTeardownFailure() async {
         let session = TrackpadSession { _, _, _, stopToken, _ in
             while stopToken.shouldContinue {}
