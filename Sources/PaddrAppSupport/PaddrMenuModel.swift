@@ -312,7 +312,7 @@ public final class PaddrMenuModel {
             self.receiverDescription = receiverDescription
         }
         accessibilityTrusted = dependencies.accessibilityTrusted(false)
-        if isEnabled, !accessibilityTrusted, isRunning {
+        if isEnabled, !accessibilityTrusted, sessionID != nil {
             isEnabled = false
             publishStatus(.failure(.accessibilityRequired))
         }

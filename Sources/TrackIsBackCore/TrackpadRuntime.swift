@@ -207,10 +207,7 @@ public enum TrackpadRuntime {
         func reconcileOutputGate() throws {
             guard let outputGate else { return }
             let current = outputGate.snapshot
-            guard current.isEnabled != observedGate.isEnabled else {
-                observedGate = current
-                return
-            }
+            guard current.revision != observedGate.revision else { return }
             observedGate = current
             guard !current.isEnabled else { return }
             try releaseEpochOutputs()

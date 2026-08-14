@@ -715,6 +715,36 @@ final class RuntimeTests: XCTestCase {
         XCTAssertEqual(events.events.filter { $0 == .controllerConnected }.count, 2)
     }
 
+    func testCoalescedEnableDisableStillAcknowledgesTheNewerDisabledRevision() throws {
+        let clock = ManualUptimeClock()
+        let output = RecordingOutput()
+        let events = EventRecorder()
+        let gate = OutputGate(enabled: false)
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .perform {
+                gate.setEnabled(true)
+                gate.setEnabled(false)
+            },
+            .wake(at: 10),
+            .report(neutralReport(), at: 20)
+        ])
+
+        _ = try run(
+            configuration: .default,
+            outputGate: gate,
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: events
+        )
+
+        XCTAssertEqual(output.actions, [])
+        XCTAssertTrue(events.events.contains(.outputReleased(revision: 0)))
+        XCTAssertTrue(events.events.contains(.outputReleased(revision: 2)))
+        XCTAssertEqual(outputReleasedEvents(in: events.events).count, 2)
+    }
+
     func testObserveOnlyStaysHardNoOutputEvenWithGateEnabled() throws {
         let clock = ManualUptimeClock()
         let output = RecordingOutput()
