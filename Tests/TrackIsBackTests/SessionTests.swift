@@ -27,7 +27,7 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(runtime.sensitivities, [1, 3])
         XCTAssertEqual(runtime.maximumConcurrent, 1)
 
-        let stop = Task { await session.stop() }
+        let stop = Task { _ = await session.stop() }
         await waitForEpoch(4, session: session)
         runtime.release(worker: 2)
         await stop.value
@@ -43,7 +43,7 @@ final class SessionTests: XCTestCase {
         let replacementConfiguration = configuration(sensitivity: 2)
         let replacement = Task { await session.start(configuration: replacementConfiguration) }
         await waitForEpoch(2, session: session)
-        let stop = Task { await session.stop() }
+        let stop = Task { _ = await session.stop() }
         await waitForEpoch(3, session: session)
         let latestConfiguration = configuration(sensitivity: 4)
         let latest = Task { await session.start(configuration: latestConfiguration) }
@@ -59,7 +59,7 @@ final class SessionTests: XCTestCase {
 
         XCTAssertEqual(runtime.sensitivities, [1, 4])
         XCTAssertEqual(runtime.maximumConcurrent, 1)
-        let finalStop = Task { await session.stop() }
+        let finalStop = Task { _ = await session.stop() }
         await waitForEpoch(5, session: session)
         runtime.release(worker: 2)
         await finalStop.value
@@ -105,7 +105,7 @@ final class SessionTests: XCTestCase {
         XCTAssertFalse(oldEvents.contains(.controllerLost(.init(reportCount: 1, actionCount: 1))))
         XCTAssertEqual(runtime.maximumConcurrent, 1)
 
-        let stop = Task { await session.stop() }
+        let stop = Task { _ = await session.stop() }
         await waitForEpoch(3, session: session)
         runtime.release(worker: 2)
         await stop.value
@@ -133,7 +133,7 @@ final class SessionTests: XCTestCase {
         while let event = await oldIterator.next() { supersededEvents.append(event) }
         XCTAssertEqual(supersededEvents, [])
 
-        let stop = Task { await session.stop() }
+        let stop = Task { _ = await session.stop() }
         await waitForEpoch(3, session: session)
         runtime.release(worker: 2)
         await stop.value
@@ -177,6 +177,29 @@ final class SessionTests: XCTestCase {
         await session.stop()
     }
 
+    func testReleaseAcknowledgementSurvivesProgressPressure() async {
+        let runtime = ReleasePressureRuntime()
+        let session = TrackpadSession(runtime: runtime.run)
+        let stream = await session.start(configuration: configuration(sensitivity: 1))
+        await runtime.waitUntilProduced()
+
+        var iterator = stream.makeAsyncIterator()
+        var bufferedEvents: [TrackpadSessionEvent] = []
+        for _ in 0..<32 {
+            guard let event = await iterator.next() else {
+                return XCTFail("Expected the bounded session buffer to remain open")
+            }
+            bufferedEvents.append(event)
+        }
+
+        XCTAssertTrue(bufferedEvents.contains(.outputReleased(revision: 7)))
+        XCTAssertTrue(bufferedEvents.contains(.controllerConnected))
+
+        runtime.release()
+        while await iterator.next() != nil {}
+        _ = await session.stop()
+    }
+
     func testEventGateRejectsEnqueueFromSupersededGeneration() {
         let gate = SessionEventGate()
         var delivered: [String] = []
@@ -186,6 +209,29 @@ final class SessionTests: XCTestCase {
         gate.activate(2)
         XCTAssertFalse(gate.enqueue(ifCurrent: 1) { delivered.append("stale") })
         XCTAssertEqual(delivered, ["current"])
+    }
+
+    func testStopTreatsDeviceErrorsAsCleanTeardown() async {
+        let session = TrackpadSession { _, _, _, stopToken, _ in
+            while stopToken.shouldContinue {}
+            throw TrackIsBackError.device("No Steam Controller 2 puck interface was found.")
+        }
+        _ = await session.start(configuration: configuration(sensitivity: 1))
+        let outcome = await session.stop()
+        XCTAssertEqual(outcome, .clean)
+    }
+
+    func testStopReportsWorkerTeardownFailure() async {
+        let session = TrackpadSession { _, _, _, stopToken, _ in
+            while stopToken.shouldContinue {}
+            throw TrackIsBackError.output("Could not release held outputs: injected.")
+        }
+        _ = await session.start(configuration: configuration(sensitivity: 1))
+        let outcome = await session.stop()
+        guard case let .failed(diagnostic) = outcome else {
+            return XCTFail("Expected the teardown failure to propagate through stop()")
+        }
+        XCTAssertTrue(diagnostic.contains("Could not release held outputs"))
     }
 
     private func configuration(sensitivity: Double) -> TrackIsBackConfiguration {
@@ -221,6 +267,7 @@ private final class ProgressPressureRuntime: Sendable {
     func run(
         configuration: TrackIsBackConfiguration,
         observeOnly: Bool,
+        outputGate: OutputGate?,
         stopToken: TrackpadStopToken,
         event: @escaping @Sendable (TrackpadSessionEvent) -> Void
     ) throws -> TrackpadRunResult {
@@ -240,6 +287,48 @@ private final class ProgressPressureRuntime: Sendable {
         releaseGate.wait()
         return TrackpadRunResult(
             summary: .init(reportCount: 80, actionCount: 8),
+            termination: .stopped
+        )
+    }
+
+    func waitUntilProduced() async {
+        var iterator = produced.makeAsyncIterator()
+        _ = await iterator.next()
+    }
+
+    func release() {
+        releaseGate.signal()
+    }
+}
+
+private final class ReleasePressureRuntime: Sendable {
+    private let produced: AsyncStream<Void>
+    private let producedContinuation: AsyncStream<Void>.Continuation
+    private let releaseGate = DispatchSemaphore(value: 0)
+
+    init() {
+        (produced, producedContinuation) = AsyncStream<Void>.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
+    }
+
+    func run(
+        configuration: TrackIsBackConfiguration,
+        observeOnly: Bool,
+        outputGate: OutputGate?,
+        stopToken: TrackpadStopToken,
+        event: @escaping @Sendable (TrackpadSessionEvent) -> Void
+    ) throws -> TrackpadRunResult {
+        event(.waitingForController("release-pressure-test"))
+        event(.outputReleased(revision: 7))
+        event(.controllerConnected)
+        for reportCount in 1...80 {
+            event(.progress(.init(reportCount: reportCount, actionCount: 0)))
+        }
+        producedContinuation.yield(())
+        releaseGate.wait()
+        return TrackpadRunResult(
+            summary: .init(reportCount: 80, actionCount: 0),
             termination: .stopped
         )
     }
@@ -283,6 +372,7 @@ private final class GatedRuntime: Sendable {
     func run(
         configuration: TrackIsBackConfiguration,
         observeOnly: Bool,
+        outputGate: OutputGate?,
         stopToken: TrackpadStopToken,
         event: @escaping @Sendable (TrackpadSessionEvent) -> Void
     ) throws -> TrackpadRunResult {

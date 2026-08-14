@@ -6,35 +6,21 @@ struct ApplyBarView: View {
 
     private var outputValue: LocalizedStringResource {
         if model.isRunning { return "Active" }
+        if model.isReleasingOutput { return "Releasing" }
         if model.isEnabled { return "Waiting" }
         return "Idle"
     }
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) {
-                statusCells
-                statusMessage
-                    .frame(width: 230, height: 32, alignment: .leading)
-                Spacer(minLength: 12)
-                saveState
-                actions
-            }
-
-            VStack(spacing: 8) {
-                HStack(spacing: 8) { statusCells }
-                HStack(spacing: 12) {
-                    statusMessage
-                        .frame(
-                            maxWidth: .infinity,
-                            minHeight: 32,
-                            maxHeight: 32,
-                            alignment: .leading
-                        )
-                    saveState
-                    actions
-                }
-            }
+        HStack(spacing: 8) {
+            statusCells
+            statusMessage
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: 32,
+                    maxHeight: 32,
+                    alignment: .leading
+                )
         }
         .padding(.horizontal, PaddrStyle.panelPadding)
         .padding(.vertical, 8)
@@ -80,6 +66,16 @@ struct ApplyBarView: View {
 
     @ViewBuilder private var statusCells: some View {
         StatusCell(
+            title: LocalizedStringResource("Puck"),
+            value: model.receiverDescription != nil
+                ? LocalizedStringResource("Connected")
+                : LocalizedStringResource("Not found"),
+            systemImage: model.receiverDescription != nil
+                ? "cable.connector"
+                : "cable.connector.slash",
+            state: model.receiverDescription != nil ? .ready : .problem
+        )
+        StatusCell(
             title: LocalizedStringResource("Controller"),
             value: model.controllerConnected
                 ? LocalizedStringResource("Connected")
@@ -105,30 +101,4 @@ struct ApplyBarView: View {
         )
     }
 
-    private var saveState: some View {
-        Label(
-            model.hasUnsavedChanges ? "Unsaved changes" : "Saved",
-            systemImage: model.hasUnsavedChanges ? "circle.fill" : "checkmark.circle.fill"
-        )
-        .paddrTypography(.callout)
-        .foregroundStyle(model.hasUnsavedChanges ? PaddrStyle.warningText : PaddrStyle.accentText)
-        .fixedSize()
-    }
-
-    private var actions: some View {
-        GlassEffectContainer(spacing: 10) {
-            HStack(spacing: 10) {
-                Button("Defaults", systemImage: "arrow.counterclockwise", action: model.restoreDefaults)
-                    .paddrActionButton()
-                    .disabled(!model.activeProfileControlsAppearEnabled)
-                    .allowsHitTesting(model.canEditActiveProfile)
-                    .accessibilityRespondsToUserInteraction(model.canEditActiveProfile)
-
-                Button("Save & Apply", systemImage: "checkmark", action: model.saveAndApply)
-                    .paddrActionButton(prominent: true)
-                    .disabled(!model.canSaveAndApply)
-                    .keyboardShortcut("s", modifiers: .command)
-            }
-        }
-    }
 }

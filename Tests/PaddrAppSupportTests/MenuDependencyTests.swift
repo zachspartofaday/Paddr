@@ -52,12 +52,14 @@ final class MenuDependencyTests: XCTestCase {
 private actor InertSession: TrackpadSessionControlling {
     func start(
         configuration: TrackIsBackConfiguration,
-        observeOnly: Bool
+        observeOnly: Bool,
+        outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {
         AsyncStream { $0.finish() }
     }
 
-    func stop() async {}
+    @discardableResult
+    func stop() async -> TrackpadSessionStopOutcome { .clean }
 }
 
 private final class DependencyExecutionState: Sendable {

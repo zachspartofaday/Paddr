@@ -64,6 +64,23 @@ final class MenuViewPresentationTests: XCTestCase {
         )
     }
 
+    func testFourStatusPillsFitMinimumWindowWidth() async throws {
+        let store = BlockingProfileStore()
+        let model = PaddrMenuModel(dependencies: dependencies(store: store))
+        defer { store.releaseSave() }
+        let didInitialize = await waitUntil { model.isInitialized }
+        XCTAssertTrue(didInitialize)
+        XCTAssertNil(model.receiverDescription)
+        XCTAssertFalse(model.controllerConnected)
+
+        let controller = NSHostingController(rootView: ApplyBarView(model: model))
+        let fitted = controller.sizeThatFits(
+            in: NSSize(width: PaddrStyle.minimumWindowSize.width, height: 400)
+        )
+        XCTAssertLessThanOrEqual(fitted.width, PaddrStyle.minimumWindowSize.width + 0.5)
+        XCTAssertGreaterThan(fitted.height, 0)
+    }
+
     private func hostedPadConfigurationHeight(initiallyExpanded: Bool) -> CGFloat {
         let view = PadConfigurationView(
             side: .left,
@@ -118,7 +135,8 @@ final class MenuViewPresentationTests: XCTestCase {
             probeReceiver: { nil },
             accessibilityTrusted: { _ in true },
             openPrivacySettings: { _ in },
-            sleep: { duration in try await Task.sleep(for: duration) }
+            sleep: { duration in try await Task.sleep(for: duration) },
+            reconnectDelay: { _ in throw CancellationError() }
         )
     }
 
@@ -138,14 +156,16 @@ final class MenuViewPresentationTests: XCTestCase {
 private struct InertSession: TrackpadSessionControlling {
     func start(
         configuration: TrackIsBackConfiguration,
-        observeOnly: Bool
+        observeOnly: Bool,
+        outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {
         AsyncStream { continuation in
             continuation.finish()
         }
     }
 
-    func stop() async {}
+    @discardableResult
+    func stop() async -> TrackpadSessionStopOutcome { .clean }
 }
 
 private final class BlockingProfileStore: @unchecked Sendable {
