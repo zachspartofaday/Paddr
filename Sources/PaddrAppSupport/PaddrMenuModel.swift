@@ -312,6 +312,10 @@ public final class PaddrMenuModel {
             self.receiverDescription = receiverDescription
         }
         accessibilityTrusted = dependencies.accessibilityTrusted(false)
+        if isEnabled, !accessibilityTrusted, isRunning {
+            isEnabled = false
+            publishStatus(.failure(.accessibilityRequired))
+        }
         let resultingStatusGeneration = withStatusPublicationGeneration(statusGeneration) {
             reconcileCompletedPermissionRequest()
         }

@@ -3085,6 +3085,37 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.isEnabled)
     }
 
+    func testStatusRefreshWithRevokedAccessibilityClosesTheGateAndDisablesOutput() async {
+        let state = readyState(receiver: "Fake receiver")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await session.connect(receiver: "Fake receiver")
+        await waitUntil(model: model) { model.isRunning }
+
+        state.accessibilityGranted = false
+        model.refreshStatus()
+        await waitUntil(model: model) { !model.isEnabled }
+
+        XCTAssertFalse(model.hasSystemAccess)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertTrue(model.isReleasingOutput)
+        guard case .failure(.accessibilityRequired) = model.status else {
+            return XCTFail("Expected the revoked-access failure to publish")
+        }
+
+        await session.send(.outputReleased(revision: .max))
+        await waitUntil(model: model) { !model.isReleasingOutput }
+        guard case .failure(.accessibilityRequired) = model.status else {
+            return XCTFail("Expected the failure to survive the release acknowledgement")
+        }
+        XCTAssertTrue(model.controllerConnected)
+        let startCount = await session.startCount
+        XCTAssertEqual(startCount, 1)
+    }
+
     func testOutputFailureKeepsObservationAliveThroughReconnect() async {
         let state = readyState(receiver: "Fake receiver")
         let reconnectSleeper = ManualSleeper()
