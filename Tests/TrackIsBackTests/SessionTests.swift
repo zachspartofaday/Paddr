@@ -27,7 +27,7 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(runtime.sensitivities, [1, 3])
         XCTAssertEqual(runtime.maximumConcurrent, 1)
 
-        let stop = Task { await session.stop() }
+        let stop = Task { _ = await session.stop() }
         await waitForEpoch(4, session: session)
         runtime.release(worker: 2)
         await stop.value
@@ -43,7 +43,7 @@ final class SessionTests: XCTestCase {
         let replacementConfiguration = configuration(sensitivity: 2)
         let replacement = Task { await session.start(configuration: replacementConfiguration) }
         await waitForEpoch(2, session: session)
-        let stop = Task { await session.stop() }
+        let stop = Task { _ = await session.stop() }
         await waitForEpoch(3, session: session)
         let latestConfiguration = configuration(sensitivity: 4)
         let latest = Task { await session.start(configuration: latestConfiguration) }
@@ -59,7 +59,7 @@ final class SessionTests: XCTestCase {
 
         XCTAssertEqual(runtime.sensitivities, [1, 4])
         XCTAssertEqual(runtime.maximumConcurrent, 1)
-        let finalStop = Task { await session.stop() }
+        let finalStop = Task { _ = await session.stop() }
         await waitForEpoch(5, session: session)
         runtime.release(worker: 2)
         await finalStop.value
@@ -105,7 +105,7 @@ final class SessionTests: XCTestCase {
         XCTAssertFalse(oldEvents.contains(.controllerLost(.init(reportCount: 1, actionCount: 1))))
         XCTAssertEqual(runtime.maximumConcurrent, 1)
 
-        let stop = Task { await session.stop() }
+        let stop = Task { _ = await session.stop() }
         await waitForEpoch(3, session: session)
         runtime.release(worker: 2)
         await stop.value
@@ -133,7 +133,7 @@ final class SessionTests: XCTestCase {
         while let event = await oldIterator.next() { supersededEvents.append(event) }
         XCTAssertEqual(supersededEvents, [])
 
-        let stop = Task { await session.stop() }
+        let stop = Task { _ = await session.stop() }
         await waitForEpoch(3, session: session)
         runtime.release(worker: 2)
         await stop.value
@@ -186,6 +186,19 @@ final class SessionTests: XCTestCase {
         gate.activate(2)
         XCTAssertFalse(gate.enqueue(ifCurrent: 1) { delivered.append("stale") })
         XCTAssertEqual(delivered, ["current"])
+    }
+
+    func testStopReportsWorkerTeardownFailure() async {
+        let session = TrackpadSession { _, _, _, stopToken, _ in
+            while stopToken.shouldContinue {}
+            throw TrackIsBackError.output("Could not release held outputs: injected.")
+        }
+        _ = await session.start(configuration: configuration(sensitivity: 1))
+        let outcome = await session.stop()
+        guard case let .failed(diagnostic) = outcome else {
+            return XCTFail("Expected the teardown failure to propagate through stop()")
+        }
+        XCTAssertTrue(diagnostic.contains("Could not release held outputs"))
     }
 
     private func configuration(sensitivity: Double) -> TrackIsBackConfiguration {

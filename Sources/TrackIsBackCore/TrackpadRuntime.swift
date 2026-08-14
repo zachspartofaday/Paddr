@@ -15,19 +15,43 @@ public final class TrackpadStopToken: Sendable {
     }
 }
 
-public final class OutputGate: Sendable {
-    private let enabled: Mutex<Bool>
+public struct OutputGateSnapshot: Equatable, Sendable {
+    public let isEnabled: Bool
+    public let revision: UInt64
 
-    public init(enabled: Bool = true) {
-        self.enabled = Mutex(enabled)
+    public init(isEnabled: Bool, revision: UInt64) {
+        self.isEnabled = isEnabled
+        self.revision = revision
+    }
+}
+
+public final class OutputGate: Sendable {
+    private struct State: ~Copyable {
+        var isEnabled: Bool
+        var revision: UInt64 = 0
     }
 
-    public func setEnabled(_ enabled: Bool) {
-        self.enabled.withLock { $0 = enabled }
+    private let state: Mutex<State>
+
+    public init(enabled: Bool = true) {
+        state = Mutex(State(isEnabled: enabled))
+    }
+
+    @discardableResult
+    public func setEnabled(_ enabled: Bool) -> UInt64 {
+        state.withLock { state in
+            state.isEnabled = enabled
+            state.revision &+= 1
+            return state.revision
+        }
     }
 
     public var isEnabled: Bool {
-        enabled.withLock { $0 }
+        state.withLock { $0.isEnabled }
+    }
+
+    public var snapshot: OutputGateSnapshot {
+        state.withLock { OutputGateSnapshot(isEnabled: $0.isEnabled, revision: $0.revision) }
     }
 }
 
@@ -56,12 +80,17 @@ public enum TrackpadSessionEvent: Equatable, Sendable {
     case waitingForController(String)
     case controllerConnected
     case outputArmed
-    case outputReleased
+    case outputReleased(revision: UInt64)
     case progress(TrackpadRunSummary)
     case controllerLost(TrackpadRunSummary)
     case stopped(TrackpadRunSummary)
     case receiverRemoved(TrackpadRunSummary)
     case receiverUnavailable(String)
+    case failed(String)
+}
+
+public enum TrackpadSessionStopOutcome: Equatable, Sendable {
+    case clean
     case failed(String)
 }
 
@@ -71,7 +100,8 @@ public protocol TrackpadSessionControlling: Sendable {
         observeOnly: Bool,
         outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent>
-    func stop() async
+    @discardableResult
+    func stop() async -> TrackpadSessionStopOutcome
 }
 
 public struct TrackpadRuntimeDependencies: Sendable {
@@ -117,7 +147,7 @@ public enum TrackpadRuntime {
         var controllerEpoch: ControllerEpoch?
         var controllerLive = false
         var lastAcceptedReportUptime: UInt64?
-        var outputWasEnabled = outputGate?.isEnabled ?? true
+        var observedGate = outputGate?.snapshot ?? OutputGateSnapshot(isEnabled: true, revision: 0)
         var reportCount = 0
         var actionCount = 0
 
@@ -175,17 +205,21 @@ public enum TrackpadRuntime {
         }
 
         func reconcileOutputGate() throws {
-            let outputIsEnabled = outputGate?.isEnabled ?? true
-            guard outputIsEnabled != outputWasEnabled else { return }
-            outputWasEnabled = outputIsEnabled
-            guard !outputIsEnabled else { return }
+            guard let outputGate else { return }
+            let current = outputGate.snapshot
+            guard current.isEnabled != observedGate.isEnabled else {
+                observedGate = current
+                return
+            }
+            observedGate = current
+            guard !current.isEnabled else { return }
             try releaseEpochOutputs()
-            onEvent?(.outputReleased)
+            onEvent?(.outputReleased(revision: current.revision))
         }
 
         onEvent?(.waitingForController(device.summaryDescription))
-        if outputGate != nil, !outputWasEnabled {
-            onEvent?(.outputReleased)
+        if outputGate != nil, !observedGate.isEnabled {
+            onEvent?(.outputReleased(revision: observedGate.revision))
         }
         let streamOutcome: Result<TrackpadStreamTermination, any Error>
         do {
@@ -210,7 +244,7 @@ public enum TrackpadRuntime {
                         onEvent?(.controllerConnected)
                     }
                     try reconcileOutputGate()
-                    guard outputWasEnabled else {
+                    guard observedGate.isEnabled else {
                         if reportCount.isMultiple(of: 100) { onEvent?(.progress(summary())) }
                         return
                     }
@@ -299,7 +333,7 @@ public actor TrackpadSession: TrackpadSessionControlling {
     private struct WorkerRecord: Sendable {
         let id: UInt64
         let stopToken: TrackpadStopToken
-        let task: Task<Void, Never>
+        let task: Task<TrackpadSessionStopOutcome, Never>
     }
 
     private let runtime: Runtime
@@ -337,7 +371,7 @@ public actor TrackpadSession: TrackpadSessionControlling {
         let runtime = self.runtime
         let eventGate = self.eventGate
 
-        let task = Task.detached(priority: .userInitiated) {
+        let task = Task.detached(priority: .userInitiated) { () -> TrackpadSessionStopOutcome in
             let outcome = Result {
                 try runtime(
                     configuration,
@@ -370,25 +404,34 @@ public actor TrackpadSession: TrackpadSessionControlling {
                 eventBuffer.finish()
             }
             if !delivered { eventBuffer.finish() }
+            switch outcome {
+            case .success:
+                return .clean
+            case let .failure(error):
+                return .failed(String(describing: error))
+            }
         }
         activeWorker = WorkerRecord(id: request, stopToken: token, task: task)
         continuation.onTermination = { @Sendable [weak token] _ in token?.requestStop() }
         return stream
     }
 
-    public func stop() async {
+    @discardableResult
+    public func stop() async -> TrackpadSessionStopOutcome {
         advanceRequestEpoch()
         eventGate.activate(requestEpoch)
-        await teardownActiveWorker()
+        return await teardownActiveWorker()
     }
 
-    private func teardownActiveWorker() async {
-        guard let worker = activeWorker else { return }
+    @discardableResult
+    private func teardownActiveWorker() async -> TrackpadSessionStopOutcome {
+        guard let worker = activeWorker else { return .clean }
         worker.stopToken.requestStop()
-        await worker.task.value
+        let outcome = await worker.task.value
         if activeWorker?.id == worker.id {
             activeWorker = nil
         }
+        return outcome
     }
 
     private static func finishedEventStream() -> AsyncStream<TrackpadSessionEvent> {
@@ -451,10 +494,13 @@ private final class SessionEventBuffer: Sendable {
                 snapshot = [.controllerConnected]
             case .outputArmed:
                 snapshot = [.controllerConnected, .outputArmed]
-            case .outputReleased:
-                if snapshot.last != .outputReleased {
-                    snapshot = snapshot.filter { $0 != .outputArmed } + [.outputReleased]
-                }
+            case let .outputReleased(revision):
+                snapshot = snapshot.filter { event in
+                    switch event {
+                    case .outputArmed, .outputReleased: false
+                    default: true
+                    }
+                } + [.outputReleased(revision: revision)]
             case let .controllerLost(summary):
                 snapshot = [.controllerLost(summary)]
             case .progress:

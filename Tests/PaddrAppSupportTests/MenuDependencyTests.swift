@@ -58,7 +58,8 @@ private actor InertSession: TrackpadSessionControlling {
         AsyncStream { $0.finish() }
     }
 
-    func stop() async {}
+    @discardableResult
+    func stop() async -> TrackpadSessionStopOutcome { .clean }
 }
 
 private final class DependencyExecutionState: Sendable {

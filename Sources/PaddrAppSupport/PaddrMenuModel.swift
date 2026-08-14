@@ -85,7 +85,8 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var storageWriteBlocked = false
     @ObservationIgnored private var sessionID: UUID?
     @ObservationIgnored private var sessionConfiguration: TrackIsBackConfiguration?
-    @ObservationIgnored private var sessionTeardownPending = false
+    @ObservationIgnored private var sessionTeardownCount = 0
+    @ObservationIgnored private var pendingReleaseRevision: UInt64?
     @ObservationIgnored private var lifecycleEpoch: UInt64 = 0
     @ObservationIgnored private var initializationTask: Task<Void, Never>?
     @ObservationIgnored private var configurationTask: Task<Void, Never>?
@@ -585,7 +586,7 @@ public final class PaddrMenuModel {
             sessionStatusGeneration = nil
             controllerConnected = false
             isRunning = false
-            isReleasingOutput = false
+            resolvePendingRelease()
         } else {
             preservingCurrentOperationalStatusAuthority {
                 advanceStatusGeneration()
@@ -602,13 +603,16 @@ public final class PaddrMenuModel {
                 return
             }
             if shouldRestart {
-                sessionTeardownPending = true
-                await dependencies.session.stop()
-                sessionTeardownPending = false
+                sessionTeardownCount += 1
+                let stopOutcome = await dependencies.session.stop()
+                sessionTeardownCount -= 1
                 guard configurationEpoch == operation,
                       terminationState == .idle else {
                     clearConfigurationTask(operation: operation)
                     return
+                }
+                if case let .failed(diagnostic) = stopOutcome {
+                    publishStatus(.failure(.output(diagnostic: diagnostic)))
                 }
             }
             do {
@@ -719,7 +723,7 @@ public final class PaddrMenuModel {
         sessionID = nil
         controllerConnected = false
         isRunning = false
-        isReleasingOutput = false
+        resolvePendingRelease()
 
         terminationTask = Task { [self] in
             await dependencies.session.stop()
@@ -759,7 +763,7 @@ public final class PaddrMenuModel {
     }
 
     private func enableOutputInPlace() {
-        isReleasingOutput = false
+        resolvePendingRelease()
         outputGate.setEnabled(true)
         publishStatus(controllerConnected ? .waitingForNeutral : .waitingForController)
         sessionStatusGeneration = currentStatusGeneration
@@ -768,15 +772,23 @@ public final class PaddrMenuModel {
     private func disableOutput() {
         guard terminationState == .idle else { return }
         activationCommitPending = false
-        outputGate.setEnabled(false)
-        isReleasingOutput = sessionID != nil || isReleasingOutput
+        let revision = outputGate.setEnabled(false)
+        if sessionID != nil || isReleasingOutput {
+            isReleasingOutput = true
+            pendingReleaseRevision = revision
+        }
         isRunning = false
-        if isReleasingOutput || sessionTeardownPending {
+        if isReleasingOutput || sessionTeardownCount > 0 {
             publishStatus(.releasingOutputs)
             sessionStatusGeneration = currentStatusGeneration
         } else {
             publishStatus(.off)
         }
+    }
+
+    private func resolvePendingRelease() {
+        isReleasingOutput = false
+        pendingReleaseRevision = nil
     }
 
     private func startLifecycle(
@@ -833,15 +845,20 @@ public final class PaddrMenuModel {
         sessionID = nil
         controllerConnected = false
         isRunning = false
+        var stopOutcome = TrackpadSessionStopOutcome.clean
         if !sessionAlreadyStopped {
-            sessionTeardownPending = true
-            await dependencies.session.stop()
-            sessionTeardownPending = false
+            sessionTeardownCount += 1
+            stopOutcome = await dependencies.session.stop()
+            sessionTeardownCount -= 1
             guard isCurrent(operation) else { return nil }
         }
-        isReleasingOutput = false
+        resolvePendingRelease()
         if !isEnabled, status == .releasingOutputs {
-            publishStatus(.off)
+            if case let .failed(diagnostic) = stopOutcome {
+                publishStatus(.failure(.output(diagnostic: diagnostic)))
+            } else {
+                publishStatus(.off)
+            }
         }
 
         if commitDraft {
@@ -1118,11 +1135,12 @@ public final class PaddrMenuModel {
             case .outputArmed:
                 guard controllerConnected, isEnabled else { break }
                 isRunning = true
-                isReleasingOutput = false
+                resolvePendingRelease()
                 publishStatus(.active)
-            case .outputReleased:
+            case let .outputReleased(revision):
+                if let pending = pendingReleaseRevision, revision < pending { break }
                 isRunning = false
-                isReleasingOutput = false
+                resolvePendingRelease()
                 if !isEnabled, status == .releasingOutputs {
                     publishStatus(.off)
                 }
@@ -1132,7 +1150,7 @@ public final class PaddrMenuModel {
                 update(summary)
                 controllerConnected = false
                 isRunning = false
-                isReleasingOutput = false
+                resolvePendingRelease()
                 if isEnabled {
                     publishStatus(.waitingForController)
                 } else if status == .releasingOutputs {
@@ -1142,7 +1160,7 @@ public final class PaddrMenuModel {
                 update(summary)
                 controllerConnected = false
                 isRunning = false
-                isReleasingOutput = false
+                resolvePendingRelease()
                 sessionID = nil
                 if terminationState == .idle {
                     if isEnabled {
@@ -1160,7 +1178,7 @@ public final class PaddrMenuModel {
                 receiverDescription = nil
                 controllerConnected = false
                 isRunning = false
-                isReleasingOutput = false
+                resolvePendingRelease()
                 sessionID = nil
                 if isEnabled {
                     publishStatus(.waitingForController)
@@ -1171,7 +1189,7 @@ public final class PaddrMenuModel {
             case .receiverUnavailable:
                 controllerConnected = false
                 isRunning = false
-                isReleasingOutput = false
+                resolvePendingRelease()
                 sessionID = nil
                 if isEnabled {
                     publishStatus(.waitingForController)
@@ -1183,7 +1201,7 @@ public final class PaddrMenuModel {
                 sessionID = nil
                 controllerConnected = false
                 isRunning = false
-                isReleasingOutput = false
+                resolvePendingRelease()
                 let failure = MenuFailure.output(diagnostic: message)
                 if isEnabled { isEnabled = false }
                 publishStatus(.failure(failure))
@@ -1349,7 +1367,8 @@ public final class PaddrMenuModel {
         reconnectStatusGeneration = nil
         permissionRefreshTask = nil
         terminationTask = nil
-        sessionTeardownPending = false
+        sessionTeardownCount = 0
+        pendingReleaseRevision = nil
         let completions = terminationCompletions
         terminationCompletions.removeAll()
         for completion in completions { completion() }

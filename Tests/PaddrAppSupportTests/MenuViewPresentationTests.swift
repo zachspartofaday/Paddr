@@ -164,7 +164,8 @@ private struct InertSession: TrackpadSessionControlling {
         }
     }
 
-    func stop() async {}
+    @discardableResult
+    func stop() async -> TrackpadSessionStopOutcome { .clean }
 }
 
 private final class BlockingProfileStore: @unchecked Sendable {

@@ -2829,7 +2829,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.status, .releasingOutputs)
         XCTAssertTrue(model.controllerConnected)
 
-        await session.send(.outputReleased)
+        await session.send(.outputReleased(revision: .max))
         await waitUntil(model: model) { !model.isReleasingOutput }
 
         XCTAssertEqual(model.status, .off)
@@ -2879,7 +2879,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.isEnabled)
         XCTAssertEqual(model.status, .releasingOutputs)
 
-        await session.send(.outputReleased)
+        await session.send(.outputReleased(revision: .max))
         await waitUntil(model: model) { !model.isReleasingOutput }
         XCTAssertEqual(model.status, .off)
         XCTAssertTrue(model.canToggleOutput)
@@ -2907,7 +2907,7 @@ final class MenuModelTests: XCTestCase {
         model.isEnabled = true
         XCTAssertFalse(model.isEnabled)
 
-        await session.send(.outputReleased)
+        await session.send(.outputReleased(revision: .max))
         await waitUntil(model: model) { !model.isReleasingOutput }
         XCTAssertEqual(model.status, .off)
         XCTAssertTrue(model.canToggleOutput)
@@ -2978,6 +2978,61 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.isRunning)
     }
 
+    func testStaleReleaseAcknowledgementCannotResolveALaterDisable() async {
+        let state = readyState(receiver: "Fake receiver")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await session.connect(receiver: "Fake receiver")
+        await waitUntil(model: model) { model.isRunning }
+
+        model.isEnabled = false
+        XCTAssertTrue(model.isReleasingOutput)
+
+        await session.send(.outputReleased(revision: 0))
+        await session.send(.progress(.init(reportCount: 5, actionCount: 0)))
+        await waitUntil(model: model) { model.reportCount == 5 }
+
+        XCTAssertTrue(model.isReleasingOutput)
+        XCTAssertEqual(model.status, .releasingOutputs)
+        model.isEnabled = true
+        XCTAssertFalse(model.isEnabled)
+
+        await session.send(.outputReleased(revision: .max))
+        await waitUntil(model: model) { !model.isReleasingOutput }
+        XCTAssertEqual(model.status, .off)
+    }
+
+    func testTeardownReleaseFailureSurfacesInsteadOfIdle() async {
+        let state = readyState(receiver: nil)
+        let session = GatedSession(blockedStops: [1])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        state.receiver = "Fake"
+        model.isEnabled = true
+        await session.waitForStop(1)
+
+        model.isEnabled = false
+        XCTAssertEqual(model.status, .releasingOutputs)
+
+        await session.setStopOutcome(.failed("held output release failed"))
+        await session.releaseStop(1)
+        await waitUntil(model: model) {
+            if case .failure(.output) = model.status { return true }
+            return false
+        }
+
+        guard case let .failure(.output(diagnostic)) = model.status else {
+            return XCTFail("Expected the teardown failure to surface")
+        }
+        XCTAssertTrue(diagnostic.contains("held output release failed"))
+        XCTAssertFalse(model.isReleasingOutput)
+        await waitUntil(model: model) { await session.startCount == 1 }
+        XCTAssertFalse(model.isEnabled)
+    }
+
     func testOutputFailureKeepsObservationAliveThroughReconnect() async {
         let state = readyState(receiver: "Fake receiver")
         let reconnectSleeper = ManualSleeper()
@@ -3033,7 +3088,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.status, .off)
         XCTAssertNotNil(model.receiverDescription)
 
-        await session.send(.outputReleased)
+        await session.send(.outputReleased(revision: .max))
         await session.send(.progress(.init(reportCount: 9, actionCount: 0)))
         await waitUntil(model: model) { model.reportCount == 9 }
         XCTAssertEqual(model.status, .off)
@@ -3248,9 +3303,10 @@ private actor ProgressPressureSession: TrackpadSessionControlling {
         return stream
     }
 
-    func stop() async {
+    @discardableResult
+    func stop() async -> TrackpadSessionStopOutcome {
         runtime.release()
-        await session.stop()
+        return await session.stop()
     }
 }
 
@@ -3332,10 +3388,12 @@ private actor ScriptedSession: TrackpadSessionControlling {
         return stream
     }
 
-    func stop() async {
+    @discardableResult
+    func stop() async -> TrackpadSessionStopOutcome {
         stopCount += 1
         continuation?.finish()
         continuation = nil
+        return .clean
     }
 }
 
@@ -3354,9 +3412,11 @@ private actor ManualEventSession: TrackpadSessionControlling {
         return stream
     }
 
-    func stop() async {
+    @discardableResult
+    func stop() async -> TrackpadSessionStopOutcome {
         continuation?.finish()
         continuation = nil
+        return .clean
     }
 
     func send(_ event: TrackpadSessionEvent) {
@@ -3390,7 +3450,8 @@ private actor RetainedEventSession: TrackpadSessionControlling {
         return stream
     }
 
-    func stop() async {}
+    @discardableResult
+    func stop() async -> TrackpadSessionStopOutcome { .clean }
 
     func send(_ event: TrackpadSessionEvent, to index: Int) {
         guard continuations.indices.contains(index) else { return }
@@ -3407,6 +3468,7 @@ private actor RetainedEventSession: TrackpadSessionControlling {
 }
 
 private actor GatedSession: TrackpadSessionControlling {
+    var stopOutcome = TrackpadSessionStopOutcome.clean
     private let blockedStops: Set<Int>
     private let gate = IndexedStopGate()
     private let stopEvents: AsyncStream<Int>
@@ -3436,7 +3498,8 @@ private actor GatedSession: TrackpadSessionControlling {
         return stream
     }
 
-    func stop() async {
+    @discardableResult
+    func stop() async -> TrackpadSessionStopOutcome {
         stopCount += 1
         let stopNumber = stopCount
         stopEventsContinuation.yield(stopNumber)
@@ -3445,6 +3508,11 @@ private actor GatedSession: TrackpadSessionControlling {
         }
         eventContinuation?.finish()
         eventContinuation = nil
+        return stopOutcome
+    }
+
+    func setStopOutcome(_ outcome: TrackpadSessionStopOutcome) {
+        stopOutcome = outcome
     }
 
     func waitForStop(_ expectedCount: Int) async {
@@ -3626,11 +3694,13 @@ private actor RecordingSession: TrackpadSessionControlling {
         return stream
     }
 
-    func stop() async {
+    @discardableResult
+    func stop() async -> TrackpadSessionStopOutcome {
         recorder.record("stop")
         continuation?.finish()
         continuation = nil
         workerCount = 0
+        return .clean
     }
 }
 

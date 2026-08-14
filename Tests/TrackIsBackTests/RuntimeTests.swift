@@ -520,9 +520,9 @@ final class RuntimeTests: XCTestCase {
 
         XCTAssertTrue(events.events.contains(.controllerConnected))
         XCTAssertFalse(events.events.contains(.outputArmed))
-        XCTAssertEqual(events.events.filter { $0 == .outputReleased }.count, 1)
+        XCTAssertEqual(outputReleasedEvents(in: events.events).count, 1)
         XCTAssertEqual(events.events.first, .waitingForController("Fake receiver"))
-        XCTAssertEqual(events.events.dropFirst().first, .outputReleased)
+        XCTAssertEqual(events.events.dropFirst().first, .outputReleased(revision: 0))
         XCTAssertEqual(output.actions, [])
         XCTAssertEqual(result.summary, TrackpadRunSummary(reportCount: 3, actionCount: 0))
     }
@@ -571,6 +571,7 @@ final class RuntimeTests: XCTestCase {
         let events = EventRecorder { event in
             switch event {
             case .outputReleased: timeline.append("event:outputReleased")
+
             case .controllerConnected: timeline.append("event:controllerConnected")
             case .controllerLost: timeline.append("event:controllerLost")
             default: break
@@ -654,7 +655,7 @@ final class RuntimeTests: XCTestCase {
             .key(space, isPressed: false)
         ])
         XCTAssertEqual(events.events.filter { $0 == .outputArmed }.count, 2)
-        XCTAssertEqual(events.events.filter { $0 == .outputReleased }.count, 1)
+        XCTAssertEqual(outputReleasedEvents(in: events.events).count, 1)
     }
 
     func testGateDisableWithNothingHeldStillEmitsOutputReleasedAndKeepsLiveness() throws {
@@ -679,7 +680,7 @@ final class RuntimeTests: XCTestCase {
         )
 
         XCTAssertEqual(output.actions, [])
-        XCTAssertEqual(events.events.filter { $0 == .outputReleased }.count, 1)
+        XCTAssertEqual(outputReleasedEvents(in: events.events).count, 1)
         XCTAssertEqual(events.events.filter { $0 == .controllerConnected }.count, 1)
     }
 
@@ -904,6 +905,13 @@ private final class FailingReleaseOutput: TrackpadOutputDispatching, Sendable {
             releaseStorage.withLock { $0.append(action) }
             throw TrackIsBackError.output("Injected release failure.")
         }
+    }
+}
+
+private func outputReleasedEvents(in events: [TrackpadSessionEvent]) -> [TrackpadSessionEvent] {
+    events.filter { event in
+        if case .outputReleased = event { return true }
+        return false
     }
 }
 
