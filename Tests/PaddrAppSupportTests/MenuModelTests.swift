@@ -2891,6 +2891,28 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(startCount, 1)
     }
 
+    func testDisableOfLiveSessionAwaitsWorkerAcknowledgementEvenWhenUnarmed() async {
+        let state = readyState(receiver: "Fake receiver")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        XCTAssertFalse(model.isRunning)
+
+        model.isEnabled = false
+
+        XCTAssertTrue(model.isReleasingOutput)
+        XCTAssertEqual(model.status, .releasingOutputs)
+        model.isEnabled = true
+        XCTAssertFalse(model.isEnabled)
+
+        await session.send(.outputReleased)
+        await waitUntil(model: model) { !model.isReleasingOutput }
+        XCTAssertEqual(model.status, .off)
+        XCTAssertTrue(model.canToggleOutput)
+    }
+
     func testOutputFailureKeepsObservationAliveThroughReconnect() async {
         let state = readyState(receiver: "Fake receiver")
         let reconnectSleeper = ManualSleeper()

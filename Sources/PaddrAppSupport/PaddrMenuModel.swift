@@ -765,7 +765,7 @@ public final class PaddrMenuModel {
         guard terminationState == .idle else { return }
         activationCommitPending = false
         outputGate.setEnabled(false)
-        isReleasingOutput = isRunning && sessionID != nil
+        isReleasingOutput = sessionID != nil
         isRunning = false
         if isReleasingOutput {
             publishStatus(.releasingOutputs)
