@@ -765,7 +765,7 @@ public final class PaddrMenuModel {
         guard terminationState == .idle else { return }
         activationCommitPending = false
         outputGate.setEnabled(false)
-        isReleasingOutput = sessionID != nil
+        isReleasingOutput = sessionID != nil || isReleasingOutput
         isRunning = false
         if isReleasingOutput {
             publishStatus(.releasingOutputs)
@@ -829,10 +829,15 @@ public final class PaddrMenuModel {
         sessionID = nil
         controllerConnected = false
         isRunning = false
-        isReleasingOutput = false
         if !sessionAlreadyStopped {
             await dependencies.session.stop()
             guard isCurrent(operation) else { return nil }
+        }
+        if isReleasingOutput {
+            isReleasingOutput = false
+            if !isEnabled, status == .releasingOutputs {
+                publishStatus(.off)
+            }
         }
 
         if commitDraft {

@@ -2913,6 +2913,28 @@ final class MenuModelTests: XCTestCase {
         XCTAssertTrue(model.canToggleOutput)
     }
 
+    func testDisableDuringPendingReplacementResolvesReleasingToIdle() async {
+        let state = readyState(receiver: "Fake receiver")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        model.configuration.left.sensitivity = 3
+
+        model.isEnabled = true
+        model.isEnabled = false
+
+        XCTAssertTrue(model.isReleasingOutput)
+        XCTAssertEqual(model.status, .releasingOutputs)
+
+        await waitUntil(model: model) { model.status == .off }
+        XCTAssertFalse(model.isReleasingOutput)
+        XCTAssertTrue(model.canToggleOutput)
+        await waitUntil(model: model) { await session.startCount == 2 }
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
     func testOutputFailureKeepsObservationAliveThroughReconnect() async {
         let state = readyState(receiver: "Fake receiver")
         let reconnectSleeper = ManualSleeper()
