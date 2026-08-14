@@ -82,6 +82,7 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var profileDocument = ConfigurationProfileDocument.default
     @ObservationIgnored private var storageWriteBlocked = false
     @ObservationIgnored private var sessionID: UUID?
+    @ObservationIgnored private var sessionConfiguration: TrackIsBackConfiguration?
     @ObservationIgnored private var lifecycleEpoch: UInt64 = 0
     @ObservationIgnored private var initializationTask: Task<Void, Never>?
     @ObservationIgnored private var configurationTask: Task<Void, Never>?
@@ -729,10 +730,31 @@ public final class PaddrMenuModel {
     private func beginEnabledTransition(statusGeneration: UInt64) {
         guard isInitialized, terminationState == .idle else { return }
         if isEnabled {
-            startLifecycle(commitDraft: true, statusGeneration: statusGeneration)
+            if canEnableOutputInPlace {
+                enableOutputInPlace()
+            } else {
+                startLifecycle(commitDraft: true, statusGeneration: statusGeneration)
+            }
         } else {
             disableOutput()
         }
+    }
+
+    private var canEnableOutputInPlace: Bool {
+        sessionID != nil
+            && sessionConfiguration == savedConfiguration
+            && !hasUnsavedChanges
+            && !needsInitialSave
+            && accessibilityTrusted
+            && configurationTask == nil
+            && !replacesActiveConfiguration
+    }
+
+    private func enableOutputInPlace() {
+        isReleasingOutput = false
+        outputGate.setEnabled(true)
+        publishStatus(controllerConnected ? .waitingForNeutral : .waitingForController)
+        sessionStatusGeneration = currentStatusGeneration
     }
 
     private func disableOutput() {
@@ -851,6 +873,7 @@ public final class PaddrMenuModel {
             }
         }
         sessionStatusGeneration = statusGeneration
+        sessionConfiguration = savedConfiguration
         outputGate.setEnabled(isEnabled && accessibilityTrusted)
         let stream = await dependencies.session.start(
             configuration: savedConfiguration,
