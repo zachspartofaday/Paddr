@@ -489,9 +489,15 @@ private final class SessionEventBuffer: Sendable {
             case .connecting:
                 snapshot = [.connecting]
             case let .waitingForController(description):
-                snapshot = [.waitingForController(description)]
+                snapshot = preservingReleaseAcknowledgement(
+                    base: [.waitingForController(description)],
+                    from: snapshot
+                )
             case .controllerConnected:
-                snapshot = [.controllerConnected]
+                snapshot = preservingReleaseAcknowledgement(
+                    base: [.controllerConnected],
+                    from: snapshot
+                )
             case .outputArmed:
                 snapshot = [.controllerConnected, .outputArmed]
             case let .outputReleased(revision):
@@ -523,6 +529,17 @@ private final class SessionEventBuffer: Sendable {
     func finish() {
         continuation.finish()
     }
+}
+
+private func preservingReleaseAcknowledgement(
+    base: [TrackpadSessionEvent],
+    from snapshot: [TrackpadSessionEvent]
+) -> [TrackpadSessionEvent] {
+    guard let acknowledgement = snapshot.last(where: { event in
+        if case .outputReleased = event { return true }
+        return false
+    }) else { return base }
+    return base + [acknowledgement]
 }
 
 private extension TrackpadSessionEvent {

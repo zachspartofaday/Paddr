@@ -612,7 +612,9 @@ public final class PaddrMenuModel {
                     return
                 }
                 if case let .failed(diagnostic) = stopOutcome {
+                    if isEnabled { isEnabled = false }
                     publishStatus(.failure(.output(diagnostic: diagnostic)))
+                    statusDidChange?()
                 }
             }
             do {
@@ -853,12 +855,12 @@ public final class PaddrMenuModel {
             guard isCurrent(operation) else { return nil }
         }
         resolvePendingRelease()
-        if !isEnabled, status == .releasingOutputs {
-            if case let .failed(diagnostic) = stopOutcome {
-                publishStatus(.failure(.output(diagnostic: diagnostic)))
-            } else {
-                publishStatus(.off)
-            }
+        if case let .failed(diagnostic) = stopOutcome {
+            if isEnabled { isEnabled = false }
+            publishStatus(.failure(.output(diagnostic: diagnostic)))
+            statusDidChange?()
+        } else if !isEnabled, status == .releasingOutputs {
+            publishStatus(.off)
         }
 
         if commitDraft {

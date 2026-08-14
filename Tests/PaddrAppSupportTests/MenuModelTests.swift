@@ -3033,6 +3033,58 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.isEnabled)
     }
 
+    func testEnabledRestartTeardownFailureDisablesOutputAndSurfaces() async {
+        let state = readyState(receiver: nil)
+        let session = GatedSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        state.receiver = "Fake"
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+        await session.setStopOutcome(.failed("held output release failed"))
+
+        model.configuration.right.sensitivity = 6
+        model.saveAndApply()
+        await waitUntil(model: model) { !model.isEnabled }
+
+        guard case let .failure(.output(diagnostic)) = model.status else {
+            return XCTFail("Expected the enabled-restart teardown failure to surface")
+        }
+        XCTAssertTrue(diagnostic.contains("held output release failed"))
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(state.savedConfiguration?.right.sensitivity, 6)
+        await waitUntil(model: model) { await session.startCount == 2 }
+        XCTAssertFalse(model.isEnabled)
+    }
+
+    func testProfileReplacementTeardownFailureDisablesOutputButPersistsSelection() async throws {
+        let state = readyState(receiver: nil)
+        let (document, _, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let session = GatedSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        state.receiver = "Fake"
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+        await session.setStopOutcome(.failed("held output release failed"))
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await waitUntil(model: model) { !model.isEnabled }
+        await waitUntil(model: model) { model.activeProfileID == second.id }
+
+        guard case .failure(.output) = model.status else {
+            return XCTFail("Expected the replacement teardown failure to surface")
+        }
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(state.savedProfileDocument?.activeProfileID, second.id)
+        await waitUntil(model: model) { await session.startCount == 2 }
+        XCTAssertFalse(model.isEnabled)
+    }
+
     func testOutputFailureKeepsObservationAliveThroughReconnect() async {
         let state = readyState(receiver: "Fake receiver")
         let reconnectSleeper = ManualSleeper()

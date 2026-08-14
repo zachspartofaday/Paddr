@@ -177,6 +177,29 @@ final class SessionTests: XCTestCase {
         await session.stop()
     }
 
+    func testReleaseAcknowledgementSurvivesProgressPressure() async {
+        let runtime = ReleasePressureRuntime()
+        let session = TrackpadSession(runtime: runtime.run)
+        let stream = await session.start(configuration: configuration(sensitivity: 1))
+        await runtime.waitUntilProduced()
+
+        var iterator = stream.makeAsyncIterator()
+        var bufferedEvents: [TrackpadSessionEvent] = []
+        for _ in 0..<32 {
+            guard let event = await iterator.next() else {
+                return XCTFail("Expected the bounded session buffer to remain open")
+            }
+            bufferedEvents.append(event)
+        }
+
+        XCTAssertTrue(bufferedEvents.contains(.outputReleased(revision: 7)))
+        XCTAssertTrue(bufferedEvents.contains(.controllerConnected))
+
+        runtime.release()
+        while await iterator.next() != nil {}
+        _ = await session.stop()
+    }
+
     func testEventGateRejectsEnqueueFromSupersededGeneration() {
         let gate = SessionEventGate()
         var delivered: [String] = []
@@ -254,6 +277,48 @@ private final class ProgressPressureRuntime: Sendable {
         releaseGate.wait()
         return TrackpadRunResult(
             summary: .init(reportCount: 80, actionCount: 8),
+            termination: .stopped
+        )
+    }
+
+    func waitUntilProduced() async {
+        var iterator = produced.makeAsyncIterator()
+        _ = await iterator.next()
+    }
+
+    func release() {
+        releaseGate.signal()
+    }
+}
+
+private final class ReleasePressureRuntime: Sendable {
+    private let produced: AsyncStream<Void>
+    private let producedContinuation: AsyncStream<Void>.Continuation
+    private let releaseGate = DispatchSemaphore(value: 0)
+
+    init() {
+        (produced, producedContinuation) = AsyncStream<Void>.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
+    }
+
+    func run(
+        configuration: TrackIsBackConfiguration,
+        observeOnly: Bool,
+        outputGate: OutputGate?,
+        stopToken: TrackpadStopToken,
+        event: @escaping @Sendable (TrackpadSessionEvent) -> Void
+    ) throws -> TrackpadRunResult {
+        event(.waitingForController("release-pressure-test"))
+        event(.outputReleased(revision: 7))
+        event(.controllerConnected)
+        for reportCount in 1...80 {
+            event(.progress(.init(reportCount: reportCount, actionCount: 0)))
+        }
+        producedContinuation.yield(())
+        releaseGate.wait()
+        return TrackpadRunResult(
+            summary: .init(reportCount: 80, actionCount: 0),
             termination: .stopped
         )
     }
