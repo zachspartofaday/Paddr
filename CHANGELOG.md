@@ -18,6 +18,10 @@ User-visible changes to Paddr are recorded here. Release entries describe confir
 - Moved **Save & Apply** and the saved-state indicator into the top profile card, and moved **Restore Defaults** into the profile actions menu. The bottom bar is now a stable status-only row, so it no longer reflows when statuses change.
 - **Save & Apply** is enabled only while there are unsaved changes.
 
+### Known issues
+
+- In Pointer mode, **Center tap radius** currently doubles as a tracking dead zone: touch taps register only inside the radius, and pointer tracking responds only outside it, so the pad's center cannot move the pointer while a radius is set. A radius of 0% keeps taps and tracking available across the whole pad. Decoupling these — full-pad tracking with taps confined to the radius, as a togglable default — is planned ([#50](https://github.com/zachspartofaday/Paddr/issues/50)).
+
 ## 0.9.9 — 2026-08-13
 
 ### Profiles and setup
