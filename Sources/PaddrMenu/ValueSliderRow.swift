@@ -23,7 +23,11 @@ struct ValueSliderRow: View {
     let valueText: String
 
     var body: some View {
-        PaddrSettingsRow(title: title, systemImage: systemImage) {
+        PaddrSettingsRow(
+            title: title,
+            systemImage: systemImage,
+            labelWidth: PaddrStyle.Width.labelColumnWide
+        ) {
             HStack(spacing: PaddrStyle.Spacing.s2) {
                 Slider(value: $value.quantized(step: step, in: range), in: range)
                     .frame(minWidth: PaddrStyle.sliderMinimumWidth)

@@ -161,6 +161,49 @@ final class MenuViewPresentationTests: XCTestCase {
         )
     }
 
+    /// The inspector column is the binding constraint on the width scale, and overrunning it
+    /// fails silently in two ways a bounds check cannot see: `ViewThatFits` drops the row
+    /// into its stacked fallback, and a starved label wraps mid-word. Both are asserted on
+    /// the geometry directly.
+    func testPickerRowFitsItsInlineBranchInsideTheInspectorColumn() {
+        XCTAssertLessThanOrEqual(
+            PaddrStyle.Width.labelColumn + PaddrStyle.Spacing.s3 + PaddrStyle.Width.control,
+            PaddrStyle.zoneInspectorWidth,
+            "A picker row's inline branch must fit the inspector column"
+        )
+        // The area-layout row is Text + HStack spacing + Spacer(minLength:) + HStack spacing
+        // + picker, so it spends three `s3` gaps, not one. At `controlWide` its label was
+        // left 30pt and wrapped mid-word.
+        let modeLabel = NSHostingView(
+            rootView: Text(LocalizedStringResource("Mode")).paddrTypography(.sectionLabel)
+        )
+        modeLabel.layoutSubtreeIfNeeded()
+        XCTAssertLessThanOrEqual(
+            modeLabel.fittingSize.width,
+            PaddrStyle.zoneInspectorWidth
+                - PaddrStyle.Width.controlMedium
+                - (3 * PaddrStyle.Spacing.s3),
+            "The area-layout row starves its label, which then wraps mid-word"
+        )
+
+        let row = PaddrSettingsRow(title: "Action", systemImage: "keyboard") {
+            OutputBindingPicker(
+                selection: .constant("Up arrow"),
+                width: PaddrStyle.Width.control
+            )
+        }
+        .frame(width: PaddrStyle.zoneInspectorWidth)
+        let hostingView = NSHostingView(rootView: row)
+        hostingView.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(
+            hostingView.fittingSize.height,
+            PaddrStyle.Metrics.row + (2 * PaddrStyle.Spacing.s1),
+            accuracy: 0.5,
+            "The row fell back to the stacked branch inside the inspector column"
+        )
+    }
+
     /// The public `colorSchemeContrast`, `accessibilityReduceTransparency`, and
     /// `accessibilityDifferentiateWithoutColor` values are read-only, so the hosted matrix
     /// drives them through their underscore-prefixed writable key paths. `PaddrAppearance`'s

@@ -74,15 +74,24 @@ enum PaddrStyle {
         static let pad: CGFloat = 30
     }
 
+    /// Widths are derived from the container they must fit, not chosen a priori. The binding
+    /// constraint is the pad card's inspector column: a settings row's inline branch needs
+    /// `labelColumn + Spacing.s3 + control <= zoneInspectorWidth`. Exceeding it does not clip
+    /// — it silently drops every picker row into `PaddrSettingsRow`'s stacked fallback.
     enum Width {
         /// Numeric value column, monospaced and trailing-aligned.
         static let readout: CGFloat = 48
         /// Settings-row pickers.
         static let control: CGFloat = 132
-        /// Profile picker and area-layout picker.
+        /// The area-layout picker, whose longest value is "Four-way radial".
+        static let controlMedium: CGFloat = 160
+        /// The profile picker, which sits in the full-width top band rather than a column.
         static let controlWide: CGFloat = 200
-        /// Settings-row label column.
-        static let labelColumn: CGFloat = 128
+        /// Label column for rows whose control is a fixed-width picker.
+        static let labelColumn: CGFloat = 108
+        /// Label column for slider rows: their labels are longer ("Pointer acceleration")
+        /// and their control is flexible, so they can afford what a picker row cannot.
+        static let labelColumnWide: CGFloat = 152
     }
 
     static let accent = Color(red: 26.0 / 255.0, green: 159.0 / 255.0, blue: 1)
@@ -137,24 +146,26 @@ private struct PaddrCardModifier: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         PaddrAppearanceReader { appearance in
+            // Bezeled, not glass. Paddr's controls are a mix of SwiftUI buttons, a SwiftUI
+            // menu picker, and an AppKit `NSSegmentedControl`, and only the buttons can take
+            // Liquid Glass — so a glass card sat above three controls that could never join
+            // it. The standard control bezel is the one family all four share.
             Group {
                 if appearance.usesOpaqueFallback {
-                    // The opaque fallback keeps the card's tint so it still reads as a
-                    // card against the equally opaque panel background.
-                    content
-                        .background(
-                            PaddrStyle.accent.opacity(0.06),
-                            in: .rect(cornerRadius: PaddrStyle.Radius.card)
-                        )
-                        .background(
-                            Color(nsColor: .controlBackgroundColor),
-                            in: .rect(cornerRadius: PaddrStyle.Radius.card)
-                        )
-                } else {
-                    content.glassEffect(
-                        .regular,
+                    content.background(
+                        Color(nsColor: .controlBackgroundColor),
                         in: .rect(cornerRadius: PaddrStyle.Radius.card)
                     )
+                } else {
+                    content
+                        .background(
+                            PaddrStyle.accent.opacity(0.04),
+                            in: .rect(cornerRadius: PaddrStyle.Radius.card)
+                        )
+                        .background(
+                            .regularMaterial,
+                            in: .rect(cornerRadius: PaddrStyle.Radius.card)
+                        )
                 }
             }
             .overlay {
@@ -177,19 +188,19 @@ private struct PaddrActionButtonModifier: ViewModifier {
         switch role {
         case .primary:
             content
-                .buttonStyle(.glassProminent)
+                .buttonStyle(.borderedProminent)
                 .controlSize(.regular)
                 .paddrTypography(.rowLabel)
                 .tint(PaddrStyle.accent)
         case .secondary:
             content
-                .buttonStyle(.glass)
+                .buttonStyle(.bordered)
                 .controlSize(.regular)
                 .paddrTypography(.rowLabel)
         case .icon:
             content
                 .labelStyle(.iconOnly)
-                .buttonStyle(.glass)
+                .buttonStyle(.bordered)
                 .controlSize(.regular)
                 .paddrTypography(.rowLabel)
         }

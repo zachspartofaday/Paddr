@@ -60,13 +60,15 @@ struct PaddrInsetDivider: View {
 struct PaddrSettingsRow<Control: View>: View {
     let title: LocalizedStringResource
     let systemImage: String
+    /// Picker rows and slider rows need different label columns; see `PaddrStyle.Width`.
+    var labelWidth: CGFloat = PaddrStyle.Width.labelColumn
     @ViewBuilder let control: () -> Control
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: PaddrStyle.Spacing.s3) {
                 label
-                    .frame(width: PaddrStyle.Width.labelColumn, alignment: .leading)
+                    .frame(width: labelWidth, alignment: .leading)
                 control()
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }

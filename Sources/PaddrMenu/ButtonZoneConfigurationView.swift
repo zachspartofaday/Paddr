@@ -130,7 +130,7 @@ struct ButtonZoneConfigurationView: View {
         .labelsHidden()
         .pickerStyle(.menu)
         .paddrMenuSelector()
-        .frame(width: PaddrStyle.Width.controlWide, alignment: .trailing)
+        .frame(width: PaddrStyle.Width.controlMedium, alignment: .trailing)
         .help("Choose how the trackpad is divided into button areas.")
     }
 
