@@ -7,8 +7,8 @@ struct PaddrSectionContainer<Content: View>: View {
     var body: some View {
         PaddrAppearanceReader { appearance in
             content()
-                .padding(.horizontal, PaddrStyle.Spacing.s4)
-                .padding(.vertical, PaddrStyle.Spacing.s4)
+                .padding(.horizontal, PaddrStyle.Spacing.s3)
+                .padding(.vertical, PaddrStyle.Spacing.s3)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     appearance.usesOpaqueFallback

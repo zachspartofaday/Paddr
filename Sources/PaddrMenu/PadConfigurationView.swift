@@ -83,7 +83,7 @@ struct PadConfigurationView: View {
             .frame(minHeight: PaddrStyle.Metrics.row)
             .contentShape(.rect)
         }
-        .padding(PaddrStyle.Spacing.s4)
+        .padding(PaddrStyle.Spacing.s3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(
             height: isExpanded ? PaddrStyle.padConfigurationCardHeight : nil,
@@ -99,7 +99,7 @@ struct PadConfigurationView: View {
         case .disabled:
             previewSplit(previewTitle: LocalizedStringResource("Preview")) {
                 Text("This trackpad will not emit pointer, scroll, or button input.")
-                    .paddrTypography(.callout)
+                    .paddrTypography(.rowLabel)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

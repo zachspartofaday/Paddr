@@ -15,7 +15,7 @@ struct PadModePreview: View {
             let bounds = CGRect(origin: .zero, size: size)
             let padShape = Path(
                 roundedRect: bounds,
-                cornerRadius: PaddrStyle.padPreviewCornerRadius
+                cornerRadius: PaddrStyle.Radius.pad
             )
             context.fill(
                 padShape,
@@ -38,13 +38,13 @@ struct PadModePreview: View {
                 break
             }
         }
-        .clipShape(.rect(cornerRadius: PaddrStyle.padPreviewCornerRadius))
+        .clipShape(.rect(cornerRadius: PaddrStyle.Radius.pad))
         .overlay {
             ZStack {
-                RoundedRectangle(cornerRadius: PaddrStyle.padPreviewCornerRadius)
+                RoundedRectangle(cornerRadius: PaddrStyle.Radius.pad)
                     .strokeBorder(.white.opacity(0.10), lineWidth: 1)
                     .padding(1)
-                RoundedRectangle(cornerRadius: PaddrStyle.padPreviewCornerRadius)
+                RoundedRectangle(cornerRadius: PaddrStyle.Radius.pad)
                     .strokeBorder(.primary.opacity(0.30), lineWidth: 1)
             }
         }

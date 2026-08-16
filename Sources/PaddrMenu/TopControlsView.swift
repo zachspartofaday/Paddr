@@ -5,28 +5,28 @@ struct TopControlsView: View {
     @Bindable var model: PaddrMenuModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
             ViewThatFits(in: .horizontal) {
-                HStack(spacing: 12) {
+                HStack(spacing: PaddrStyle.Spacing.s3) {
                     ProfileControlsView(model: model)
-                    Spacer(minLength: 12)
+                    Spacer(minLength: PaddrStyle.Spacing.s3)
                     saveState
                     actions
                 }
-                .frame(minHeight: 40)
+                .frame(minHeight: PaddrStyle.Metrics.row)
 
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
                     ProfileControlsView(model: model)
-                    HStack(spacing: 12) {
+                    HStack(spacing: PaddrStyle.Spacing.s3) {
                         saveState
-                        Spacer(minLength: 12)
+                        Spacer(minLength: PaddrStyle.Spacing.s3)
                         actions
                     }
                 }
             }
             if !model.hasSystemAccess { permissionsContent }
         }
-        .padding(PaddrStyle.cardPadding)
+        .padding(PaddrStyle.Spacing.s3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .paddrCard()
     }
@@ -36,37 +36,37 @@ struct TopControlsView: View {
             model.hasUnsavedChanges ? "Unsaved changes" : "Saved",
             systemImage: model.hasUnsavedChanges ? "circle.fill" : "checkmark.circle.fill"
         )
-        .paddrTypography(.callout)
+        .paddrTypography(.rowLabel)
         .foregroundStyle(model.hasUnsavedChanges ? PaddrStyle.warningText : PaddrStyle.accentText)
         .fixedSize()
     }
 
     private var actions: some View {
         Button("Save & Apply", systemImage: "checkmark", action: model.saveAndApply)
-            .paddrActionButton(prominent: true)
+            .paddrActionButton(.primary)
             .disabled(!model.canSaveAndApply)
             .keyboardShortcut("s", modifiers: .command)
     }
 
     private var permissionsContent: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: PaddrStyle.Spacing.s3) {
             Text("Permissions")
-                .paddrTypography(.headline)
+                .paddrTypography(.sectionLabel)
                 .fixedSize()
 
             ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) {
+                HStack(spacing: PaddrStyle.Spacing.s2) {
                     inputMonitoringTile
                     accessibilityTile
                 }
-                VStack(spacing: 8) {
+                VStack(spacing: PaddrStyle.Spacing.s2) {
                     inputMonitoringTile
                     accessibilityTile
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(minHeight: 40)
+        .frame(minHeight: PaddrStyle.Metrics.row)
     }
 
     private var inputMonitoringTile: some View {

@@ -60,7 +60,7 @@ struct StatusCell: View {
                 .foregroundStyle(state.textColor)
                 .lineLimit(1)
         }
-        .padding(.horizontal, PaddrStyle.Spacing.s2)
+        .padding(.horizontal, PaddrStyle.Spacing.s1)
         .frame(minHeight: PaddrStyle.Metrics.row)
         .background(state.color.opacity(0.11), in: .capsule)
         .overlay {

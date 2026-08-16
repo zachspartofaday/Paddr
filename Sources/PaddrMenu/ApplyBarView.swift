@@ -16,19 +16,19 @@ struct ApplyBarView: View {
     }
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: PaddrStyle.Spacing.s1) {
             statusCells
             statusMessage
                 .frame(
                     maxWidth: .infinity,
-                    minHeight: 32,
-                    maxHeight: 32,
+                    minHeight: PaddrStyle.Metrics.row,
+                    maxHeight: PaddrStyle.Metrics.row,
                     alignment: .leading
                 )
         }
-        .padding(.horizontal, PaddrStyle.panelPadding)
-        .padding(.vertical, 8)
-        .frame(minHeight: PaddrStyle.commandBarMinimumHeight)
+        .padding(.horizontal, PaddrStyle.Spacing.s4)
+        .padding(.vertical, PaddrStyle.Spacing.s2)
+        .frame(minHeight: PaddrStyle.Metrics.commandBar)
         .background(.thickMaterial)
         .overlay(alignment: .top) {
             Rectangle()
