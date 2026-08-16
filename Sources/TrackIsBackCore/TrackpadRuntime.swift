@@ -147,6 +147,9 @@ public enum TrackpadRuntime {
         var controllerEpoch: ControllerEpoch?
         var controllerLive = false
         var lastAcceptedReportUptime: UInt64?
+        // The dongle carries one controller slot per interface; Paddr drives one controller,
+        // so the first slot with evidence is adopted and other slots are ignored until loss.
+        var activeSlot: Int?
         var observedGate = outputGate?.snapshot ?? OutputGateSnapshot(isEnabled: true, revision: 0)
         var reportCount = 0
         var actionCount = 0
@@ -194,6 +197,7 @@ public enum TrackpadRuntime {
         }
 
         func loseController() throws {
+            activeSlot = nil
             lastAcceptedReportUptime = nil
             controllerLive = false
             try releaseEpochOutputs()
@@ -232,15 +236,20 @@ public enum TrackpadRuntime {
                     try reconcileOutputGate()
                     try loseControllerIfDeadlineReached(at: dependencies.uptimeNanoseconds())
                 },
-                onReport: { bytes, timestamp in
+                onReport: { report in
+                    let bytes = report.bytes
+                    let timestamp = report.timestampNanoseconds
                     if let wirelessConnected = TritonParser.parseWirelessConnection(bytes) {
                         if wirelessConnected {
+                            if let activeSlot, activeSlot != report.slot { return }
+                            try loseControllerIfDeadlineReached(at: timestamp)
+                            activeSlot = report.slot
                             lastAcceptedReportUptime = timestamp
                             if !controllerLive {
                                 controllerLive = true
                                 onEvent?(.controllerConnected)
                             }
-                        } else if controllerLive {
+                        } else if controllerLive, activeSlot == report.slot {
                             try loseController()
                         }
                         return
@@ -248,7 +257,9 @@ public enum TrackpadRuntime {
                     guard let pads = TritonParser.parseTrackpads(bytes, timestampNanoseconds: timestamp) else {
                         return
                     }
+                    if let activeSlot, activeSlot != report.slot { return }
                     try loseControllerIfDeadlineReached(at: timestamp)
+                    activeSlot = report.slot
                     lastAcceptedReportUptime = timestamp
                     reportCount += 1
 

@@ -44,20 +44,24 @@ public struct TritonDeviceSummary: Sendable {
 #if canImport(IOKit)
 private final class HIDCallbackState: Sendable {
     private struct State: ~Copyable {
-        var reports: [([UInt8], UInt64)] = []
+        var reports: [TrackpadHIDReport] = []
         var deviceRemoved = false
     }
 
     private let state = Mutex(State())
 
-    func append(_ bytes: [UInt8]) {
+    func append(slot: Int, bytes: [UInt8]) {
         state.withLock { state in
             guard !state.deviceRemoved else { return }
-            state.reports.append((bytes, DispatchTime.now().uptimeNanoseconds))
+            state.reports.append(TrackpadHIDReport(
+                slot: slot,
+                bytes: bytes,
+                timestampNanoseconds: DispatchTime.now().uptimeNanoseconds
+            ))
         }
     }
 
-    func drain() -> [([UInt8], UInt64)] {
+    func drain() -> [TrackpadHIDReport] {
         state.withLock { state in
             guard !state.deviceRemoved else { return [] }
             let result = state.reports
@@ -84,12 +88,26 @@ public enum TrackpadStreamTermination: Equatable, Sendable {
     case deviceRemoved
 }
 
+/// One drained HID input report tagged with the controller slot (opened-interface index)
+/// it arrived on, so slot identity survives the multi-interface fan-in.
+public struct TrackpadHIDReport: Equatable, Sendable {
+    public let slot: Int
+    public let bytes: [UInt8]
+    public let timestampNanoseconds: UInt64
+
+    public init(slot: Int, bytes: [UInt8], timestampNanoseconds: UInt64) {
+        self.slot = slot
+        self.bytes = bytes
+        self.timestampNanoseconds = timestampNanoseconds
+    }
+}
+
 public protocol TrackpadHIDStreaming {
     var summaryDescription: String { get }
     func stream(
         shouldContinue: () -> Bool,
         onWake: () throws -> Void,
-        onReport: ([UInt8], UInt64) throws -> Void
+        onReport: (TrackpadHIDReport) throws -> Void
     ) throws -> TrackpadStreamTermination
 }
 
@@ -194,23 +212,41 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
         #endif
     }
 
+    #if canImport(IOKit)
+    private final class InterfaceCallbackContext {
+        let state: HIDCallbackState
+        let slot: Int
+
+        init(state: HIDCallbackState, slot: Int) {
+            self.state = state
+            self.slot = slot
+        }
+    }
+    #endif
+
     public func stream(
         shouldContinue: () -> Bool,
         onWake: () throws -> Void,
-        onReport: ([UInt8], UInt64) throws -> Void
+        onReport: (TrackpadHIDReport) throws -> Void
     ) throws -> TrackpadStreamTermination {
         #if canImport(IOKit)
         let callback: IOHIDReportCallback = { context, result, _, _, _, report, length in
             guard result == kIOReturnSuccess, let context, length >= TritonHIDDevice.minimumReportLength else { return }
-            let state = Unmanaged<HIDCallbackState>.fromOpaque(context).takeUnretainedValue()
-            state.append(Array(UnsafeBufferPointer(start: report, count: length)))
+            let interfaceContext = Unmanaged<InterfaceCallbackContext>.fromOpaque(context).takeUnretainedValue()
+            interfaceContext.state.append(
+                slot: interfaceContext.slot,
+                bytes: Array(UnsafeBufferPointer(start: report, count: length))
+            )
         }
         let removalCallback: IOHIDCallback = { context, _, _ in
             guard let context else { return }
-            Unmanaged<HIDCallbackState>.fromOpaque(context).takeUnretainedValue().markRemoved()
+            Unmanaged<InterfaceCallbackContext>.fromOpaque(context).takeUnretainedValue().state.markRemoved()
         }
-        let context = Unmanaged.passUnretained(callbackState).toOpaque()
-        for interface in openedInterfaces {
+        let contexts = openedInterfaces.indices.map { index in
+            InterfaceCallbackContext(state: callbackState, slot: index)
+        }
+        for (index, interface) in openedInterfaces.enumerated() {
+            let context = Unmanaged.passUnretained(contexts[index]).toOpaque()
             IOHIDDeviceRegisterInputReportCallback(
                 interface.device,
                 interface.buffer,
@@ -227,14 +263,15 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
                 IOHIDDeviceRegisterRemovalCallback(interface.device, nil, nil)
                 IOHIDDeviceUnscheduleFromRunLoop(interface.device, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
             }
+            withExtendedLifetime(contexts) {}
         }
 
         while shouldContinue(), !callbackState.isRemoved {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
             guard !callbackState.isRemoved else { break }
-            for (bytes, timestamp) in callbackState.drain() {
+            for report in callbackState.drain() {
                 guard !callbackState.isRemoved else { break }
-                try onReport(bytes, timestamp)
+                try onReport(report)
             }
             guard !callbackState.isRemoved else { break }
             try onWake()
