@@ -50,6 +50,278 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertLessThan(collapsedHeight, expandedHeight)
     }
 
+    /// Each case sets every lower-precedence flag as well, so it fails if the resolver
+    /// reorders any adjacent pair.
+    func testPaddrControlStateResolvesTheDocumentedPrecedenceOrder() {
+        XCTAssertEqual(
+            PaddrControlState(
+                isEnabled: false,
+                isProminent: true,
+                isSelected: true,
+                isPressed: true,
+                isHovering: true
+            ).row,
+            .disabled
+        )
+        XCTAssertEqual(
+            PaddrControlState(
+                isProminent: true,
+                isSelected: true,
+                isPressed: true,
+                isHovering: true
+            ).row,
+            .prominent
+        )
+        XCTAssertEqual(
+            PaddrControlState(isSelected: true, isPressed: true, isHovering: true).row,
+            .selected
+        )
+        XCTAssertEqual(PaddrControlState(isPressed: true, isHovering: true).row, .pressed)
+        XCTAssertEqual(PaddrControlState(isHovering: true).row, .hover)
+        XCTAssertEqual(PaddrControlState().row, .rest)
+    }
+
+    func testPaddrControlStateResolvesEveryInputCombinationToOneRow() {
+        // The documented order, expressed as data rather than as a second copy of the
+        // resolver's control flow.
+        let precedence: [(row: PaddrControlRow, applies: (PaddrControlState) -> Bool)] = [
+            (.disabled, { !$0.isEnabled }),
+            (.prominent, \.isProminent),
+            (.selected, \.isSelected),
+            (.pressed, \.isPressed),
+            (.hover, \.isHovering)
+        ]
+        let differentiating = PaddrAppearance(differentiateWithoutColor: true)
+
+        for isEnabled in [true, false] {
+            for isProminent in [false, true] {
+                for isSelected in [false, true] {
+                    for isPressed in [false, true] {
+                        for isHovering in [false, true] {
+                            for isFocused in [false, true] {
+                                let state = PaddrControlState(
+                                    isEnabled: isEnabled,
+                                    isProminent: isProminent,
+                                    isSelected: isSelected,
+                                    isPressed: isPressed,
+                                    isHovering: isHovering,
+                                    isFocused: isFocused
+                                )
+                                let label = "\(state)"
+                                XCTAssertEqual(
+                                    state.row,
+                                    precedence.first { $0.applies(state) }?.row ?? .rest,
+                                    label
+                                )
+
+                                // Focus is additive: it never changes which row won, and a
+                                // disabled control never shows a ring.
+                                var unfocused = state
+                                unfocused.isFocused = false
+                                XCTAssertEqual(state.row, unfocused.row, label)
+                                XCTAssertEqual(state.showsFocusRing, isFocused && isEnabled, label)
+
+                                // A press is always visible somewhere: either the pressed row
+                                // won, or the pressed tint is applied on top of the row that
+                                // outranked it. Never both.
+                                if isPressed && isEnabled {
+                                    XCTAssertTrue(
+                                        state.row == .pressed || state.showsAdditivePressTint,
+                                        "A press must be visible in \(label)"
+                                    )
+                                } else {
+                                    XCTAssertFalse(state.showsAdditivePressTint, label)
+                                }
+                                XCTAssertFalse(
+                                    state.row == .pressed && state.showsAdditivePressTint,
+                                    label
+                                )
+
+                                // Selection is never colour-only, and the mark tracks
+                                // selection rather than the winning row.
+                                XCTAssertEqual(
+                                    state.showsSelectionMark(in: differentiating),
+                                    isSelected && isEnabled,
+                                    label
+                                )
+                                XCTAssertFalse(
+                                    state.showsSelectionMark(in: PaddrAppearance()),
+                                    label
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// A custom `ButtonStyle` renders no `NSControl`, so the row-height assertions elsewhere
+    /// in this file cannot see a button at all. The height is asserted on the hosted
+    /// geometry directly, and exactly, rather than as containment.
+    func testEveryButtonRoleRendersAtTheControlHeight() {
+        XCTAssertEqual(PaddrStyle.Metrics.control, 24)
+        XCTAssertEqual(PaddrStyle.Radius.control, 6)
+
+        for role in [PaddrButtonRole.primary, .secondary, .icon] {
+            let hostingView = NSHostingView(
+                rootView: Button("Request", systemImage: "gearshape", action: {})
+                    .paddrActionButton(role)
+            )
+            hostingView.layoutSubtreeIfNeeded()
+            XCTAssertEqual(
+                hostingView.fittingSize.height,
+                PaddrStyle.Metrics.control,
+                accuracy: 0.5,
+                "\(role) does not render at the control height"
+            )
+            XCTAssertLessThanOrEqual(
+                hostingView.fittingSize.height,
+                PaddrStyle.Metrics.row,
+                "\(role) must fit inside the shared row family"
+            )
+            if role == .icon {
+                XCTAssertEqual(
+                    hostingView.fittingSize.width,
+                    PaddrStyle.Metrics.control,
+                    accuracy: 0.5,
+                    "The icon role must be square at the control height"
+                )
+            }
+        }
+    }
+
+    /// The slice-1 adaptive matrix, extended to the button family. Height is the property
+    /// that an adaptive override can silently break — a heavier stroke or an opaque fill
+    /// that changes layout — so it is asserted per cell rather than left to containment.
+    func testAdaptiveMatrixKeepsEveryButtonRoleAtTheControlHeight() {
+        for role in [PaddrButtonRole.primary, .secondary, .icon] {
+            for colorScheme in [ColorScheme.light, .dark] {
+                for contrast in [ColorSchemeContrast.standard, .increased] {
+                    for reduceTransparency in [false, true] {
+                        for differentiateWithoutColor in [false, true] {
+                            let view = Button("Request", systemImage: "gearshape", action: {})
+                                .paddrActionButton(role)
+                                .environment(\.colorScheme, colorScheme)
+                                .environment(\._colorSchemeContrast, contrast)
+                                .environment(
+                                    \._accessibilityReduceTransparency,
+                                    reduceTransparency
+                                )
+                                .environment(
+                                    \._accessibilityDifferentiateWithoutColor,
+                                    differentiateWithoutColor
+                                )
+                            let label = """
+                                \(role)/\(colorScheme)/\(contrast)/\
+                                reduceTransparency:\(reduceTransparency)/\
+                                differentiateWithoutColor:\(differentiateWithoutColor)
+                                """
+                            let hostingView = NSHostingView(rootView: view)
+                            hostingView.layoutSubtreeIfNeeded()
+                            let fitted = hostingView.fittingSize
+                            XCTAssertTrue(fitted.width.isFinite, label)
+                            XCTAssertGreaterThan(fitted.width, 0, label)
+                            XCTAssertEqual(
+                                fitted.height,
+                                PaddrStyle.Metrics.control,
+                                accuracy: 0.5,
+                                label
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Selection must not be carried by colour alone. The mark is a real layout change, so
+    /// the surface is wider under Differentiate Without Colour than without it.
+    func testSelectedSurfaceCarriesItsMarkUnderDifferentiateWithoutColor() {
+        func selectedWidth(differentiateWithoutColor: Bool) -> CGFloat {
+            let hostingView = NSHostingView(
+                rootView: Text(verbatim: "Scroll")
+                    .paddrControlSurface(PaddrControlState(isSelected: true))
+                    .environment(
+                        \._accessibilityDifferentiateWithoutColor,
+                        differentiateWithoutColor
+                    )
+            )
+            hostingView.layoutSubtreeIfNeeded()
+            return hostingView.fittingSize.width
+        }
+
+        let plain = selectedWidth(differentiateWithoutColor: false)
+        let marked = selectedWidth(differentiateWithoutColor: true)
+        XCTAssertGreaterThan(
+            marked,
+            plain + PaddrStyle.Spacing.s1,
+            "The selected surface carries no additional mark under Differentiate Without Colour"
+        )
+
+        // An unselected surface gains nothing, so the mark is selection and not decoration.
+        let unselected = NSHostingView(
+            rootView: Text(verbatim: "Scroll")
+                .paddrControlSurface(PaddrControlState())
+                .environment(\._accessibilityDifferentiateWithoutColor, true)
+        )
+        unselected.layoutSubtreeIfNeeded()
+        XCTAssertEqual(unselected.fittingSize.width, plain, accuracy: 0.5)
+    }
+
+    /// `focusEffectDisabled()` must suppress the system focus effect without removing the
+    /// button from the keyboard focus order. SwiftUI's key-view-loop participant is the
+    /// probe for the second half; `focusable(false)` is the negative control, so a renamed
+    /// or vanished participant fails this test rather than passing it vacuously.
+    func testSuppressingTheSystemFocusEffectKeepsButtonsInTheKeyViewLoop() {
+        func viewTypeNames(_ view: some View) -> [String] {
+            let hostingView = NSHostingView(rootView: view)
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 300, height: 100),
+                styleMask: [.titled],
+                backing: .buffered,
+                defer: false
+            )
+            window.contentView = hostingView
+            hostingView.frame = NSRect(x: 0, y: 0, width: 300, height: 100)
+            hostingView.layoutSubtreeIfNeeded()
+            window.recalculateKeyViewLoop()
+            return descendants(of: NSView.self, in: hostingView)
+                .map { String(describing: type(of: $0)) }
+        }
+        func keyViewProxies(_ names: [String]) -> Int {
+            names.filter { $0.contains("KeyViewProxy") }.count
+        }
+        func focusRings(_ names: [String]) -> Int {
+            names.filter { $0.contains("FocusRingView") }.count
+        }
+
+        let stock = viewTypeNames(Button("Stock", action: {}).buttonStyle(.bordered))
+        let paddr = viewTypeNames(Button("Paddr", action: {}).paddrActionButton(.secondary))
+        let unfocusable = viewTypeNames(
+            Button("Unfocusable", action: {}).paddrActionButton(.secondary).focusable(false)
+        )
+
+        XCTAssertEqual(keyViewProxies(stock), 1, "Baseline: a stock button joins the key-view loop")
+        XCTAssertEqual(
+            keyViewProxies(paddr),
+            keyViewProxies(stock),
+            "A Paddr button left the keyboard focus order: \(paddr)"
+        )
+        XCTAssertEqual(
+            keyViewProxies(unfocusable),
+            0,
+            "Negative control: an unfocusable button must not join the loop"
+        )
+
+        XCTAssertEqual(focusRings(stock), 1, "Baseline: a stock button draws the system effect")
+        XCTAssertEqual(
+            focusRings(paddr),
+            0,
+            "The system focus effect is not suppressed, so it doubles the Paddr ring: \(paddr)"
+        )
+    }
+
     func testPaddrAppearanceResolvesEveryAdaptiveCombination() {
         for reduceTransparency in [false, true] {
             for contrast in [ColorSchemeContrast.standard, .increased] {

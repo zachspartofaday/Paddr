@@ -49,12 +49,14 @@ enum PaddrStyle {
     }
 
     /// Heights and fixed surface sizes. `row` is the single control-row family
-    /// (card header, settings row, status cell, permission row, inspector header);
-    /// control heights themselves stay native and are never hand-set.
+    /// (card header, settings row, status cell, permission row, inspector header), and
+    /// `control` is the height every Paddr-drawn control is laid out at.
     enum Metrics {
         static let row: CGFloat = 28
         /// `row` plus a `Spacing.s2` inset above and below.
         static let commandBar: CGFloat = 44
+        /// Custom controls. Sits inside `row` with room to centre.
+        static let control: CGFloat = 24
 
         static let defaultWindowSize = NSSize(width: 1_120, height: 600)
         static let minimumWindowSize = NSSize(width: 640, height: 360)
@@ -68,8 +70,8 @@ enum PaddrStyle {
     enum Radius {
         /// Glass card or banner.
         static let card: CGFloat = 16
-        /// Inset chips, status containers, zone label plates.
-        static let control: CGFloat = 8
+        /// Paddr-drawn controls, and the inset containers that hold them.
+        static let control: CGFloat = 6
         /// The physical trackpad. Geometry-bearing and unchanged.
         static let pad: CGFloat = 30
     }
@@ -183,26 +185,21 @@ private struct PaddrCardModifier: ViewModifier {
 private struct PaddrActionButtonModifier: ViewModifier {
     let role: PaddrButtonRole
 
+    /// `focusEffectDisabled()` sits outside the `Button`, where the system effect is drawn;
+    /// it suppresses the effect only, leaving the button in the keyboard focus order for
+    /// `PaddrControlSurface` to draw the ring itself.
     @ViewBuilder
     func body(content: Content) -> some View {
         switch role {
-        case .primary:
+        case .primary, .secondary:
             content
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
-                .paddrTypography(.rowLabel)
-                .tint(PaddrStyle.accent)
-        case .secondary:
-            content
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-                .paddrTypography(.rowLabel)
+                .buttonStyle(PaddrButtonStyle(role: role))
+                .focusEffectDisabled()
         case .icon:
             content
                 .labelStyle(.iconOnly)
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-                .paddrTypography(.rowLabel)
+                .buttonStyle(PaddrButtonStyle(role: .icon))
+                .focusEffectDisabled()
         }
     }
 }
