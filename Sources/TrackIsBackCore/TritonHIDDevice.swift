@@ -132,6 +132,18 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
         return maximumInputReportSize >= minimumStateReportLength
     }
 
+    /// Indices of the interfaces belonging to the single physical receiver to open, keyed by each
+    /// candidate's USB location ID. Interfaces from a second plugged-in puck must not share the
+    /// stream: its removal would tear down the active controller. Picks the lowest known location;
+    /// candidates without a location are used only when no candidate reports one.
+    public static func indicesOfSelectedReceiver(locationIDs: [Int?]) -> [Int] {
+        let known = locationIDs.enumerated().compactMap { index, id in id.map { (index, $0) } }
+        guard let target = known.map(\.1).min() else {
+            return Array(locationIDs.indices)
+        }
+        return known.filter { $0.1 == target }.map(\.0)
+    }
+
     #if canImport(IOKit)
     private struct OpenedInterface {
         let device: IOHIDDevice
@@ -305,7 +317,7 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
             return nil
         }
 
-        let candidates = (deviceSet as NSSet).map { $0 as! IOHIDDevice }.compactMap { device -> (IOHIDDevice, UInt16, TritonInterfaceSummary)? in
+        let candidates = (deviceSet as NSSet).map { $0 as! IOHIDDevice }.compactMap { device -> (IOHIDDevice, UInt16, TritonInterfaceSummary, Int?)? in
             guard let productID = integerProperty(device, key: kIOHIDProductIDKey).map(UInt16.init),
                   let maximum = integerProperty(device, key: kIOHIDMaxInputReportSizeKey)
             else { return nil }
@@ -317,18 +329,20 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
                 usage: integerProperty(device, key: kIOHIDPrimaryUsageKey),
                 maximumInputReportSize: maximum
             )
-            return (device, productID, summary)
+            return (device, productID, summary, integerProperty(device, key: kIOHIDLocationIDKey))
         }.sorted { lhs, rhs in
             (lhs.2.interfaceNumber ?? Int.max) < (rhs.2.interfaceNumber ?? Int.max)
         }
 
-        guard let first = candidates.first else {
+        let selectedIndices = indicesOfSelectedReceiver(locationIDs: candidates.map(\.3))
+        let selected = selectedIndices.map { candidates[$0] }
+        guard let first = selected.first else {
             IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
             return nil
         }
         return Selection(
             manager: manager,
-            candidates: candidates.map { ($0.0, $0.2) },
+            candidates: selected.map { ($0.0, $0.2) },
             productID: first.1
         )
     }

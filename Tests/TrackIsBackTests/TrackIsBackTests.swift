@@ -61,6 +61,14 @@ final class TrackIsBackTests: XCTestCase {
         XCTAssertFalse(TritonHIDDevice.isControllerInterface(interfaceNumber: nil, maximumInputReportSize: 8))
     }
 
+    func testReceiverSelectionKeepsOnePhysicalPuck() {
+        XCTAssertEqual(TritonHIDDevice.indicesOfSelectedReceiver(locationIDs: [nil, nil, nil]), [0, 1, 2])
+        XCTAssertEqual(TritonHIDDevice.indicesOfSelectedReceiver(locationIDs: [7, 7, 7, 7]), [0, 1, 2, 3])
+        XCTAssertEqual(TritonHIDDevice.indicesOfSelectedReceiver(locationIDs: [9, 7, 9, 7]), [1, 3])
+        XCTAssertEqual(TritonHIDDevice.indicesOfSelectedReceiver(locationIDs: [nil, 7, nil, 7]), [1, 3])
+        XCTAssertEqual(TritonHIDDevice.indicesOfSelectedReceiver(locationIDs: []), [])
+    }
+
     func testDeviceSummaryDescriptionListsAllInterfaces() {
         let summary = TritonDeviceSummary(
             productID: 0x1304,
