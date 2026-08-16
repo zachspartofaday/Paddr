@@ -28,5 +28,7 @@
     <true/>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 Zach Skjaveland / Part of a Day</string>
+    <key>NSInputMonitoringUsageDescription</key>
+    <string>Paddr reads Steam Controller 2 reports from the puck to show controller status and map trackpad input.</string>
 </dict>
 </plist>

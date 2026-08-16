@@ -807,6 +807,204 @@ final class RuntimeTests: XCTestCase {
         XCTAssertEqual(events.events.filter { $0 == .outputArmed }.count, 2)
     }
 
+    func testWirelessConnectStatusMarksControllerLiveWithoutStateReports() throws {
+        let clock = ManualUptimeClock()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report([0x46, 2], at: 10),
+            .stop
+        ])
+        let events = EventRecorder()
+        let output = RecordingOutput()
+
+        let result = try run(hid: hid, clock: clock, output: output, events: events)
+
+        XCTAssertEqual(result.summary.reportCount, 0)
+        XCTAssertEqual(events.events, [
+            .waitingForController("Fake receiver"),
+            .controllerConnected
+        ])
+        XCTAssertEqual(output.actions, [])
+    }
+
+    func testWirelessDisconnectReleasesHeldOutputsBeforeControllerLost() throws {
+        let clock = ManualUptimeClock()
+        let timeline = TimelineRecorder()
+        let output = RecordingOutput { action in timeline.append(action.description) }
+        let events = EventRecorder { event in timeline.append(String(describing: event)) }
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .report(heldLeftReport(), at: 10),
+            .report([0x79, 1], at: 20),
+            .report(neutralReport(), at: 30),
+            .stop
+        ])
+        var configuration = TrackIsBackConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+
+        _ = try run(
+            configuration: configuration,
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: events
+        )
+
+        let space = try KeyCatalog.resolve("space")
+        XCTAssertEqual(output.actions, [
+            .key(space, isPressed: true),
+            .key(space, isPressed: false)
+        ])
+        XCTAssertEqual(events.events.filter { if case .controllerLost = $0 { true } else { false } }.count, 1)
+        XCTAssertTrue(events.events.contains(.controllerLost(.init(reportCount: 2, actionCount: 1))))
+        XCTAssertEqual(events.events.filter { $0 == .controllerConnected }.count, 2)
+
+        let entries = timeline.entries
+        let releaseIndex = try XCTUnwrap(entries.firstIndex(of: "key space up"))
+        let lostIndex = try XCTUnwrap(entries.firstIndex { $0.contains("controllerLost") })
+        XCTAssertLessThan(releaseIndex, lostIndex)
+    }
+
+    func testWirelessConnectStatusRefreshesLivenessDeadline() throws {
+        let clock = ManualUptimeClock()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .report([0x46, 2], at: 900_000_000),
+            .wake(at: 1_899_999_999),
+            .wake(at: 1_900_000_000),
+            .stop
+        ])
+        let events = EventRecorder()
+
+        let result = try run(hid: hid, clock: clock, events: events)
+
+        XCTAssertEqual(result.summary.reportCount, 1)
+        XCTAssertEqual(events.events.filter { $0 == .controllerConnected }.count, 1)
+        XCTAssertEqual(events.events.filter { if case .controllerLost = $0 { true } else { false } }.count, 1)
+        XCTAssertEqual(events.events.last, .controllerLost(.init(reportCount: 1, actionCount: 0)))
+    }
+
+    func testWirelessDisconnectWhileNotLiveEmitsNothing() throws {
+        let clock = ManualUptimeClock()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report([0x46, 1], at: 10),
+            .stop
+        ])
+        let events = EventRecorder()
+
+        _ = try run(hid: hid, clock: clock, events: events)
+
+        XCTAssertEqual(events.events, [.waitingForController("Fake receiver")])
+    }
+
+    func testWirelessConnectDrainedAfterDeadlineReleasesHeldOutputsFirst() throws {
+        let clock = ManualUptimeClock()
+        let timeline = TimelineRecorder()
+        let output = RecordingOutput { action in timeline.append(action.description) }
+        let events = EventRecorder { event in timeline.append(String(describing: event)) }
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .report(heldLeftReport(), at: 10),
+            .report([0x46, 2], at: 1_000_000_011),
+            .stop
+        ])
+        var configuration = TrackIsBackConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+
+        _ = try run(
+            configuration: configuration,
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: events
+        )
+
+        let space = try KeyCatalog.resolve("space")
+        XCTAssertEqual(output.actions, [
+            .key(space, isPressed: true),
+            .key(space, isPressed: false)
+        ])
+        XCTAssertEqual(events.events.filter { if case .controllerLost = $0 { true } else { false } }.count, 1)
+        XCTAssertEqual(events.events.filter { $0 == .controllerConnected }.count, 2)
+
+        let entries = timeline.entries
+        let releaseIndex = try XCTUnwrap(entries.firstIndex(of: "key space up"))
+        let lostIndex = try XCTUnwrap(entries.firstIndex { $0.contains("controllerLost") })
+        XCTAssertLessThan(releaseIndex, lostIndex)
+    }
+
+    func testOtherSlotReportsAndDisconnectsAreIgnoredWhileSlotActive() throws {
+        let clock = ManualUptimeClock()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .report(heldLeftReport(), at: 10),
+            .slotReport(1, neutralReport(), at: 20),
+            .slotReport(1, [0x46, 2], at: 25),
+            .slotReport(1, [0x79, 1], at: 30),
+            .slotReport(0, [0x79, 1], at: 40),
+            .stop
+        ])
+        let events = EventRecorder()
+        let output = RecordingOutput()
+        var configuration = TrackIsBackConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+
+        let result = try run(
+            configuration: configuration,
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: events
+        )
+
+        XCTAssertEqual(result.summary.reportCount, 2)
+        let space = try KeyCatalog.resolve("space")
+        XCTAssertEqual(output.actions, [
+            .key(space, isPressed: true),
+            .key(space, isPressed: false)
+        ])
+        XCTAssertEqual(events.events.filter { $0 == .controllerConnected }.count, 1)
+        XCTAssertEqual(events.events.filter { if case .controllerLost = $0 { true } else { false } }.count, 1)
+        XCTAssertEqual(events.events.last, .controllerLost(.init(reportCount: 2, actionCount: 1)))
+    }
+
+    func testControllerAdoptsNewSlotAfterLoss() throws {
+        let clock = ManualUptimeClock()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .slotReport(1, neutralReport(), at: 10),
+            .wake(at: 1_100_000_000),
+            .slotReport(2, neutralReport(), at: 1_200_000_000),
+            .stop
+        ])
+        let events = EventRecorder()
+
+        let result = try run(hid: hid, clock: clock, events: events)
+
+        XCTAssertEqual(result.summary.reportCount, 2)
+        XCTAssertEqual(events.events.filter { $0 == .controllerConnected }.count, 2)
+        XCTAssertEqual(events.events.filter { if case .controllerLost = $0 { true } else { false } }.count, 1)
+    }
+
+    func testUnpadded46ByteStateReportDrivesControllerConnection() throws {
+        let clock = ManualUptimeClock()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(Array(neutralReport().prefix(46)), at: 10),
+            .stop
+        ])
+        let events = EventRecorder()
+
+        let result = try run(hid: hid, clock: clock, events: events)
+
+        XCTAssertEqual(result.summary.reportCount, 1)
+        XCTAssertEqual(events.events, [
+            .waitingForController("Fake receiver"),
+            .controllerConnected,
+            .outputArmed
+        ])
+    }
+
     private func run(
         configuration: TrackIsBackConfiguration = .default,
         observeOnly: Bool = false,
@@ -840,6 +1038,7 @@ private final class ManualUptimeClock: Sendable {
 private final class ScriptedHID: TrackpadHIDStreaming, Sendable {
     enum Step: Sendable {
         case report([UInt8], at: UInt64)
+        case slotReport(Int, [UInt8], at: UInt64)
         case delayedReport([UInt8], receivedAt: UInt64, processedAt: UInt64)
         case wake(at: UInt64)
         case perform(@Sendable () -> Void)
@@ -859,17 +1058,20 @@ private final class ScriptedHID: TrackpadHIDStreaming, Sendable {
     func stream(
         shouldContinue: () -> Bool,
         onWake: () throws -> Void,
-        onReport: ([UInt8], UInt64) throws -> Void
+        onReport: (TrackpadHIDReport) throws -> Void
     ) throws -> TrackpadStreamTermination {
         for step in steps {
             guard shouldContinue() else { return .stopped }
             switch step {
             case let .report(bytes, uptime):
                 clock.set(uptime)
-                try onReport(bytes, uptime)
+                try onReport(TrackpadHIDReport(slot: 0, bytes: bytes, timestampNanoseconds: uptime))
+            case let .slotReport(slot, bytes, uptime):
+                clock.set(uptime)
+                try onReport(TrackpadHIDReport(slot: slot, bytes: bytes, timestampNanoseconds: uptime))
             case let .delayedReport(bytes, receivedAt, processedAt):
                 clock.set(processedAt)
-                try onReport(bytes, receivedAt)
+                try onReport(TrackpadHIDReport(slot: 0, bytes: bytes, timestampNanoseconds: receivedAt))
             case let .wake(uptime):
                 clock.set(uptime)
                 try onWake()

@@ -73,6 +73,7 @@ public final class PaddrMenuModel {
     public private(set) var receiverDescription: String?
     public private(set) var controllerConnected = false
     public private(set) var accessibilityTrusted = false
+    public private(set) var inputMonitoringGranted = false
     public private(set) var status: MenuStatus = .off
     public private(set) var reportCount = 0
     public private(set) var actionCount = 0
@@ -118,7 +119,7 @@ public final class PaddrMenuModel {
     @ObservationIgnored public var statusDidChange: (@MainActor () -> Void)?
 
     public var hasUnsavedChanges: Bool { needsInitialSave || configuration != savedConfiguration }
-    public var hasSystemAccess: Bool { accessibilityTrusted }
+    public var hasSystemAccess: Bool { accessibilityTrusted && inputMonitoringGranted }
     public var activeProfile: ConfigurationProfile {
         profiles.first { $0.id == activeProfileID } ?? .default
     }
@@ -285,6 +286,9 @@ public final class PaddrMenuModel {
             }
         }
         isInitialized = true
+        // Observation opens the puck at launch, so the one-time Input Monitoring prompt
+        // belongs here rather than at first output enable.
+        inputMonitoringGranted = dependencies.inputMonitoringGranted(true)
         _ = await refreshStatusNow(statusGeneration: statusGeneration)
         if terminationState == .idle {
             startLifecycle(
@@ -312,6 +316,7 @@ public final class PaddrMenuModel {
             self.receiverDescription = receiverDescription
         }
         accessibilityTrusted = dependencies.accessibilityTrusted(false)
+        inputMonitoringGranted = dependencies.inputMonitoringGranted(false)
         if isEnabled, !accessibilityTrusted, sessionID != nil {
             isEnabled = false
             publishStatus(.failure(.accessibilityRequired))
@@ -500,6 +505,25 @@ public final class PaddrMenuModel {
         guard terminationState == .idle else { return }
         dependencies.openPrivacySettings("Privacy_Accessibility")
         publishStatus(.accessibilitySettings)
+    }
+
+    public func requestInputMonitoring() {
+        guard terminationState == .idle else { return }
+        inputMonitoringGranted = dependencies.inputMonitoringGranted(true)
+        if inputMonitoringGranted {
+            preservingCurrentOperationalStatusAuthority {
+                publishStatus(operationalStatus)
+            }
+        } else {
+            publishStatus(.requestingInputMonitoring)
+        }
+        schedulePermissionRefresh()
+    }
+
+    public func openInputMonitoringSettings() {
+        guard terminationState == .idle else { return }
+        dependencies.openPrivacySettings("Privacy_ListenEvent")
+        publishStatus(.inputMonitoringSettings)
     }
 
     private func canBeginProfileMutation(discardingDraft: Bool) -> Bool {
@@ -1086,7 +1110,9 @@ public final class PaddrMenuModel {
     private func reconcileCompletedPermissionRequest() {
         switch status {
         case .requestingAccessibility where accessibilityTrusted,
-             .accessibilitySettings where accessibilityTrusted:
+             .accessibilitySettings where accessibilityTrusted,
+             .requestingInputMonitoring where inputMonitoringGranted,
+             .inputMonitoringSettings where inputMonitoringGranted:
             let identifier = sessionID
             let priorSessionStatusGeneration = identifier == nil ? nil : sessionStatusGeneration
             let priorReconnectStatusGeneration = reconnectTask == nil

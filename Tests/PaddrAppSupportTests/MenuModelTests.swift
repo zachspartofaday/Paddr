@@ -1115,6 +1115,58 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.status == .off }
     }
 
+    func testInitializationPromptsForInputMonitoringOnce() async {
+        let state = ModelDependencyState()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { state.inputMonitoringPromptValues.contains(true) }
+
+        XCTAssertEqual(state.inputMonitoringPromptValues.filter { $0 }.count, 1)
+        await waitUntil(model: model) { model.inputMonitoringGranted }
+    }
+
+    func testInputMonitoringRequestInvokesPromptDependency() async {
+        let state = ModelDependencyState()
+        state.inputMonitoringGranted = false
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.requestInputMonitoring()
+
+        XCTAssertEqual(state.inputMonitoringPromptValues.last, true)
+        XCTAssertEqual(state.openedPrivacySettingsAnchors, [])
+        XCTAssertEqual(model.status, .requestingInputMonitoring)
+        XCTAssertFalse(model.hasSystemAccess)
+    }
+
+    func testInputMonitoringSettingsFallbackOpensSettingsWhenRequestDoesNotGrant() async {
+        let state = ModelDependencyState()
+        state.inputMonitoringGranted = false
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.requestInputMonitoring()
+        model.openInputMonitoringSettings()
+
+        XCTAssertEqual(state.inputMonitoringPromptValues.last, true)
+        XCTAssertEqual(state.openedPrivacySettingsAnchors, ["Privacy_ListenEvent"])
+        XCTAssertEqual(model.status, .inputMonitoringSettings)
+    }
+
+    func testDelayedPermissionRefreshClearsRequestingInputMonitoringStatus() async {
+        let state = ModelDependencyState()
+        state.inputMonitoringGranted = false
+        let sleeper = ManualSleeper()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, sleeper: sleeper))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.requestInputMonitoring()
+        XCTAssertEqual(model.status, .requestingInputMonitoring)
+        state.inputMonitoringGranted = true
+        sleeper.wake()
+        await waitUntil(model: model) { model.status == .off }
+        await waitUntil(model: model) { model.inputMonitoringGranted }
+    }
+
     func testSessionEventPreservesNewerPermissionGuidanceButRecordsRuntimeState() async {
         let state = readyState(receiver: "Fake")
         let sleeper = ManualSleeper()
@@ -3361,6 +3413,10 @@ final class MenuModelTests: XCTestCase {
                 state.accessibilityPromptValues.append(prompt)
                 return state.accessibilityGranted
             },
+            inputMonitoringGranted: { prompt in
+                state.inputMonitoringPromptValues.append(prompt)
+                return state.inputMonitoringGranted
+            },
             openPrivacySettings: { state.openedPrivacySettingsAnchors.append($0) },
             sleep: { _ in
                 guard let sleeper else { throw CancellationError() }
@@ -3669,6 +3725,8 @@ private final class ModelDependencyState: Sendable {
         var openedPrivacySettingsAnchors: [String] = []
         var accessibilityGranted = false
         var accessibilityPromptValues: [Bool] = []
+        var inputMonitoringGranted = true
+        var inputMonitoringPromptValues: [Bool] = []
         var loadFailure: String?
         var loadDiagnostic: String?
         var loadGate: DispatchSemaphore?
@@ -3715,6 +3773,14 @@ private final class ModelDependencyState: Sendable {
     var accessibilityPromptValues: [Bool] {
         get { state.withLock { $0.accessibilityPromptValues } }
         set { state.withLock { $0.accessibilityPromptValues = newValue } }
+    }
+    var inputMonitoringGranted: Bool {
+        get { state.withLock { $0.inputMonitoringGranted } }
+        set { state.withLock { $0.inputMonitoringGranted = newValue } }
+    }
+    var inputMonitoringPromptValues: [Bool] {
+        get { state.withLock { $0.inputMonitoringPromptValues } }
+        set { state.withLock { $0.inputMonitoringPromptValues = newValue } }
     }
     var loadFailure: String? {
         get { state.withLock { $0.loadFailure } }

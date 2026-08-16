@@ -32,26 +32,6 @@
         }
       }
     },
-    "Access needed": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Access needed"
-          }
-        }
-      }
-    },
-    "Access ready": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Access ready"
-          }
-        }
-      }
-    },
     "Accessibility": {
       "localizations": {
         "en": {
@@ -92,12 +72,24 @@
         }
       }
     },
-    "Accessibility permission lets Paddr send your mapped mouse and keyboard input. Paddr only requests permission or opens Settings when you choose an action below.": {
+    "Accessibility needed": {
+      "comment": "Onboarding label when Accessibility is not yet granted.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Accessibility permission lets Paddr send your mapped mouse and keyboard input. Paddr only requests permission or opens Settings when you choose an action below."
+            "value": "Accessibility needed"
+          }
+        }
+      }
+    },
+    "Accessibility ready": {
+      "comment": "Onboarding label when Accessibility is granted.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accessibility ready"
           }
         }
       }
@@ -124,12 +116,13 @@
         }
       }
     },
-    "Allow Accessibility": {
+    "Allow Access": {
+      "comment": "Onboarding page title for the permissions step.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Allow Accessibility"
+            "value": "Allow Access"
           }
         }
       }
@@ -328,6 +321,17 @@
         }
       }
     },
+    "Complete the Input Monitoring prompt, then return to Paddr.": {
+      "comment": "Status guidance after requesting Input Monitoring.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Complete the Input Monitoring prompt, then return to Paddr."
+          }
+        }
+      }
+    },
     "Configuration saved.": {
       "localizations": {
         "en": {
@@ -503,6 +507,17 @@
         }
       }
     },
+    "Enable Paddr in Input Monitoring, then return to the app.": {
+      "comment": "Status guidance after opening Input Monitoring settings.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable Paddr in Input Monitoring, then return to the app."
+          }
+        }
+      }
+    },
     "Escape": {
       "localizations": {
         "en": {
@@ -590,6 +605,72 @@
           "stringUnit": {
             "state": "translated",
             "value": "Idle"
+          }
+        }
+      }
+    },
+    "Input Monitoring": {
+      "comment": "Permission tile title for the Input Monitoring grant.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input Monitoring"
+          }
+        }
+      }
+    },
+    "Input Monitoring access is needed": {
+      "comment": "Accessibility label when Input Monitoring is not yet granted.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input Monitoring access is needed"
+          }
+        }
+      }
+    },
+    "Input Monitoring access is ready": {
+      "comment": "Accessibility label when Input Monitoring is granted.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input Monitoring access is ready"
+          }
+        }
+      }
+    },
+    "Input Monitoring lets Paddr receive controller reports from the puck, and Accessibility lets it send your mapped mouse and keyboard input. Paddr asks for Input Monitoring at first launch; otherwise it only requests permission or opens Settings when you choose an action below.": {
+      "comment": "Onboarding page detail for the permissions step.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input Monitoring lets Paddr receive controller reports from the puck, and Accessibility lets it send your mapped mouse and keyboard input. Paddr asks for Input Monitoring at first launch; otherwise it only requests permission or opens Settings when you choose an action below."
+          }
+        }
+      }
+    },
+    "Input Monitoring needed": {
+      "comment": "Onboarding label when Input Monitoring is not yet granted.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input Monitoring needed"
+          }
+        }
+      }
+    },
+    "Input Monitoring ready": {
+      "comment": "Onboarding label when Input Monitoring is granted.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input Monitoring ready"
           }
         }
       }
@@ -993,22 +1074,23 @@
         }
       }
     },
-    "Reads trackpad reports and sends mapped mouse and keyboard input.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reads trackpad reports and sends mapped mouse and keyboard input."
-          }
-        }
-      }
-    },
     "Ready": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Ready"
+          }
+        }
+      }
+    },
+    "Receives Steam Controller 2 reports from the puck.": {
+      "comment": "Permission tile detail for the Input Monitoring grant.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Receives Steam Controller 2 reports from the puck."
           }
         }
       }
@@ -1234,6 +1316,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Selected area"
+          }
+        }
+      }
+    },
+    "Sends mapped mouse, scroll, and keyboard input.": {
+      "comment": "Permission tile detail for the Accessibility grant.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sends mapped mouse, scroll, and keyboard input."
           }
         }
       }
