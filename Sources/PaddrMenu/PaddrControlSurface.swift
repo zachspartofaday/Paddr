@@ -122,8 +122,25 @@ struct PaddrControlSurface: ViewModifier {
         }
     }
 
-    private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: PaddrStyle.Radius.control)
+    /// The control's outline. `.continuous` rather than the default `.circular`: it is the
+    /// corner every other Paddr-drawn surface and the system's own controls use, and mixing
+    /// the two families in one panel is visible as a mismatch long before either arc is.
+    var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: PaddrStyle.Radius.control, style: .continuous)
+    }
+
+    /// How far inside the control the focus ring is drawn. The ring used to share ``shape``
+    /// with the border, so two antialiased strokes landed on one arc and the ring simply
+    /// covered the border. On its own inset arc the two read as two.
+    static let focusRingInset: CGFloat = 2
+
+    /// The ring's arc: ``shape`` moved in by ``focusRingInset``, with the radius reduced to
+    /// match so the inset stays constant around the curve rather than pinching at the corner.
+    var focusRingShape: RoundedRectangle {
+        RoundedRectangle(
+            cornerRadius: max(1, PaddrStyle.Radius.control - Self.focusRingInset),
+            style: .continuous
+        )
     }
 
     /// The label colour. The prominent row's label sits on solid accent, and the accent is
@@ -205,7 +222,10 @@ struct PaddrControlSurface: ViewModifier {
     @ViewBuilder
     private func border(_ appearance: PaddrAppearance) -> some View {
         if let strokeColor {
-            shape.strokeBorder(
+            // Centred on the outline rather than inset inside it: the line then straddles the
+            // fill's own antialiased edge instead of sitting behind it, which is the border
+            // treatment the rest of the ecosystem's panel chrome uses.
+            shape.stroke(
                 strokeColor.opacity(appearance.strokeOpacity(resolvedStrokeOpacity)),
                 lineWidth: max(strokeWidth, appearance.strokeWidth)
             )
@@ -227,7 +247,9 @@ struct PaddrControlSurface: ViewModifier {
     @ViewBuilder
     private var focusRing: some View {
         if state.showsFocusRing {
-            shape.strokeBorder(focusRingColor, lineWidth: 2)
+            focusRingShape
+                .stroke(focusRingColor, lineWidth: 2)
+                .padding(Self.focusRingInset)
         }
     }
 }

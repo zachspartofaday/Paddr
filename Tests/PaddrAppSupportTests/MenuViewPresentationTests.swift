@@ -300,6 +300,34 @@ final class MenuViewPresentationTests: XCTestCase {
         )
     }
 
+    /// The ring and the border are two arcs, not one.
+    ///
+    /// Both used to be drawn on `shape`, so the 2pt ring landed exactly on top of the 1pt
+    /// border: two antialiased strokes compounding on a single curve, and the ring simply
+    /// covering the border rather than joining it. The ring now takes its own arc, inset by
+    /// `focusRingInset` with its radius reduced by the same amount so the inset stays
+    /// constant around the curve instead of pinching at the corner.
+    ///
+    /// Both arcs are `.continuous`. `RoundedRectangle(cornerRadius:)` defaults to `.circular`,
+    /// which is a different corner family from the one the rest of the panel chrome draws.
+    func testTheFocusRingTakesItsOwnInsetArcInTheContinuousCornerFamily() {
+        let surface = PaddrControlSurface(state: PaddrControlState(isFocused: true))
+
+        XCTAssertEqual(surface.shape.style, .continuous)
+        XCTAssertEqual(surface.focusRingShape.style, .continuous)
+
+        XCTAssertGreaterThan(PaddrControlSurface.focusRingInset, 0)
+        XCTAssertEqual(
+            surface.focusRingShape.cornerSize.width,
+            PaddrStyle.Radius.control - PaddrControlSurface.focusRingInset
+        )
+        XCTAssertEqual(
+            surface.focusRingShape.cornerSize.height,
+            PaddrStyle.Radius.control - PaddrControlSurface.focusRingInset
+        )
+        XCTAssertEqual(surface.shape.cornerSize.width, PaddrStyle.Radius.control)
+    }
+
     /// Every row strokes, so the interaction overlay's stroke term reaches every row. The
     /// prominent row's stroke was `nil`, which made hover and press on a primary button read
     /// through the fill delta alone — the suppression family this slice already closed twice,
