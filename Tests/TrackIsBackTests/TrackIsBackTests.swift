@@ -50,6 +50,59 @@ final class TrackIsBackTests: XCTestCase {
         XCTAssertNil(TritonParser.parseWirelessConnection([0x42, 2]))
     }
 
+    func testBatteryParserAcceptsExactAndTrailingReports() {
+        let exact = batteryReport(chargeState: 2, percentage: 82)
+        XCTAssertEqual(
+            TritonParser.parseBatteryStatus(exact),
+            ControllerBatteryStatus(chargeState: .charging, percentage: 82)
+        )
+
+        let trailing = batteryReport(chargeState: 4, percentage: 100) + [0xAA, 0xBB]
+        XCTAssertEqual(
+            TritonParser.parseBatteryStatus(trailing),
+            ControllerBatteryStatus(chargeState: .chargingDone, percentage: 100)
+        )
+    }
+
+    func testBatteryParserRejectsShortWrongIDOffsetDecoysAndMalformedPercentage() {
+        XCTAssertNil(
+            TritonParser.parseBatteryStatus(
+                Array(batteryReport(chargeState: 1, percentage: 50).prefix(14))
+            )
+        )
+        XCTAssertNil(TritonParser.parseBatteryStatus([0x42, 1, 50] + [UInt8](repeating: 0, count: 12)))
+
+        var offsetDecoy = [UInt8](repeating: 0, count: 18)
+        offsetDecoy[0] = 0x99
+        offsetDecoy[7] = 0x43
+        offsetDecoy[8] = 2
+        offsetDecoy[9] = 82
+        XCTAssertNil(TritonParser.parseBatteryStatus(offsetDecoy))
+        XCTAssertNil(TritonParser.parseBatteryStatus(batteryReport(chargeState: 1, percentage: 101)))
+    }
+
+    func testBatteryParserMapsPercentageBoundsAndEveryChargeState() {
+        let knownStates: [(UInt8, ControllerBatteryChargeState)] = [
+            (0, .reset),
+            (1, .discharging),
+            (2, .charging),
+            (3, .sourceValidate),
+            (4, .chargingDone)
+        ]
+        for (rawValue, expected) in knownStates {
+            XCTAssertEqual(
+                TritonParser.parseBatteryStatus(
+                    batteryReport(chargeState: rawValue, percentage: rawValue == 0 ? 0 : 100)
+                )?.chargeState,
+                expected
+            )
+        }
+        XCTAssertEqual(
+            TritonParser.parseBatteryStatus(batteryReport(chargeState: 0xFE, percentage: 50)),
+            ControllerBatteryStatus(chargeState: .unknown(0xFE), percentage: 50)
+        )
+    }
+
     func testControllerInterfaceFilterMatchesDongleSlots() {
         XCTAssertTrue(TritonHIDDevice.isControllerInterface(interfaceNumber: 2, maximumInputReportSize: 54))
         XCTAssertTrue(TritonHIDDevice.isControllerInterface(interfaceNumber: 3, maximumInputReportSize: 64))
@@ -497,6 +550,10 @@ final class TrackIsBackTests: XCTestCase {
 
     private func sample(touched: Bool, x: Int16 = 0, y: Int16 = 0, time: UInt64) -> TrackpadSample {
         TrackpadSample(isTouched: touched, isClicked: false, x: x, y: y, pressure: 0, timestampNanoseconds: time)
+    }
+
+    private func batteryReport(chargeState: UInt8, percentage: UInt8) -> [UInt8] {
+        [0x43, chargeState, percentage] + [UInt8](repeating: 0, count: 12)
     }
 
     private func writeUInt16(_ value: UInt16, to bytes: inout [UInt8], at offset: Int) {

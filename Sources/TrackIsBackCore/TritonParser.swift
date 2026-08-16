@@ -23,6 +23,36 @@ public struct TrackpadPair: Equatable, Sendable {
     public var right: TrackpadSample
 }
 
+public enum ControllerBatteryChargeState: Equatable, Sendable {
+    case reset
+    case discharging
+    case charging
+    case sourceValidate
+    case chargingDone
+    case unknown(UInt8)
+
+    init(rawValue: UInt8) {
+        switch rawValue {
+        case 0: self = .reset
+        case 1: self = .discharging
+        case 2: self = .charging
+        case 3: self = .sourceValidate
+        case 4: self = .chargingDone
+        default: self = .unknown(rawValue)
+        }
+    }
+}
+
+public struct ControllerBatteryStatus: Equatable, Sendable {
+    public let chargeState: ControllerBatteryChargeState
+    public let percentage: UInt8
+
+    public init(chargeState: ControllerBatteryChargeState, percentage: UInt8) {
+        self.chargeState = chargeState
+        self.percentage = percentage
+    }
+}
+
 public enum TritonParser {
     private static let rightTouchMask: UInt32 = 0x0020_0000
     private static let rightClickMask: UInt32 = 0x0040_0000
@@ -34,6 +64,8 @@ public enum TritonParser {
     private static let wirelessStatusReportIDs: Set<UInt8> = [0x46, 0x79]
     private static let wirelessStateDisconnected: UInt8 = 1
     private static let wirelessStateConnected: UInt8 = 2
+    private static let batteryStatusReportID: UInt8 = 0x43
+    private static let minimumBatteryStatusReportLength = 15
 
     /// Returns the link state carried by a dongle wireless-status report, or nil when the
     /// bytes are not a wireless-status report with a recognized state.
@@ -44,6 +76,19 @@ public enum TritonParser {
         case wirelessStateDisconnected: return false
         default: return nil
         }
+    }
+
+    /// Parses the packed dongle battery-status report. The report is an ID byte followed by
+    /// a 14-byte payload; only charge state and percentage are surfaced by Paddr.
+    public static func parseBatteryStatus(_ bytes: [UInt8]) -> ControllerBatteryStatus? {
+        guard bytes.count >= minimumBatteryStatusReportLength,
+              bytes[0] == batteryStatusReportID,
+              bytes[2] <= 100
+        else { return nil }
+        return ControllerBatteryStatus(
+            chargeState: ControllerBatteryChargeState(rawValue: bytes[1]),
+            percentage: bytes[2]
+        )
     }
 
     public static func parseTrackpads(_ bytes: [UInt8], timestampNanoseconds: UInt64) -> TrackpadPair? {
