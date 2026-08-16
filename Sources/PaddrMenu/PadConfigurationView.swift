@@ -47,32 +47,32 @@ struct PadConfigurationView: View {
 
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: PaddrStyle.settingsRowSpacing) {
-                HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
+                HStack(spacing: PaddrStyle.Spacing.s3) {
                     PadModePicker(selection: $configuration.mode)
                         .frame(width: PaddrStyle.behaviorPickerWidth)
 
-                    Spacer(minLength: 8)
+                    Spacer(minLength: PaddrStyle.Spacing.s2)
                 }
-                .frame(maxWidth: .infinity, minHeight: PaddrStyle.behaviorRowHeight)
-                .padding(.horizontal, PaddrStyle.insetHorizontalPadding)
+                .frame(maxWidth: .infinity, minHeight: PaddrStyle.Metrics.row)
+                .padding(.horizontal, PaddrStyle.Spacing.s4)
 
                 PaddrSectionContainer {
                     modeSettings
                 }
             }
-            .padding(.top, PaddrStyle.settingsRowSpacing)
+            .padding(.top, PaddrStyle.Spacing.s3)
         } label: {
-            HStack(spacing: 10) {
-                Text(title).paddrTypography(.padTitle)
+            HStack(spacing: PaddrStyle.Spacing.s2) {
+                Text(title).paddrTypography(.cardTitle)
                 Spacer()
                 Text(summary)
                     .paddrTypography(.caption)
                     .foregroundStyle(
                         configuration.mode == .disabled ? Color.secondary : PaddrStyle.accentText
                     )
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, PaddrStyle.Spacing.s2)
+                    .padding(.vertical, PaddrStyle.Spacing.s1)
                     .background(
                         configuration.mode == .disabled
                             ? Color.secondary.opacity(0.08)
@@ -80,10 +80,10 @@ struct PadConfigurationView: View {
                         in: .capsule
                     )
             }
-            .frame(minHeight: PaddrStyle.cardHeaderHeight)
+            .frame(minHeight: PaddrStyle.Metrics.row)
             .contentShape(.rect)
         }
-        .padding(PaddrStyle.cardPadding)
+        .padding(PaddrStyle.Spacing.s4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(
             height: isExpanded ? PaddrStyle.padConfigurationCardHeight : nil,
@@ -106,7 +106,7 @@ struct PadConfigurationView: View {
 
         case .mouse:
             previewSplit(previewTitle: LocalizedStringResource("Tap area")) {
-                VStack(spacing: PaddrStyle.settingsRowSpacing) {
+                PaddrSettingsGroup {
                     sensitivityRow
                     ValueSliderRow(
                         title: "Pointer acceleration",
@@ -146,7 +146,7 @@ struct PadConfigurationView: View {
 
         case .scroll:
             previewSplit(previewTitle: LocalizedStringResource("Preview")) {
-                VStack(spacing: PaddrStyle.settingsRowSpacing) {
+                PaddrSettingsGroup {
                     sensitivityRow
                     TapActionPicker(selection: $configuration.tapKey)
                 }
@@ -166,15 +166,15 @@ struct PadConfigurationView: View {
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .top, spacing: 0) {
                 previewSection(title: previewTitle)
-                    .frame(width: PaddrStyle.zoneMapWidth)
+                    .frame(width: PaddrStyle.Metrics.zoneMapWidth)
                 PaddrInsetDivider(axis: .vertical)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, PaddrStyle.Spacing.s2)
                 settingsSection(settings)
                     .frame(width: PaddrStyle.zoneInspectorWidth, alignment: .topLeading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: PaddrStyle.zoneSubdivisionSpacing) {
+            VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s4) {
                 previewSection(title: previewTitle)
                 settingsSection(settings)
             }
@@ -185,11 +185,10 @@ struct PadConfigurationView: View {
     private func settingsSection<Settings: View>(
         @ViewBuilder _ settings: () -> Settings
     ) -> some View {
-        VStack(alignment: .leading, spacing: PaddrStyle.insetHeaderContentSpacing) {
+        VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
             Text(settingsTitle)
-                .paddrTypography(.callout)
-                .bold()
-                .frame(minHeight: PaddrStyle.insetHeaderHeight)
+                .paddrTypography(.sectionLabel)
+                .frame(minHeight: PaddrStyle.Metrics.row)
                 .accessibilityAddTraits(.isHeader)
             settings()
         }
@@ -198,16 +197,15 @@ struct PadConfigurationView: View {
     }
 
     private func previewSection(title: LocalizedStringResource) -> some View {
-        VStack(alignment: .leading, spacing: PaddrStyle.settingsRowSpacing) {
+        VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
             Text(title)
-                .paddrTypography(.callout)
-                .bold()
-                .frame(minHeight: PaddrStyle.insetHeaderHeight)
+                .paddrTypography(.sectionLabel)
+                .frame(minHeight: PaddrStyle.Metrics.row)
             PadModePreview(mode: configuration.mode, deadzone: configuration.mouseDeadzone)
-                .frame(maxWidth: PaddrStyle.zoneMapWidth * 1.4)
+                .frame(maxWidth: PaddrStyle.Metrics.zoneMapWidth * 1.4)
                 .frame(
-                    minHeight: PaddrStyle.zoneMapHeight,
-                    maxHeight: PaddrStyle.zoneMapHeight
+                    minHeight: PaddrStyle.Metrics.zoneMapHeight,
+                    maxHeight: PaddrStyle.Metrics.zoneMapHeight
                 )
                 .help("Mirrors how the trackpad will respond in this mode.")
         }

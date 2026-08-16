@@ -4,29 +4,27 @@ import SwiftUI
 struct PaddrSectionContainer<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
-
     var body: some View {
-        content()
-            .padding(.horizontal, PaddrStyle.insetHorizontalPadding)
-            .padding(.vertical, PaddrStyle.insetVerticalPadding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                reduceTransparency
-                    ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor))
-                    : AnyShapeStyle(Color.primary.opacity(0.032)),
-                in: .rect(cornerRadius: PaddrStyle.insetCornerRadius)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: PaddrStyle.insetCornerRadius)
-                    .strokeBorder(
-                        Color(nsColor: .separatorColor).opacity(
-                            colorSchemeContrast == .increased ? 0.95 : 0.18
-                        ),
-                        lineWidth: colorSchemeContrast == .increased ? 1.5 : 1
-                    )
-            }
+        PaddrAppearanceReader { appearance in
+            content()
+                .padding(.horizontal, PaddrStyle.Spacing.s4)
+                .padding(.vertical, PaddrStyle.Spacing.s4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    appearance.usesOpaqueFallback
+                        ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor))
+                        : AnyShapeStyle(Color.primary.opacity(0.032)),
+                    in: .rect(cornerRadius: PaddrStyle.Radius.control)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: PaddrStyle.Radius.control)
+                        .strokeBorder(
+                            Color(nsColor: .separatorColor)
+                                .opacity(appearance.strokeOpacity(0.18)),
+                            lineWidth: appearance.strokeWidth
+                        )
+                }
+        }
     }
 }
 
@@ -38,65 +36,70 @@ struct PaddrInsetDivider: View {
 
     var axis: Axis = .horizontal
 
-    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
-
     var body: some View {
-        Rectangle()
-            .fill(
-                Color(nsColor: .separatorColor).opacity(
-                    colorSchemeContrast == .increased ? 0.9 : 0.34
+        PaddrAppearanceReader { appearance in
+            Rectangle()
+                .fill(
+                    Color(nsColor: .separatorColor)
+                        .opacity(appearance.strokeOpacity(0.34))
                 )
-            )
-            .frame(
-                maxWidth: axis == .horizontal ? .infinity : 1,
-                maxHeight: axis == .vertical ? .infinity : 1
-            )
-            .padding(
-                axis == .horizontal ? .horizontal : .vertical,
-                axis == .horizontal ? PaddrStyle.dividerInset : PaddrStyle.zoneDividerInset
-            )
+                .frame(
+                    maxWidth: axis == .horizontal ? .infinity : 1,
+                    maxHeight: axis == .vertical ? .infinity : 1
+                )
+                .padding(
+                    axis == .horizontal ? .horizontal : .vertical,
+                    axis == .horizontal ? PaddrStyle.Spacing.s2 : PaddrStyle.Spacing.s3
+                )
+        }
     }
 }
 
+/// The single settings-row grammar: a fixed label column carrying an SF Symbol, and a
+/// trailing control column, on the shared `Metrics.row` height family.
 struct PaddrSettingsRow<Control: View>: View {
     let title: LocalizedStringResource
     let systemImage: String
-    let labelWidth: CGFloat
     @ViewBuilder let control: () -> Control
-
-    init(
-        title: LocalizedStringResource,
-        systemImage: String,
-        labelWidth: CGFloat = PaddrStyle.settingsLabelWidth,
-        @ViewBuilder control: @escaping () -> Control
-    ) {
-        self.title = title
-        self.systemImage = systemImage
-        self.labelWidth = labelWidth
-        self.control = control
-    }
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: PaddrStyle.settingsControlSpacing) {
+            HStack(spacing: PaddrStyle.Spacing.s3) {
                 label
-                    .frame(width: labelWidth, alignment: .leading)
+                    .frame(width: PaddrStyle.Width.labelColumn, alignment: .leading)
                 control()
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s2) {
                 label
                 control()
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, PaddrStyle.settingsRowVerticalPadding)
+        .frame(maxWidth: .infinity, minHeight: PaddrStyle.Metrics.row, alignment: .leading)
+        .padding(.vertical, PaddrStyle.Spacing.s1)
     }
 
     private var label: some View {
         Label(title, systemImage: systemImage)
-            .paddrTypography(.callout)
+            .paddrTypography(.rowLabel)
+    }
+}
+
+/// Lays out settings rows on the shared row spacing, and carries the inset divider that
+/// separates one declared group from the group above it, so call sites stop hand-placing
+/// dividers and one-off top padding.
+struct PaddrSettingsGroup<Content: View>: View {
+    var showsLeadingDivider: Bool = false
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
+            if showsLeadingDivider {
+                PaddrInsetDivider()
+            }
+            content()
+        }
     }
 }
