@@ -146,12 +146,10 @@ struct OnboardingGuideView: View {
                         : Text("Input Monitoring access is needed")
                 )
 
-                if !model.inputMonitoringGranted {
-                    Button("Request", action: model.requestInputMonitoring)
-                        .paddrActionButton(prominent: true)
-                    Button("Open Settings", action: model.openInputMonitoringSettings)
-                        .paddrActionButton()
-                }
+                Button("Request", action: model.requestInputMonitoring)
+                    .paddrActionButton(prominent: true)
+                Button("Open Settings", action: model.openInputMonitoringSettings)
+                    .paddrActionButton()
             }
 
             HStack(spacing: 8) {
@@ -166,12 +164,10 @@ struct OnboardingGuideView: View {
                         : Text("Accessibility access is needed")
                 )
 
-                if !model.accessibilityTrusted {
-                    Button("Request", action: model.requestAccessibility)
-                        .paddrActionButton(prominent: true)
-                    Button("Open Settings", action: model.openAccessibilitySettings)
-                        .paddrActionButton()
-                }
+                Button("Request", action: model.requestAccessibility)
+                    .paddrActionButton(prominent: true)
+                Button("Open Settings", action: model.openAccessibilitySettings)
+                    .paddrActionButton()
             }
         }
     }
