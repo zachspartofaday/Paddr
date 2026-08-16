@@ -1,5 +1,5 @@
 import SwiftUI
-import TrackIsBackCore
+import PaddrCore
 
 struct OutputBindingText: View {
     let binding: String

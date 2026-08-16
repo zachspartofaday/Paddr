@@ -1,6 +1,6 @@
 import Darwin
 import Foundation
-import TrackIsBackCore
+import PaddrCore
 
 private struct CLIOptions {
     var configuration = TrackIsBackConfiguration.default

@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import TrackIsBackCore
+@testable import PaddrCore
 
 final class ConfigurationProfileTests: XCTestCase {
     func testCanonicalDocumentRoundTripsIndependentCompleteConfigurations() throws {

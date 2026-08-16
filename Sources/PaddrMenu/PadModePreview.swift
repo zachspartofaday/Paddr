@@ -1,5 +1,5 @@
 import SwiftUI
-import TrackIsBackCore
+import PaddrCore
 
 /// Non-interactive squircle preview shown for pointer, scroll, and off modes so every
 /// pad card is anchored by the physical trackpad, matching the Zones area map.

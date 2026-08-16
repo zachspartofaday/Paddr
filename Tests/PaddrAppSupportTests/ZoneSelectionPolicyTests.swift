@@ -1,6 +1,6 @@
 import XCTest
 @testable import PaddrAppSupport
-import TrackIsBackCore
+import PaddrCore
 
 final class ZoneSelectionPolicyTests: XCTestCase {
     func testEveryLayoutNormalizesToAVisibleInitialZone() {

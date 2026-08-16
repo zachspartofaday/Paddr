@@ -2,7 +2,7 @@ import Foundation
 import Synchronization
 import XCTest
 @testable import PaddrAppSupport
-import TrackIsBackCore
+import PaddrCore
 
 @MainActor
 final class MenuDependencyTests: XCTestCase {

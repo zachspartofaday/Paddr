@@ -1,5 +1,5 @@
 import XCTest
-@testable import TrackIsBackCore
+@testable import PaddrCore
 
 final class OutputBindingPresentationTests: XCTestCase {
     func testKnownBindingsHaveLocalizedPresentation() {

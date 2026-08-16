@@ -1,7 +1,7 @@
 import AppKit
 import PaddrAppSupport
 import SwiftUI
-import TrackIsBackCore
+import PaddrCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {

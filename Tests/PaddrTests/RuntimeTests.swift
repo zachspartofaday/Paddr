@@ -1,7 +1,7 @@
 import Foundation
 import Synchronization
 import XCTest
-@testable import TrackIsBackCore
+@testable import PaddrCore
 
 final class RuntimeTests: XCTestCase {
     func testBothPadsEmitDistinctZoneBindingsAndReleaseIndependently() throws {

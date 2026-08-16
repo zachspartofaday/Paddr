@@ -1,7 +1,7 @@
 #if canImport(CoreGraphics)
 import CoreGraphics
 import XCTest
-@testable import TrackIsBackCore
+@testable import PaddrCore
 
 final class CGEventOutputTests: XCTestCase {
     func testMouseButtonReleaseThrowsWhenCurrentLocationIsUnavailable() {

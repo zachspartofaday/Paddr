@@ -1,6 +1,6 @@
 import PaddrAppSupport
 import SwiftUI
-import TrackIsBackCore
+import PaddrCore
 
 struct ProfileControlsView: View {
     @Bindable var model: PaddrMenuModel

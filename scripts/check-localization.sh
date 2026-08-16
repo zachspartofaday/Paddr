@@ -18,9 +18,9 @@ source_files=()
 while IFS= read -r -d '' source_file; do
     source_files+=("$source_file")
 done < <(find \
-    "$repo_dir/Sources/TrackIsBackCore" \
+    "$repo_dir/Sources/PaddrCore" \
     "$repo_dir/Sources/PaddrAppSupport" \
-    "$repo_dir/Sources/TrackIsBackMenu" \
+    "$repo_dir/Sources/PaddrMenu" \
     -type f -name '*.swift' -print0)
 
 xcrun xcstringstool extract \

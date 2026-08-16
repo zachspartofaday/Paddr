@@ -4,8 +4,8 @@ import SwiftUI
 import XCTest
 
 import PaddrAppSupport
-@testable import TrackIsBackMenu
-import TrackIsBackCore
+@testable import PaddrMenu
+import PaddrCore
 
 @MainActor
 final class MenuViewPresentationTests: XCTestCase {

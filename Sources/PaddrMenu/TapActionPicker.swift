@@ -1,5 +1,5 @@
 import SwiftUI
-import TrackIsBackCore
+import PaddrCore
 
 struct TapActionPicker: View {
     @Binding var selection: String?

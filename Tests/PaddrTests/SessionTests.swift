@@ -1,7 +1,7 @@
 import Dispatch
 import Synchronization
 import XCTest
-@testable import TrackIsBackCore
+@testable import PaddrCore
 
 final class SessionTests: XCTestCase {
     func testConcurrentStartsLaunchOnlyLatestReplacement() async {

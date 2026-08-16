@@ -1,5 +1,5 @@
 import XCTest
-@testable import TrackIsBackCore
+@testable import PaddrCore
 #if canImport(CoreGraphics)
 import CoreGraphics
 #endif

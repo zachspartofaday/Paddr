@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import TrackIsBackCore
+import PaddrCore
 
 public enum ProfileSelectionSource: Sendable {
     case configurationWindow
