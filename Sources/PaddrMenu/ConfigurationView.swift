@@ -4,7 +4,7 @@ import SwiftUI
 struct ConfigurationView: View {
     @Bindable var model: PaddrMenuModel
     @State private var configurationContentHeight: CGFloat = 0
-    @State private var commandBarHeight = PaddrStyle.commandBarMinimumHeight
+    @State private var commandBarHeight = PaddrStyle.Metrics.commandBar
 
     var body: some View {
         ZStack {
@@ -12,10 +12,10 @@ struct ConfigurationView: View {
 
             VStack(spacing: 0) {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: PaddrStyle.sectionSpacing) {
+                    VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
                         TopControlsView(model: model)
                         ViewThatFits(in: .horizontal) {
-                            HStack(alignment: .top, spacing: PaddrStyle.sectionSpacing) {
+                            HStack(alignment: .top, spacing: PaddrStyle.Spacing.s3) {
                                 PadConfigurationView(
                                     side: .left,
                                     configuration: $model.configuration.left
@@ -30,7 +30,7 @@ struct ConfigurationView: View {
                             }
                             .frame(maxWidth: .infinity)
 
-                            VStack(spacing: PaddrStyle.sectionSpacing) {
+                            VStack(spacing: PaddrStyle.Spacing.s3) {
                                 PadConfigurationView(
                                     side: .left,
                                     configuration: $model.configuration.left
@@ -45,7 +45,7 @@ struct ConfigurationView: View {
                         .allowsHitTesting(model.canEditActiveProfile)
                         .accessibilityRespondsToUserInteraction(model.canEditActiveProfile)
                     }
-                    .padding(PaddrStyle.panelPadding)
+                    .padding(PaddrStyle.Spacing.s4)
                     .onGeometryChange(
                         for: CGFloat.self,
                         of: { $0.size.height },
@@ -69,17 +69,17 @@ struct ConfigurationView: View {
             }
         }
         .frame(
-            minWidth: PaddrStyle.minimumWindowSize.width,
-            minHeight: PaddrStyle.minimumWindowSize.height
+            minWidth: PaddrStyle.Metrics.minimumWindowSize.width,
+            minHeight: PaddrStyle.Metrics.minimumWindowSize.height
         )
-        .paddrTypography(.callout)
+        .paddrTypography(.rowLabel)
         .controlSize(.regular)
         .tint(PaddrStyle.accent)
         .background {
             if configurationContentHeight > 0 {
                 WindowContentFitter(
                     targetHeight: max(
-                        PaddrStyle.minimumWindowSize.height,
+                        PaddrStyle.Metrics.minimumWindowSize.height,
                         configurationContentHeight + commandBarHeight
                     )
                 )

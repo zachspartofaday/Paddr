@@ -341,7 +341,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
 
         let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: PaddrStyle.defaultWindowSize),
+            contentRect: NSRect(origin: .zero, size: PaddrStyle.Metrics.defaultWindowSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -349,7 +349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         window.title = String(localized: "Paddr")
         window.titleVisibility = .visible
         window.toolbarStyle = .unifiedCompact
-        window.contentMinSize = PaddrStyle.minimumWindowSize
+        window.contentMinSize = PaddrStyle.Metrics.minimumWindowSize
         window.collectionBehavior.insert(.fullScreenNone)
         window.standardWindowButton(.zoomButton)?.isEnabled = false
         window.tabbingMode = .disallowed
@@ -360,7 +360,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         )
         let autosaveName = "PaddrConfigurationWindow.v4"
         if !window.setFrameUsingName(autosaveName) {
-            window.setContentSize(PaddrStyle.defaultWindowSize)
+            window.setContentSize(PaddrStyle.Metrics.defaultWindowSize)
             window.center()
         }
         window.setFrameAutosaveName(autosaveName)
@@ -394,13 +394,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
 
         let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: PaddrStyle.guideWindowSize),
+            contentRect: NSRect(origin: .zero, size: PaddrStyle.Metrics.guideWindowSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = String(localized: "Paddr Guide")
-        window.contentMinSize = PaddrStyle.minimumGuideWindowSize
+        window.contentMinSize = PaddrStyle.Metrics.minimumGuideWindowSize
         window.collectionBehavior.insert(.fullScreenNone)
         window.standardWindowButton(.zoomButton)?.isEnabled = false
         window.tabbingMode = .disallowed

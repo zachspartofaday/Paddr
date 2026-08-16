@@ -13,7 +13,7 @@ struct ZonePadMap: View {
         GeometryReader { proxy in
             Canvas { context, size in
                 let bounds = CGRect(origin: .zero, size: size)
-                let padShape = Path(roundedRect: bounds, cornerRadius: PaddrStyle.padPreviewCornerRadius)
+                let padShape = Path(roundedRect: bounds, cornerRadius: PaddrStyle.Radius.pad)
                 context.fill(
                     padShape,
                     with: .linearGradient(
@@ -65,21 +65,21 @@ struct ZonePadMap: View {
                     )
                 }
             }
-            .clipShape(.rect(cornerRadius: PaddrStyle.padPreviewCornerRadius))
+            .clipShape(.rect(cornerRadius: PaddrStyle.Radius.pad))
             .overlay {
                 ZStack {
-                    RoundedRectangle(cornerRadius: PaddrStyle.padPreviewCornerRadius)
+                    RoundedRectangle(cornerRadius: PaddrStyle.Radius.pad)
                         .strokeBorder(.white.opacity(0.10), lineWidth: 1)
                         .padding(1)
-                    RoundedRectangle(cornerRadius: PaddrStyle.padPreviewCornerRadius)
+                    RoundedRectangle(cornerRadius: PaddrStyle.Radius.pad)
                         .strokeBorder(
                             .primary.opacity(0.30),
                             lineWidth: 1
                         )
                 }
             }
-            .contentShape(.interaction, .rect(cornerRadius: PaddrStyle.padPreviewCornerRadius))
-            .contentShape(.focusEffect, .rect(cornerRadius: PaddrStyle.padPreviewCornerRadius))
+            .contentShape(.interaction, .rect(cornerRadius: PaddrStyle.Radius.pad))
+            .contentShape(.focusEffect, .rect(cornerRadius: PaddrStyle.Radius.pad))
             .gesture(
                 SpatialTapGesture().onEnded { value in
                     if let zone = hitZone(at: value.location, size: proxy.size) {

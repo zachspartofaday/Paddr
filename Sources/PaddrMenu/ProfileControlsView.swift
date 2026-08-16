@@ -13,9 +13,9 @@ struct ProfileControlsView: View {
     var body: some View {
         let pickerPresentation = profilePickerPresentation
 
-        HStack(spacing: 8) {
+        HStack(spacing: PaddrStyle.Spacing.s2) {
             Text("Profile")
-                .paddrTypography(.headline)
+                .paddrTypography(.sectionLabel)
                 .fixedSize(horizontal: true, vertical: false)
 
             Picker("Profile", selection: profileSelection) {
@@ -26,7 +26,7 @@ struct ProfileControlsView: View {
             .pickerStyle(.menu)
             .labelsHidden()
             .paddrMenuSelector()
-            .frame(width: 220)
+            .frame(width: PaddrStyle.Width.controlWide)
             .accessibilityLabel("Profile")
             .accessibilityValue(Text(verbatim: pickerPresentation.accessibilityValue))
             .help("Select the active profile")

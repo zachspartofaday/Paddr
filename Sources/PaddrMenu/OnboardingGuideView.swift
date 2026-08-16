@@ -29,10 +29,10 @@ struct OnboardingGuideView: View {
             footer
         }
         .frame(
-            minWidth: PaddrStyle.minimumGuideWindowSize.width,
-            idealWidth: PaddrStyle.guideWindowSize.width,
-            minHeight: PaddrStyle.minimumGuideWindowSize.height,
-            idealHeight: PaddrStyle.guideWindowSize.height
+            minWidth: PaddrStyle.Metrics.minimumGuideWindowSize.width,
+            idealWidth: PaddrStyle.Metrics.guideWindowSize.width,
+            minHeight: PaddrStyle.Metrics.minimumGuideWindowSize.height,
+            idealHeight: PaddrStyle.Metrics.guideWindowSize.height
         )
         .background(Color(nsColor: .windowBackgroundColor))
     }
@@ -40,19 +40,19 @@ struct OnboardingGuideView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("Paddr Guide")
-                .paddrTypography(.title)
+                .paddrTypography(.pageTitle)
             Spacer()
             Text("Step \(pager.pageNumber) of \(OnboardingPager.pageCount)")
-                .paddrTypography(.callout)
+                .paddrTypography(.rowLabel)
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 18)
+        .padding(.horizontal, PaddrStyle.Spacing.s5)
+        .padding(.vertical, PaddrStyle.Spacing.s4)
         .accessibilityElement(children: .combine)
     }
 
     private var page: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: PaddrStyle.Spacing.s5) {
             switch pager.pageIndex {
             case 0:
                 guidePage(
@@ -92,7 +92,7 @@ struct OnboardingGuideView: View {
 
             pageIndicator
         }
-        .padding(28)
+        .padding(PaddrStyle.Spacing.s5)
     }
 
     private func guidePage(
@@ -109,32 +109,32 @@ struct OnboardingGuideView: View {
         detail: LocalizedStringResource,
         @ViewBuilder actions: () -> Actions
     ) -> some View {
-        HStack(alignment: .top, spacing: 24) {
+        HStack(alignment: .top, spacing: PaddrStyle.Spacing.s5) {
             Image(systemName: symbol)
                 .font(.system(size: 48, weight: .medium))
                 .foregroundStyle(PaddrStyle.accentText)
                 .frame(width: 72, height: 72)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
                 Text(title)
-                    .paddrTypography(.padTitle)
+                    .paddrTypography(.cardTitle)
                 Text(detail)
-                    .paddrTypography(.callout)
+                    .paddrTypography(.rowLabel)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 actions()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(PaddrStyle.cardPadding)
+        .padding(PaddrStyle.Spacing.s3)
         .paddrCard()
         .accessibilityElement(children: .contain)
     }
 
     private var permissionControls: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
+            HStack(spacing: PaddrStyle.Spacing.s2) {
                 Label(
                     model.inputMonitoringGranted ? "Input Monitoring ready" : "Input Monitoring needed",
                     systemImage: model.inputMonitoringGranted ? "checkmark.circle.fill" : "exclamationmark.circle"
@@ -147,12 +147,12 @@ struct OnboardingGuideView: View {
                 )
 
                 Button("Request", action: model.requestInputMonitoring)
-                    .paddrActionButton(prominent: true)
+                    .paddrActionButton(.primary)
                 Button("Open Settings", action: model.openInputMonitoringSettings)
-                    .paddrActionButton()
+                    .paddrActionButton(.secondary)
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: PaddrStyle.Spacing.s2) {
                 Label(
                     model.accessibilityTrusted ? "Accessibility ready" : "Accessibility needed",
                     systemImage: model.accessibilityTrusted ? "checkmark.circle.fill" : "exclamationmark.circle"
@@ -165,15 +165,15 @@ struct OnboardingGuideView: View {
                 )
 
                 Button("Request", action: model.requestAccessibility)
-                    .paddrActionButton(prominent: true)
+                    .paddrActionButton(.primary)
                 Button("Open Settings", action: model.openAccessibilitySettings)
-                    .paddrActionButton()
+                    .paddrActionButton(.secondary)
             }
         }
     }
 
     private var pageIndicator: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: PaddrStyle.Spacing.s2) {
             ForEach(0..<OnboardingPager.pageCount, id: \.self) { index in
                 Circle()
                     .fill(index == pager.pageIndex ? PaddrStyle.accentText : Color.secondary.opacity(0.28))
@@ -213,29 +213,29 @@ struct OnboardingGuideView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: PaddrStyle.Spacing.s2) {
             Button("Skip", action: onSkip)
                 .keyboardShortcut(.cancelAction)
-                .paddrActionButton()
+                .paddrActionButton(.secondary)
 
             Spacer()
 
             if pager.canGoBack {
                 Button("Back", action: goBack)
-                    .paddrActionButton()
+                    .paddrActionButton(.secondary)
             }
 
             if pager.isLastPage {
                 Button("Get Started", action: onComplete)
                     .keyboardShortcut(.defaultAction)
-                    .paddrActionButton(prominent: true)
+                    .paddrActionButton(.primary)
             } else {
                 Button("Next", action: goNext)
                     .keyboardShortcut(.defaultAction)
-                    .paddrActionButton(prominent: true)
+                    .paddrActionButton(.primary)
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
+        .padding(.horizontal, PaddrStyle.Spacing.s5)
+        .padding(.vertical, PaddrStyle.Spacing.s4)
     }
 }

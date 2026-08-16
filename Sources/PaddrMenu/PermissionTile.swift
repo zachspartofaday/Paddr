@@ -8,30 +8,28 @@ struct PermissionTile: View {
     let settingsAction: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: PaddrStyle.Spacing.s2) {
             Image(systemName: isGranted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
                 .foregroundStyle(isGranted ? PaddrStyle.accent : .orange)
                 .accessibilityHidden(true)
 
             Text(title)
-                .paddrTypography(.callout)
-                .bold()
+                .paddrTypography(.sectionLabel)
 
-            Spacer(minLength: 4)
+            Spacer(minLength: PaddrStyle.Spacing.s1)
 
             if !isGranted {
                 Button("Request", action: requestAction)
-                    .paddrActionButton(prominent: true)
+                    .paddrActionButton(.primary)
                 Button("Open Settings", systemImage: "gearshape", action: settingsAction)
-                    .labelStyle(.iconOnly)
-                    .paddrActionButton()
+                    .paddrActionButton(.icon)
             }
         }
-        .padding(.horizontal, 10)
-        .frame(maxWidth: .infinity, minHeight: 40)
-        .background(tileColor.opacity(0.07), in: .rect(cornerRadius: 10))
+        .padding(.horizontal, PaddrStyle.Spacing.s2)
+        .frame(maxWidth: .infinity, minHeight: PaddrStyle.Metrics.row)
+        .background(tileColor.opacity(0.07), in: .rect(cornerRadius: PaddrStyle.Radius.control))
         .overlay {
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: PaddrStyle.Radius.control)
                 .strokeBorder(tileColor.opacity(0.20), lineWidth: 1)
         }
         .help(Text(detail))

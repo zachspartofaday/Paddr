@@ -3,7 +3,7 @@ import PaddrCore
 
 struct OutputBindingPicker: View {
     @Binding var selection: String
-    var width: CGFloat = 132
+    var width: CGFloat = PaddrStyle.Width.control
 
     private var keyChoices: [String] {
         if TapBindingCatalog.isMouseButton(selection) || KeyCatalog.commonNames.contains(selection) {

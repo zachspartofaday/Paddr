@@ -1,25 +1,99 @@
 import AppKit
 import SwiftUI
 
+/// The only vocabulary `PaddrMenu` text uses for a font. Every role carries its own
+/// weight, so no call site follows `paddrTypography(_:)` with an ad-hoc `bold()`.
 enum PaddrTextRole {
-    case title
-    case padTitle
-    case headline
-    case callout
+    /// Guide header.
+    case pageTitle
+    /// Pad-card and guide-page titles.
+    case cardTitle
+    /// Column and band headers.
+    case sectionLabel
+    /// Settings-row labels, normally paired with an SF Symbol.
+    case rowLabel
+    /// Status values and numeric readouts.
+    case value
+    /// Detail and secondary text.
     case caption
 
     var font: Font {
         switch self {
-        case .title: .title2.bold()
-        case .padTitle: .title3.weight(.semibold)
-        case .headline: .headline
-        case .callout: .callout
+        case .pageTitle: .title2.bold()
+        case .cardTitle: .headline
+        case .sectionLabel: .subheadline.weight(.semibold)
+        case .rowLabel: .callout
+        case .value: .callout.monospacedDigit()
         case .caption: .caption
         }
     }
 }
 
+/// Emphasis of an action button. A band carries at most one `primary`.
+enum PaddrButtonRole {
+    case primary
+    case secondary
+    /// Icon-only; the role applies `labelStyle(.iconOnly)` so call sites do not repeat it.
+    case icon
+}
+
 enum PaddrStyle {
+    /// The one spacing scale. `s1` separates an icon from its label, `s2` two controls,
+    /// `s3` two rows, `s4` two bands or a panel edge, `s5` the guide's bands.
+    enum Spacing {
+        static let s1: CGFloat = 4
+        static let s2: CGFloat = 8
+        static let s3: CGFloat = 12
+        static let s4: CGFloat = 16
+        static let s5: CGFloat = 24
+    }
+
+    /// Heights and fixed surface sizes. `row` is the single control-row family
+    /// (card header, settings row, status cell, permission row, inspector header);
+    /// control heights themselves stay native and are never hand-set.
+    enum Metrics {
+        static let row: CGFloat = 28
+        /// `row` plus a `Spacing.s2` inset above and below.
+        static let commandBar: CGFloat = 44
+
+        static let defaultWindowSize = NSSize(width: 1_120, height: 600)
+        static let minimumWindowSize = NSSize(width: 640, height: 360)
+        static let guideWindowSize = NSSize(width: 680, height: 430)
+        static let minimumGuideWindowSize = NSSize(width: 560, height: 430)
+
+        static let zoneMapWidth: CGFloat = 190
+        static let zoneMapHeight: CGFloat = 182
+    }
+
+    enum Radius {
+        /// Glass card or banner.
+        static let card: CGFloat = 16
+        /// Inset chips, status containers, zone label plates.
+        static let control: CGFloat = 8
+        /// The physical trackpad. Geometry-bearing and unchanged.
+        static let pad: CGFloat = 30
+    }
+
+    /// Widths are derived from the container they must fit, not chosen a priori. The binding
+    /// constraint is the pad card's inspector column: a settings row's inline branch needs
+    /// `labelColumn + Spacing.s3 + control <= zoneInspectorWidth`. Exceeding it does not clip
+    /// — it silently drops every picker row into `PaddrSettingsRow`'s stacked fallback.
+    enum Width {
+        /// Numeric value column, monospaced and trailing-aligned.
+        static let readout: CGFloat = 48
+        /// Settings-row pickers.
+        static let control: CGFloat = 132
+        /// The area-layout picker, whose longest value is "Four-way radial".
+        static let controlMedium: CGFloat = 160
+        /// The profile picker, which sits in the full-width top band rather than a column.
+        static let controlWide: CGFloat = 200
+        /// Label column for rows whose control is a fixed-width picker.
+        static let labelColumn: CGFloat = 108
+        /// Label column for slider rows: their labels are longer ("Pointer acceleration")
+        /// and their control is flexible, so they can afford what a picker row cannot.
+        static let labelColumnWide: CGFloat = 152
+    }
+
     static let accent = Color(red: 26.0 / 255.0, green: 159.0 / 255.0, blue: 1)
     static let active = Color(nsColor: .systemGreen)
 
@@ -54,41 +128,13 @@ enum PaddrStyle {
             ? .systemRed
             : NSColor(srgbRed: 0.68, green: 0.08, blue: 0.08, alpha: 1)
     })
-    static let defaultWindowSize = NSSize(width: 1_120, height: 600)
-    static let minimumWindowSize = NSSize(width: 640, height: 360)
-    static let guideWindowSize = NSSize(width: 680, height: 430)
-    static let minimumGuideWindowSize = NSSize(width: 560, height: 430)
+
+    // Sizes the token contract has not yet absorbed; slice 2 removes or rescales them.
     static let padColumnWidth: CGFloat = 530
     static let padConfigurationCardHeight: CGFloat = 420
-    static let zoneMapWidth: CGFloat = 190
-    static let zoneMapHeight: CGFloat = 182
-    static let padPreviewCornerRadius: CGFloat = 30
     static let zoneInspectorWidth: CGFloat = 266
-    static let panelPadding: CGFloat = 16
-    static let sectionSpacing: CGFloat = 12
-    static let cardPadding: CGFloat = 14
-    static let cardCornerRadius: CGFloat = 16
-    static let cardHeaderHeight: CGFloat = 28
-    static let behaviorRowHeight: CGFloat = 28
     static let behaviorPickerWidth: CGFloat = 272
-    static let insetCornerRadius: CGFloat = 12
-    static let insetHorizontalPadding: CGFloat = 14
-    static let insetVerticalPadding: CGFloat = 14
-    static let insetHeaderHeight: CGFloat = 28
-    static let insetHeaderContentSpacing: CGFloat = 14
-    static let settingsLabelWidth: CGFloat = 108
-    static let sliderLabelWidth: CGFloat = 152
     static let sliderMinimumWidth: CGFloat = 160
-    static let settingsControlSpacing: CGFloat = 12
-    static let settingsRowSpacing: CGFloat = 12
-    static let settingsRowVerticalPadding: CGFloat = 2
-    static let compactPickerWidth: CGFloat = 130
-    static let dividerInset: CGFloat = 8
-    static let dividerTopSpacing: CGFloat = 8
-    static let dividerBottomSpacing: CGFloat = 12
-    static let zoneDividerInset: CGFloat = 12
-    static let zoneSubdivisionSpacing: CGFloat = 18
-    static let commandBarMinimumHeight: CGFloat = 50
 }
 
 private struct PaddrTypographyModifier: ViewModifier {
@@ -97,49 +143,66 @@ private struct PaddrTypographyModifier: ViewModifier {
 }
 
 private struct PaddrCardModifier: ViewModifier {
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
-
     @ViewBuilder
     func body(content: Content) -> some View {
-        Group {
-            if reduceTransparency {
-                content.background(
-                    Color(nsColor: .controlBackgroundColor),
-                    in: .rect(cornerRadius: PaddrStyle.cardCornerRadius)
-                )
-            } else {
-                content.glassEffect(
-                    .regular,
-                    in: .rect(cornerRadius: PaddrStyle.cardCornerRadius)
-                )
+        PaddrAppearanceReader { appearance in
+            // Bezeled, not glass. Paddr's controls are a mix of SwiftUI buttons, a SwiftUI
+            // menu picker, and an AppKit `NSSegmentedControl`, and only the buttons can take
+            // Liquid Glass — so a glass card sat above three controls that could never join
+            // it. The standard control bezel is the one family all four share.
+            Group {
+                if appearance.usesOpaqueFallback {
+                    content.background(
+                        Color(nsColor: .controlBackgroundColor),
+                        in: .rect(cornerRadius: PaddrStyle.Radius.card)
+                    )
+                } else {
+                    content
+                        .background(
+                            PaddrStyle.accent.opacity(0.04),
+                            in: .rect(cornerRadius: PaddrStyle.Radius.card)
+                        )
+                        .background(
+                            .regularMaterial,
+                            in: .rect(cornerRadius: PaddrStyle.Radius.card)
+                        )
+                }
             }
-        }
             .overlay {
-                RoundedRectangle(cornerRadius: PaddrStyle.cardCornerRadius)
+                RoundedRectangle(cornerRadius: PaddrStyle.Radius.card)
                     .strokeBorder(
-                        Color(nsColor: .separatorColor).opacity(
-                            colorSchemeContrast == .increased ? 1 : 0.46
-                        ),
-                        lineWidth: colorSchemeContrast == .increased ? 1.5 : 1
+                        Color(nsColor: .separatorColor)
+                            .opacity(appearance.strokeOpacity(0.46)),
+                        lineWidth: appearance.strokeWidth
                     )
             }
+        }
     }
 }
 
 private struct PaddrActionButtonModifier: ViewModifier {
-    let prominent: Bool
+    let role: PaddrButtonRole
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if prominent {
+        switch role {
+        case .primary:
             content
-                .buttonStyle(.glassProminent)
+                .buttonStyle(.borderedProminent)
                 .controlSize(.regular)
-                .font(.callout)
+                .paddrTypography(.rowLabel)
                 .tint(PaddrStyle.accent)
-        } else {
-            content.buttonStyle(.glass).controlSize(.regular).font(.callout)
+        case .secondary:
+            content
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .paddrTypography(.rowLabel)
+        case .icon:
+            content
+                .labelStyle(.iconOnly)
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .paddrTypography(.rowLabel)
         }
     }
 }
@@ -155,7 +218,7 @@ extension View {
         tint(Color(nsColor: .labelColor))
     }
 
-    func paddrActionButton(prominent: Bool = false) -> some View {
-        modifier(PaddrActionButtonModifier(prominent: prominent))
+    func paddrActionButton(_ role: PaddrButtonRole) -> some View {
+        modifier(PaddrActionButtonModifier(role: role))
     }
 }

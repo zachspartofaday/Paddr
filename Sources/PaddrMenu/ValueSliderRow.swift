@@ -26,18 +26,17 @@ struct ValueSliderRow: View {
         PaddrSettingsRow(
             title: title,
             systemImage: systemImage,
-            labelWidth: PaddrStyle.sliderLabelWidth
+            labelWidth: PaddrStyle.Width.labelColumnWide
         ) {
-            HStack(spacing: 10) {
+            HStack(spacing: PaddrStyle.Spacing.s2) {
                 Slider(value: $value.quantized(step: step, in: range), in: range)
                     .frame(minWidth: PaddrStyle.sliderMinimumWidth)
                     .accessibilityLabel(title)
                     .accessibilityValue(valueText)
                 Text(valueText)
-                    .paddrTypography(.caption)
+                    .paddrTypography(.value)
                     .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .frame(width: 46, alignment: .trailing)
+                    .frame(width: PaddrStyle.Width.readout, alignment: .trailing)
             }
         }
     }
