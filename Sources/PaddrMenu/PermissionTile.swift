@@ -10,7 +10,10 @@ struct PermissionTile: View {
     var body: some View {
         HStack(spacing: PaddrStyle.Spacing.s2) {
             Image(systemName: isGranted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                .foregroundStyle(isGranted ? PaddrStyle.accentSymbol : .orange)
+                // Derived against the plate it sits on, not against the bare panel: the
+                // plate is a wash of the same accent, and a wash pulls the background
+                // toward the glyph.
+                .foregroundStyle(isGranted ? PaddrAccentSurface.permissionTile.symbol : .orange)
                 .accessibilityHidden(true)
 
             Text(title)
@@ -27,7 +30,10 @@ struct PermissionTile: View {
         }
         .padding(.horizontal, PaddrStyle.Spacing.s2)
         .frame(maxWidth: .infinity, minHeight: PaddrStyle.Metrics.row)
-        .background(tileColor.opacity(0.07), in: .rect(cornerRadius: PaddrStyle.Radius.control))
+        .background(
+            PaddrAccentSurface.permissionTile.tint(tileColor),
+            in: .rect(cornerRadius: PaddrStyle.Radius.control)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: PaddrStyle.Radius.control)
                 .strokeBorder(tileColor.opacity(0.20), lineWidth: 1)

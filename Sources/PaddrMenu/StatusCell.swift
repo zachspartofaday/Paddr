@@ -62,7 +62,10 @@ struct StatusCell: View {
         }
         .padding(.horizontal, PaddrStyle.Spacing.s1)
         .frame(minHeight: PaddrStyle.Metrics.row)
-        .background(state.color.opacity(0.11), in: .capsule)
+        // The wash, not the icon colour at an opacity: the icon and the value are derived
+        // against this wash, so it has to be the raw colour and it has to carry the same
+        // opacity the derivation used.
+        .background(state.tint, in: .capsule)
         .overlay {
             if appearance.hasIncreasedContrast {
                 Capsule().strokeBorder(state.color, lineWidth: appearance.strokeWidth)

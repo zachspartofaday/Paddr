@@ -74,6 +74,11 @@ enum PaddrStyle {
         /// in-row height because no `paddrActionButton` call site sits inside a
         /// `PaddrSettingsRow` — every one is in a band or a footer, where a button taller
         /// than `row` costs the row rhythm nothing.
+        ///
+        /// A *minimum*, unlike ``control``: the button's label is a system text style, so a
+        /// larger interface text size or a label that has to wrap makes it taller than this,
+        /// and a fixed frame answers that by truncating. `control` stays fixed because an
+        /// in-row control has the opposite obligation — it must keep fitting ``row``.
         static let button: CGFloat = 38
         /// Horizontal padding inside a Paddr-drawn control, from LimitlessQuilter's
         /// `controlHorizontalPadding`. Off the `Spacing` scale deliberately: it is a
@@ -136,11 +141,25 @@ enum PaddrStyle {
     /// licensing 3.0:1 here: while the button family used `.rowLabel` — `.callout`, regular
     /// weight, 12pt — this token was 4.5:1 text wearing a large-text justification, and
     /// white on the stock blue was a failure the derivation reported as a pass.
-    static let onAccent = Color(nsColor: NSColor(name: nil) { appearance in
+    ///
+    /// Derived against the fill *as drawn*. The prominent fill is solid accent only while
+    /// nothing is being done to the control: the interaction overlay composites up to 7.5%
+    /// of `Color.primary` over it, and on the dark appearance's blue accent that is enough
+    /// to take white from 3.234:1 to 2.981:1 — under the threshold this token exists to
+    /// clear. So there is one token per overlay level rather than one for the row.
+    static let onAccentTokens = PaddrOverlayTokens { overlay, accent, background in
         PaddrAccentPalette.onAccentLabel(
-            for: PaddrAccentPalette.srgb(.controlAccentColor, in: appearance)
+            for: PaddrControlSurface.drawnFill(
+                for: .prominent,
+                overlay: overlay,
+                accent: accent,
+                on: background
+            )
         )
-    })
+    }
+
+    /// The prominent label and ring while nothing is being done to the control.
+    static let onAccent = onAccentTokens[.none]
 
     /// The stroke drawn on top of an accent fill, derived so the rim as *drawn* — that is,
     /// composited at ``prominentStrokeOpacity`` — clears the 3:1 non-text ratio.
@@ -166,21 +185,17 @@ enum PaddrStyle {
             : NSColor(srgbRed: 0, green: 0.42, blue: 0.18, alpha: 1)
     })
 
-    /// Accent for text on the panel background. A raw accent does not generally clear 4.5:1
-    /// against either background — the stock macOS blue reads 3.5:1 on the light one — and
-    /// the accent is now the viewer's, so this cannot be a hand-tuned pair of blues. It is
-    /// derived from whatever accent is selected, against the window background of the
+    /// Accent for text on the *bare* panel background. A raw accent does not generally clear
+    /// 4.5:1 against either background — the stock macOS blue reads 3.5:1 on the light one —
+    /// and the accent is now the viewer's, so this cannot be a hand-tuned pair of blues. It
+    /// is derived from whatever accent is selected, against the window background of the
     /// current appearance.
-    static let accentText = Color(nsColor: NSColor(name: nil) { appearance in
-        PaddrAccentPalette.text(
-            from: PaddrAccentPalette.srgb(.controlAccentColor, in: appearance),
-            on: PaddrAccentPalette.srgb(.windowBackgroundColor, in: appearance)
-        )
-    })
+    ///
+    /// A call site that draws this on an accent wash takes that surface's own token instead:
+    /// see ``PaddrAccentSurface``.
+    static let accentText = PaddrAccentSurface.plain.text
 
-    /// Accent for a meaning-bearing *symbol* on the panel background — the permission tile's
-    /// granted checkmark, the status badge's ready glyph, and the increased-contrast badge
-    /// outline drawn from the same token.
+    /// Accent for a meaning-bearing *symbol* on the bare panel background.
     ///
     /// A translucent accent *fill* may stay raw: it is decoration, and nothing is read from
     /// it. A symbol is not, and `accent` alone measures 1.51:1 against the light panel on the
@@ -189,12 +204,7 @@ enum PaddrStyle {
     /// contrast because these are glyphs and boundaries, not prose; `accentText` remains the
     /// 4.5:1 token for the words next to them. The other five accents and all eight in dark
     /// appearance already clear 3.0:1, and the derivation returns those unchanged.
-    static let accentSymbol = Color(nsColor: NSColor(name: nil) { appearance in
-        PaddrAccentPalette.nonText(
-            from: PaddrAccentPalette.srgb(.controlAccentColor, in: appearance),
-            on: PaddrAccentPalette.srgb(.windowBackgroundColor, in: appearance)
-        )
-    })
+    static let accentSymbol = PaddrAccentSurface.plain.symbol
 
     /// Warning text partner to `accentText`: system orange also fails contrast on
     /// light backgrounds, so light appearance darkens it.
@@ -218,6 +228,70 @@ enum PaddrStyle {
     static let zoneInspectorWidth: CGFloat = 266
     static let behaviorPickerWidth: CGFloat = 272
     static let sliderMinimumWidth: CGFloat = 160
+}
+
+/// An accent wash, and the foregrounds that are drawn *on* it.
+///
+/// The wash may stay raw — it is decoration, and nothing is read from it — but the symbol and
+/// the value drawn on top of it are read, and the wash sits between them and the panel
+/// background. Compositing a tint of the accent over the background pulls the background
+/// *toward* the foreground, which is the direction that reduces contrast, so a colour derived
+/// against the bare background overstates the ratio it actually achieves. Measured on the
+/// light appearance: the granted checkmark claims 3.078:1 on the yellow accent and draws
+/// 2.760:1 in the status capsule; the ready status value claims 4.583:1 and draws 4.109:1,
+/// and every one of the eight accents misses 4.5:1 there.
+///
+/// The wash and its foregrounds are declared together so a call site cannot draw one opacity
+/// and derive against another — the same reason ``PaddrControlSurface/restFillOpacity`` is a
+/// named constant rather than a literal at the two places that need it.
+struct PaddrAccentSurface {
+    /// The wash's opacity over the panel background. Zero is the bare background.
+    let tintOpacity: Double
+    /// A meaning-bearing accent symbol on this surface, at the 3.0:1 boundary threshold.
+    let symbol: Color
+    /// Accent-derived text on this surface, at the 4.5:1 body threshold.
+    let text: Color
+
+    private init(tintOpacity: Double) {
+        self.tintOpacity = tintOpacity
+        symbol = Self.token(tintOpacity: tintOpacity, PaddrAccentPalette.nonText)
+        text = Self.token(tintOpacity: tintOpacity, PaddrAccentPalette.text)
+    }
+
+    /// The wash for `color`, at this surface's opacity. The colour stays raw; only the
+    /// opacity belongs to the surface.
+    func tint(_ color: Color) -> Color { color.opacity(tintOpacity) }
+
+    /// The opaque colour this surface presents to whatever is drawn on it, for one
+    /// appearance: the panel background with the raw accent composited over it.
+    static func resolved(
+        tintOpacity: Double,
+        accent: NSColor,
+        on background: NSColor
+    ) -> NSColor {
+        PaddrAccentPalette.composite(accent, over: background, opacity: tintOpacity)
+    }
+
+    private static func token(
+        tintOpacity: Double,
+        _ derive: @escaping @Sendable (NSColor, NSColor) -> NSColor
+    ) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let accent = PaddrAccentPalette.srgb(.controlAccentColor, in: appearance)
+            let background = PaddrAccentPalette.srgb(.windowBackgroundColor, in: appearance)
+            return derive(
+                accent,
+                resolved(tintOpacity: tintOpacity, accent: accent, on: background)
+            )
+        })
+    }
+
+    /// No wash: an accent foreground straight on the panel background.
+    static let plain = PaddrAccentSurface(tintOpacity: 0)
+    /// ``StatusCell``'s capsule.
+    static let statusBadge = PaddrAccentSurface(tintOpacity: 0.11)
+    /// ``PermissionTile``'s plate.
+    static let permissionTile = PaddrAccentSurface(tintOpacity: 0.07)
 }
 
 /// Turns an arbitrary accent colour into colours that meet WCAG contrast against the surface
