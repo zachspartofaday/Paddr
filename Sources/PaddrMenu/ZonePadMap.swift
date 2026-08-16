@@ -19,11 +19,16 @@ struct ZonePadMap: View {
                     let isSelected = zone == selection
                     context.fill(
                         path,
-                        with: .color(
-                            isSelected
-                                ? PaddrStyle.accent.opacity(0.25)
-                                : .primary.opacity(0.025)
-                        )
+                        with: isSelected
+                            ? .linearGradient(
+                                Gradient(colors: [
+                                    PaddrStyle.accent.opacity(0.34),
+                                    PaddrStyle.accent.opacity(0.18)
+                                ]),
+                                startPoint: CGPoint(x: bounds.midX, y: bounds.minY),
+                                endPoint: CGPoint(x: bounds.midX, y: bounds.maxY)
+                            )
+                            : .color(.primary.opacity(0.025))
                     )
                     context.stroke(
                         path,
@@ -50,7 +55,10 @@ struct ZonePadMap: View {
             }
             .clipShape(.rect(cornerRadius: PaddrStyle.padPreviewCornerRadius))
             .background {
-                CapacitivePadSurface()
+                CapacitivePadSurface(layer: .fill)
+            }
+            .overlay {
+                CapacitivePadSurface(layer: .border)
             }
             .contentShape(.interaction, .rect(cornerRadius: PaddrStyle.padPreviewCornerRadius))
             .contentShape(.focusEffect, .rect(cornerRadius: PaddrStyle.padPreviewCornerRadius))
