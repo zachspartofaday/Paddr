@@ -222,10 +222,13 @@ struct PaddrControlSurface: ViewModifier {
     @ViewBuilder
     private func border(_ appearance: PaddrAppearance) -> some View {
         if let strokeColor {
-            // Centred on the outline rather than inset inside it: the line then straddles the
-            // fill's own antialiased edge instead of sitting behind it, which is the border
-            // treatment the rest of the ecosystem's panel chrome uses.
-            shape.stroke(
+            // Inset, not centred. A centred stroke was tried on the theory that it would cover
+            // the fill's antialiased outer edge; measured at 1× it does the opposite. Under
+            // `strokeBorder` the fringe pixels are already rim-coloured, so there is nothing
+            // exposed to cover, and centring splits one full-strength rim pixel into two
+            // half-strength ones: the prominent left edge went 0.431 to 0.714/0.714, and the
+            // rest row's border faded to 0.075 against a 0.051 fill.
+            shape.strokeBorder(
                 strokeColor.opacity(appearance.strokeOpacity(resolvedStrokeOpacity)),
                 lineWidth: max(strokeWidth, appearance.strokeWidth)
             )
