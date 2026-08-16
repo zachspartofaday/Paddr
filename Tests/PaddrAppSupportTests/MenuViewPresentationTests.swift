@@ -4,8 +4,8 @@ import SwiftUI
 import XCTest
 
 import PaddrAppSupport
-@testable import TrackIsBackMenu
-import TrackIsBackCore
+@testable import PaddrMenu
+import PaddrCore
 
 @MainActor
 final class MenuViewPresentationTests: XCTestCase {
@@ -192,7 +192,7 @@ final class MenuViewPresentationTests: XCTestCase {
     private func hostedPadConfigurationHeight(initiallyExpanded: Bool) -> CGFloat {
         let view = PadConfigurationView(
             side: .left,
-            configuration: .constant(TrackIsBackConfiguration.default.left),
+            configuration: .constant(PaddrConfiguration.default.left),
             initiallyExpanded: initiallyExpanded
         )
         .frame(width: 700)
@@ -296,7 +296,7 @@ final class MenuViewPresentationTests: XCTestCase {
 
 private struct InertSession: TrackpadSessionControlling {
     func start(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {
@@ -314,7 +314,7 @@ private actor PresentationSession: TrackpadSessionControlling {
     private(set) var startCount = 0
 
     func start(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {

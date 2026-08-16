@@ -6,25 +6,25 @@ let package = Package(
     name: "Paddr",
     platforms: [.macOS("26.0")],
     products: [
-        .library(name: "TrackIsBackCore", targets: ["TrackIsBackCore"]),
-        .executable(name: "Paddr", targets: ["TrackIsBackMenu"]),
-        .executable(name: "PaddrCLI", targets: ["TrackIsBackCLI"])
+        .library(name: "PaddrCore", targets: ["PaddrCore"]),
+        .executable(name: "Paddr", targets: ["PaddrMenu"]),
+        .executable(name: "PaddrCLI", targets: ["PaddrCLI"])
     ],
     targets: [
-        .target(name: "TrackIsBackCore"),
-        .executableTarget(name: "TrackIsBackCLI", dependencies: ["TrackIsBackCore"]),
+        .target(name: "PaddrCore"),
+        .executableTarget(name: "PaddrCLI", dependencies: ["PaddrCore"]),
         .target(
             name: "PaddrAppSupport",
-            dependencies: ["TrackIsBackCore"]
+            dependencies: ["PaddrCore"]
         ),
         .executableTarget(
-            name: "TrackIsBackMenu",
-            dependencies: ["TrackIsBackCore", "PaddrAppSupport"]
+            name: "PaddrMenu",
+            dependencies: ["PaddrCore", "PaddrAppSupport"]
         ),
-        .testTarget(name: "TrackIsBackTests", dependencies: ["TrackIsBackCore"]),
+        .testTarget(name: "PaddrTests", dependencies: ["PaddrCore"]),
         .testTarget(
             name: "PaddrAppSupportTests",
-            dependencies: ["PaddrAppSupport", "TrackIsBackCore", "TrackIsBackMenu"]
+            dependencies: ["PaddrAppSupport", "PaddrCore", "PaddrMenu"]
         )
     ]
 )

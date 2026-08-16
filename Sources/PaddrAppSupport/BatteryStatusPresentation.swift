@@ -1,5 +1,5 @@
 import Foundation
-import TrackIsBackCore
+import PaddrCore
 
 public struct BatteryStatusPresentation: Equatable, Sendable {
     public let compactValue: String

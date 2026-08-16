@@ -2,14 +2,14 @@ import Foundation
 import Synchronization
 import XCTest
 @testable import PaddrAppSupport
-import TrackIsBackCore
+import PaddrCore
 
 @MainActor
 final class MenuDependencyTests: XCTestCase {
     func testConfigurationAndReceiverDependenciesRunOffMainActor() async throws {
         let state = DependencyExecutionState()
-        let storedConfiguration: TrackIsBackConfiguration = {
-            var configuration = TrackIsBackConfiguration.default
+        let storedConfiguration: PaddrConfiguration = {
+            var configuration = PaddrConfiguration.default
             configuration.left.sensitivity = 4
             return configuration
         }()
@@ -51,7 +51,7 @@ final class MenuDependencyTests: XCTestCase {
 
 private actor InertSession: TrackpadSessionControlling {
     func start(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {
@@ -64,7 +64,7 @@ private actor InertSession: TrackpadSessionControlling {
 
 private final class DependencyExecutionState: Sendable {
     private struct State: ~Copyable {
-        var savedConfiguration: TrackIsBackConfiguration?
+        var savedConfiguration: PaddrConfiguration?
         var loadRanOnMainThread: Bool?
         var saveRanOnMainThread: Bool?
         var probeRanOnMainThread: Bool?
@@ -72,7 +72,7 @@ private final class DependencyExecutionState: Sendable {
 
     private let state = Mutex(State())
 
-    var savedConfiguration: TrackIsBackConfiguration? {
+    var savedConfiguration: PaddrConfiguration? {
         get { state.withLock { $0.savedConfiguration } }
         set { state.withLock { $0.savedConfiguration = newValue } }
     }

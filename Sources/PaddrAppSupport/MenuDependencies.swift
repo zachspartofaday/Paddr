@@ -1,6 +1,6 @@
 import AppKit
 import Foundation
-import TrackIsBackCore
+import PaddrCore
 
 public struct MenuDependencies: Sendable {
     public var session: any TrackpadSessionControlling
