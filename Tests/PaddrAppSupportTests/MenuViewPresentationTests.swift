@@ -76,8 +76,10 @@ final class MenuViewPresentationTests: XCTestCase {
             PaddrControlState(isSelected: true, isPressed: true, isHovering: true).row,
             .selected
         )
-        XCTAssertEqual(PaddrControlState(isPressed: true, isHovering: true).row, .pressed)
-        XCTAssertEqual(PaddrControlState(isHovering: true).row, .hover)
+        // Press and hover are not rows at all, so a control that is only being pressed or
+        // hovered is still at rest and its feedback comes from the additive overlay.
+        XCTAssertEqual(PaddrControlState(isPressed: true, isHovering: true).row, .rest)
+        XCTAssertEqual(PaddrControlState(isHovering: true).row, .rest)
         XCTAssertEqual(PaddrControlState().row, .rest)
     }
 
@@ -87,9 +89,7 @@ final class MenuViewPresentationTests: XCTestCase {
         let precedence: [(row: PaddrControlRow, applies: (PaddrControlState) -> Bool)] = [
             (.disabled, { !$0.isEnabled }),
             (.prominent, \.isProminent),
-            (.selected, \.isSelected),
-            (.pressed, \.isPressed),
-            (.hover, \.isHovering)
+            (.selected, \.isSelected)
         ]
         let differentiating = PaddrAppearance(differentiateWithoutColor: true)
 
@@ -121,21 +121,31 @@ final class MenuViewPresentationTests: XCTestCase {
                                 XCTAssertEqual(state.row, unfocused.row, label)
                                 XCTAssertEqual(state.showsFocusRing, isFocused && isEnabled, label)
 
-                                // A press is always visible somewhere: either the pressed row
-                                // won, or the pressed tint is applied on top of the row that
-                                // outranked it. Never both.
-                                if isPressed && isEnabled {
-                                    XCTAssertTrue(
-                                        state.row == .pressed || state.showsAdditivePressTint,
-                                        "A press must be visible in \(label)"
-                                    )
-                                } else {
-                                    XCTAssertFalse(state.showsAdditivePressTint, label)
-                                }
-                                XCTAssertFalse(
-                                    state.row == .pressed && state.showsAdditivePressTint,
+                                // The row is role and selection only, so neither interaction
+                                // flag can move it — which is why neither can be swallowed.
+                                var withoutInteraction = state
+                                withoutInteraction.isPressed = false
+                                withoutInteraction.isHovering = false
+                                XCTAssertEqual(state.row, withoutInteraction.row, label)
+
+                                // A press is always visible, and always more than a hover:
+                                // the overlay applies over every row, and only a disabled
+                                // control suppresses it.
+                                XCTAssertEqual(
+                                    state.interactionOverlay.isActive,
+                                    isEnabled && (isPressed || isHovering),
                                     label
                                 )
+                                if isPressed && isEnabled {
+                                    var hoverOnly = state
+                                    hoverOnly.isPressed = false
+                                    hoverOnly.isHovering = true
+                                    XCTAssertGreaterThan(
+                                        state.interactionOverlay.fillOpacity,
+                                        hoverOnly.interactionOverlay.fillOpacity,
+                                        "A press must be visible in \(label)"
+                                    )
+                                }
 
                                 // Selection is never colour-only, and the mark tracks
                                 // selection rather than the winning row.
@@ -162,15 +172,15 @@ final class MenuViewPresentationTests: XCTestCase {
     /// combinations as "removing the flag must change what is drawn", rather than per row,
     /// because fixing it one row at a time is what let the second instance through.
     func testNoInteractionFlagIsSwallowedByTheRowThatOutranksIt() {
-        /// What the surface paints, minus the ring: the row supplies fill, stroke, and label,
-        /// and the tint is composited over that fill.
+        /// What the surface paints, minus the ring: the row supplies the base fill, stroke,
+        /// and label, and the overlay is composited over them.
         struct Drawn: Equatable {
             let row: PaddrControlRow
-            let tint: PaddrInteractionTint
+            let overlay: PaddrInteractionOverlay
 
             init(_ state: PaddrControlState) {
                 row = state.row
-                tint = state.interactionTint
+                overlay = state.interactionOverlay
             }
         }
 
@@ -200,7 +210,7 @@ final class MenuViewPresentationTests: XCTestCase {
                                     // A disabled control does not react: hover, press, and
                                     // focus are all suppressed, and dropping any of them
                                     // changes nothing that is drawn.
-                                    XCTAssertEqual(state.interactionTint, .none, label)
+                                    XCTAssertEqual(state.interactionOverlay, .none, label)
                                     XCTAssertFalse(state.showsFocusRing, label)
                                     XCTAssertEqual(Drawn(state), Drawn(withoutHover), label)
                                     XCTAssertEqual(Drawn(state), Drawn(withoutPress), label)
@@ -229,10 +239,27 @@ final class MenuViewPresentationTests: XCTestCase {
                                     )
                                 }
                                 XCTAssertEqual(state.showsFocusRing, isFocused, label)
-                                // The additive layer never doubles a row that already
-                                // carries the same value.
-                                if state.row == .pressed || state.row == .hover {
-                                    XCTAssertEqual(state.interactionTint, .none, label)
+
+                                // The overlay's own terms, stated exactly and over every
+                                // row: hover and press share the activation, a press deepens
+                                // the fill on top of it, and selection deepens the stroke
+                                // while it is active.
+                                let overlay = state.interactionOverlay
+                                if isPressed || isHovering {
+                                    XCTAssertEqual(
+                                        overlay.fillOpacity,
+                                        isPressed ? 0.075 : 0.050,
+                                        accuracy: 0.0001,
+                                        label
+                                    )
+                                    XCTAssertEqual(
+                                        overlay.strokeOpacity,
+                                        isSelected ? 0.44 : 0.36,
+                                        accuracy: 0.0001,
+                                        label
+                                    )
+                                } else {
+                                    XCTAssertEqual(overlay, .none, label)
                                 }
                             }
                         }
@@ -252,8 +279,6 @@ final class MenuViewPresentationTests: XCTestCase {
         // added without a partner here.
         let rows: [(PaddrControlRow, PaddrControlState)] = [
             (.rest, PaddrControlState()),
-            (.hover, PaddrControlState(isHovering: true)),
-            (.pressed, PaddrControlState(isPressed: true)),
             (.selected, PaddrControlState(isSelected: true)),
             (.prominent, PaddrControlState(isProminent: true)),
             (.disabled, PaddrControlState(isEnabled: false))
@@ -279,15 +304,52 @@ final class MenuViewPresentationTests: XCTestCase {
         )
     }
 
+    /// The overlay's stroke term is added to the base rather than replacing it, so a
+    /// selected control under the pointer sums past 1 — an opacity that means nothing and
+    /// would make the standard path differ from the increased-contrast one by accident. The
+    /// sum is clamped, and only clamped: every other combination is the plain addition.
+    func testTheInteractionOverlayAddsToTheBaseStrokeAndClampsAtFullOpacity() {
+        func resolved(_ state: PaddrControlState) -> Double {
+            PaddrControlSurface(state: state).resolvedStrokeOpacity
+        }
+
+        XCTAssertEqual(resolved(PaddrControlState()), 0.50, accuracy: 0.0001)
+        XCTAssertEqual(resolved(PaddrControlState(isHovering: true)), 0.86, accuracy: 0.0001)
+        XCTAssertEqual(resolved(PaddrControlState(isPressed: true)), 0.86, accuracy: 0.0001)
+        XCTAssertEqual(resolved(PaddrControlState(isSelected: true)), 0.70, accuracy: 0.0001)
+        XCTAssertEqual(
+            resolved(PaddrControlState(isSelected: true, isHovering: true)),
+            1,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            resolved(PaddrControlState(isSelected: true, isPressed: true, isHovering: true)),
+            1,
+            accuracy: 0.0001
+        )
+        // A disabled control reacts to nothing, so its stroke is the base alone.
+        XCTAssertEqual(
+            resolved(PaddrControlState(isEnabled: false, isPressed: true, isHovering: true)),
+            0.50 * 0.4,
+            accuracy: 0.0001
+        )
+    }
+
     /// A custom `ButtonStyle` renders no `NSControl`, so the row-height assertions elsewhere
     /// in this file cannot see a button at all. The height is asserted on the hosted
     /// geometry directly, and exactly, rather than as containment.
     func testEveryButtonRoleRendersAtTheButtonHeight() {
         // `control` is the in-row height and stays 24 so a settings-row control keeps fitting
-        // `row`; `button` is the larger height, used only by the button family.
+        // `row`; `button` is LimitlessQuilter's standard control height, used only by the
+        // button family, none of which sits inside a settings row.
         XCTAssertEqual(PaddrStyle.Metrics.control, 24)
-        XCTAssertEqual(PaddrStyle.Metrics.button, 28)
-        XCTAssertEqual(PaddrStyle.Radius.control, 6)
+        XCTAssertEqual(PaddrStyle.Metrics.button, 38)
+        XCTAssertEqual(PaddrStyle.Radius.control, 7)
+        XCTAssertEqual(PaddrStyle.Radius.card, 14)
+        XCTAssertEqual(PaddrStyle.Metrics.controlHorizontalPadding, 10)
+        // The row-fitting obligation belongs to the in-row height, which is the one every
+        // `PaddrSettingsRow` control is laid out at.
+        XCTAssertLessThanOrEqual(PaddrStyle.Metrics.control, PaddrStyle.Metrics.row)
 
         for role in [PaddrButtonRole.primary, .secondary, .icon] {
             let hostingView = NSHostingView(
@@ -300,11 +362,6 @@ final class MenuViewPresentationTests: XCTestCase {
                 PaddrStyle.Metrics.button,
                 accuracy: 0.5,
                 "\(role) does not render at the button height"
-            )
-            XCTAssertLessThanOrEqual(
-                hostingView.fittingSize.height,
-                PaddrStyle.Metrics.row,
-                "\(role) must fit inside the shared row family"
             )
             if role == .icon {
                 XCTAssertEqual(

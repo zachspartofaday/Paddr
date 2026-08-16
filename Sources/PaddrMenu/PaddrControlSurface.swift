@@ -1,47 +1,48 @@
 import AppKit
 import SwiftUI
 
-/// One row of the control state table. Every custom Paddr control resolves to exactly one
-/// row, which supplies its fill, its stroke, and its label colour.
+/// The base appearance of a control: what the control *is*, before anything is done to it.
+/// Role and selection only — interaction is deliberately not a row.
+///
+/// An earlier model gave hover and press rows of their own and ordered every input by
+/// precedence. It produced the same defect twice: a prominent control showed no press, then
+/// no hover, because Prominent outranked both, and Selected had the same hole waiting. Rows
+/// that only interaction can occupy are what made that possible, so there are none.
 enum PaddrControlRow: Equatable {
     case rest
-    case hover
-    case pressed
     case selected
     case prominent
     case disabled
 }
 
-/// Interaction feedback layered on top of whichever row won.
+/// Interaction feedback, computed additively from the interaction flags and layered over
+/// whichever base row the control resolved to.
 ///
-/// Hover and press are the two inputs the precedence order can hide — a prominent or
-/// selected control outranks both — so neither is left to the row alone. Whenever the
-/// winning row does not already express them, the tint is applied additively, reusing that
-/// row's own fill value so the two paths read the same. Pressed is the stronger of the pair
-/// and wins when both apply, which is every real press: the pointer is over the control.
-enum PaddrInteractionTint: Equatable {
-    case none
-    case hover
-    case pressed
+/// There is no "the row already expresses this" exemption, because no row can: hover and
+/// press are not rows. Both terms are *deltas* over the base — a hovered rest control fills
+/// at `0.06 + 0.050`, and a hovered prominent one fills at solid accent plus `0.050`.
+///
+/// The values are LimitlessQuilter's action variant, restated here rather than imported:
+/// `PaddrMenu` takes no cross-repository dependency.
+struct PaddrInteractionOverlay: Equatable {
+    /// Added to the base fill opacity, over `Color.primary`.
+    var fillOpacity: Double = 0
+    /// Added to the base stroke opacity.
+    var strokeOpacity: Double = 0
 
-    /// Applied over `Color.primary`, matching the fill values of the rows it stands in for.
-    var fillOpacity: Double {
-        switch self {
-        case .none: 0
-        case .hover: 0.10
-        case .pressed: 0.16
-        }
-    }
+    /// A control nothing is being done to, and every disabled control.
+    static let none = PaddrInteractionOverlay()
+
+    var isActive: Bool { self != .none }
 }
 
 /// The inputs a custom control offers the state table, and the single place that resolves
-/// them to one row.
+/// them into a base row plus the layers drawn over it.
 ///
-/// Three of the six inputs are deliberately not settled by the row alone. Focus is never a
-/// row at all — the ring is drawn on top of whichever row won — and hover and press fall
-/// back to ``interactionTint`` when a higher row outranks them. That is the whole rule: a
-/// row expresses *what the control is*, and the additive layers express *what the pointer
-/// and the keyboard are doing to it*, so the second can never be swallowed by the first.
+/// Three of the six inputs never reach the row. Focus is drawn on top as a ring, and hover
+/// and press are the additive ``interactionOverlay``. That is the whole rule: a row
+/// expresses *what the control is*, and the additive layers express *what the pointer and
+/// the keyboard are doing to it*, so the second can never be swallowed by the first.
 struct PaddrControlState: Equatable {
     var isEnabled: Bool
     var isProminent: Bool
@@ -66,13 +67,12 @@ struct PaddrControlState: Equatable {
         self.isFocused = isFocused
     }
 
-    /// Disabled → Prominent → Selected → Pressed → Hover → Rest.
+    /// Disabled → Prominent → Selected → Rest. Only role and selection participate, so no
+    /// ordering here can hide an interaction.
     var row: PaddrControlRow {
         if !isEnabled { return .disabled }
         if isProminent { return .prominent }
         if isSelected { return .selected }
-        if isPressed { return .pressed }
-        if isHovering { return .hover }
         return .rest
     }
 
@@ -80,21 +80,16 @@ struct PaddrControlState: Equatable {
     /// never shows a ring.
     var showsFocusRing: Bool { isFocused && isEnabled }
 
-    /// The additive half of the state table. A disabled control resolves to `.none` because
-    /// it must not react to the pointer at all; otherwise the stronger of press and hover
-    /// applies, unless the winning row is already that same row and would double the tint.
-    var interactionTint: PaddrInteractionTint {
-        guard isEnabled else { return .none }
-        if isPressed { return row == .pressed ? .none : .pressed }
-        if isHovering { return row == .hover ? .none : .hover }
-        return .none
+    /// The additive half of the state table, over *any* row. Hover and press share the base
+    /// activation; a press deepens the fill on top of it, and selection deepens the stroke
+    /// while the overlay is active. A disabled control zeroes every term: it never reacts.
+    var interactionOverlay: PaddrInteractionOverlay {
+        guard isEnabled, isPressed || isHovering else { return .none }
+        return PaddrInteractionOverlay(
+            fillOpacity: 0.050 + (isPressed ? 0.025 : 0),
+            strokeOpacity: 0.36 + (isSelected ? 0.08 : 0)
+        )
     }
-
-    /// The press half of the additive rule, named: Prominent and Selected both outrank
-    /// Pressed, so a prominent or selected control would otherwise report a press with no
-    /// visible change at all. Keeping the primary button's press feedback after
-    /// `.borderedProminent` is replaced is what this guarantees.
-    var showsAdditivePressTint: Bool { interactionTint == .pressed }
 
     /// Selection is never colour-only: under Differentiate Without Colour a selected
     /// control also carries a leading checkmark. Tracks selection rather than the winning
@@ -133,20 +128,19 @@ struct PaddrControlSurface: ViewModifier {
 
     private var labelStyle: AnyShapeStyle {
         switch state.row {
-        case .rest, .hover, .pressed: AnyShapeStyle(.primary)
+        case .rest: AnyShapeStyle(.primary)
         case .selected: AnyShapeStyle(PaddrStyle.accentText)
         case .prominent: AnyShapeStyle(Color.white)
         case .disabled: AnyShapeStyle(.secondary)
         }
     }
 
-    /// Fills are stated over `Color.primary` and `PaddrStyle.accent` so one set of values
-    /// adapts to light and dark without a second palette. Disabled is the rest fill at 0.4.
+    /// The base fill, before the interaction overlay. Stated over `Color.primary` and
+    /// `PaddrStyle.accent` so one set of values adapts to light and dark without a second
+    /// palette. Disabled is the rest fill at 0.4.
     var fillColor: Color {
         switch state.row {
         case .rest: Color.primary.opacity(0.06)
-        case .hover: Color.primary.opacity(0.10)
-        case .pressed: Color.primary.opacity(0.16)
         case .selected: PaddrStyle.accent.opacity(0.18)
         case .prominent: PaddrStyle.accent
         case .disabled: Color.primary.opacity(0.06 * 0.4)
@@ -162,28 +156,36 @@ struct PaddrControlSurface: ViewModifier {
                 shape.fill(Color(nsColor: .controlBackgroundColor))
             }
             shape.fill(fillColor)
-            if state.interactionTint != .none {
-                shape.fill(Color.primary.opacity(state.interactionTint.fillOpacity))
+            // Drawn as its own layer rather than summed into `fillColor`: the prominent row
+            // is solid accent, which no opacity addition can express.
+            if state.interactionOverlay.isActive {
+                shape.fill(Color.primary.opacity(state.interactionOverlay.fillOpacity))
             }
         }
     }
 
     private var strokeColor: Color? {
         switch state.row {
-        case .rest, .hover, .pressed, .disabled: Color(nsColor: .separatorColor)
+        case .rest, .disabled: Color(nsColor: .separatorColor)
         case .selected: PaddrStyle.accent
         case .prominent: nil
         }
     }
 
+    /// The base stroke opacity, before the interaction overlay.
     private var strokeOpacity: Double {
         switch state.row {
         case .rest: 0.50
-        case .hover, .pressed: 0.70
         case .selected: 0.70
         case .disabled: 0.50 * 0.4
         case .prominent: 0
         }
+    }
+
+    /// Base plus overlay, clamped: opacity has no meaning above 1, and a selected control
+    /// pressed at full strength sums past it.
+    var resolvedStrokeOpacity: Double {
+        min(1, strokeOpacity + state.interactionOverlay.strokeOpacity)
     }
 
     /// Selected is the emphasis stroke at 1.5pt; increased contrast takes every stroke
@@ -196,7 +198,7 @@ struct PaddrControlSurface: ViewModifier {
     private func border(_ appearance: PaddrAppearance) -> some View {
         if let strokeColor {
             shape.strokeBorder(
-                strokeColor.opacity(appearance.strokeOpacity(strokeOpacity)),
+                strokeColor.opacity(appearance.strokeOpacity(resolvedStrokeOpacity)),
                 lineWidth: max(strokeWidth, appearance.strokeWidth)
             )
         }
@@ -241,7 +243,10 @@ struct PaddrButtonStyle: ButtonStyle {
         var body: some View {
             label
                 .paddrTypography(.rowLabel)
-                .padding(.horizontal, role == .icon ? 0 : PaddrStyle.Spacing.s2)
+                .padding(
+                    .horizontal,
+                    role == .icon ? 0 : PaddrStyle.Metrics.controlHorizontalPadding
+                )
                 .frame(
                     width: role == .icon ? PaddrStyle.Metrics.button : nil,
                     height: PaddrStyle.Metrics.button

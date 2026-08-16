@@ -55,12 +55,19 @@ enum PaddrStyle {
         static let row: CGFloat = 28
         /// `row` plus a `Spacing.s2` inset above and below.
         static let commandBar: CGFloat = 44
-        /// Custom controls. Sits inside `row` with room to centre.
+        /// In-row custom controls, from LimitlessQuilter's dense
+        /// `canvasToolbarControlHeight`. Sits inside `row` with room to centre.
         static let control: CGFloat = 24
-        /// Action buttons, which are larger than the in-row control height because no
-        /// `paddrActionButton` call site sits inside a `PaddrSettingsRow` — every one is in
-        /// a band or a footer, where the extra 4pt costs the row rhythm nothing.
-        static let button: CGFloat = 28
+        /// Action buttons, from LimitlessQuilter's standard `controlHeight`. Larger than the
+        /// in-row height because no `paddrActionButton` call site sits inside a
+        /// `PaddrSettingsRow` — every one is in a band or a footer, where a button taller
+        /// than `row` costs the row rhythm nothing.
+        static let button: CGFloat = 38
+        /// Horizontal padding inside a Paddr-drawn control, from LimitlessQuilter's
+        /// `controlHorizontalPadding`. Off the `Spacing` scale deliberately: it is a
+        /// control's own geometry, paired with `button` and `control`, not a gap between two
+        /// things.
+        static let controlHorizontalPadding: CGFloat = 10
 
         static let defaultWindowSize = NSSize(width: 1_120, height: 600)
         static let minimumWindowSize = NSSize(width: 640, height: 360)
@@ -72,10 +79,11 @@ enum PaddrStyle {
     }
 
     enum Radius {
-        /// Glass card or banner.
-        static let card: CGFloat = 16
-        /// Paddr-drawn controls, and the inset containers that hold them.
-        static let control: CGFloat = 6
+        /// Card or banner, from LimitlessQuilter's `cardCornerRadius`.
+        static let card: CGFloat = 14
+        /// Paddr-drawn controls, and the inset containers that hold them, from
+        /// LimitlessQuilter's `controlCornerRadius`.
+        static let control: CGFloat = 7
         /// The physical trackpad. Geometry-bearing and unchanged.
         static let pad: CGFloat = 30
     }
