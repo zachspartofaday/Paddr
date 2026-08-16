@@ -1,7 +1,7 @@
 import XCTest
 @testable import PaddrCore
 
-final class TrackIsBackTests: XCTestCase {
+final class PaddrTests: XCTestCase {
     func testTritonParserReadsBothTrackpads() {
         var bytes = [UInt8](repeating: 0, count: 54)
         bytes[0] = 0x42
@@ -245,7 +245,7 @@ final class TrackIsBackTests: XCTestCase {
     }
 
     func testConfigurationAcceptsMouseButtonsForZoneActions() throws {
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = TapBindingCatalog.leftMouseButton
         configuration.left.zoneLayout = .gridNine
@@ -258,7 +258,7 @@ final class TrackIsBackTests: XCTestCase {
     }
 
     func testConfigurationAcceptsIndependentZoneModesForBothPads() throws {
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.zoneLayout = .horizontalTwo
         configuration.left.dpadKeys.left = "Q"
@@ -331,7 +331,7 @@ final class TrackIsBackTests: XCTestCase {
         )
         var mapper = PadMapper(side: .right, configuration: configuration)
 
-        XCTAssertNoThrow(try TrackIsBackConfiguration(left: .init(mode: .disabled), right: configuration).validated())
+        XCTAssertNoThrow(try PaddrConfiguration(left: .init(mode: .disabled), right: configuration).validated())
         XCTAssertTrue(try mapper.process(sample(touched: true, x: .max, y: 0, time: 1_000_000)).isEmpty)
 
         let actions = try mapper.process(sample(touched: false, x: .max, y: 0, time: 20_000_000))

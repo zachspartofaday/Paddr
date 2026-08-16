@@ -101,7 +101,7 @@ public final class CGEventOutput: TrackpadOutputDispatching, Sendable {
         #if canImport(CoreGraphics)
         guard let location = currentMouseLocation() else {
             let transition = isPressed ? "down" : "up"
-            throw TrackIsBackError.output(
+            throw PaddrError.output(
                 "Could not determine the mouse location for a \(button.rawValue) mouse-button \(transition) event."
             )
         }
@@ -118,10 +118,10 @@ public final class CGEventOutput: TrackpadOutputDispatching, Sendable {
             mouseType: eventType,
             mouseCursorPosition: location,
             mouseButton: mouseButton
-        ) else { throw TrackIsBackError.output("Could not create a \(button.rawValue) mouse-button event.") }
+        ) else { throw PaddrError.output("Could not create a \(button.rawValue) mouse-button event.") }
         event.post(tap: .cghidEventTap)
         #else
-        throw TrackIsBackError.output("CoreGraphics output is unavailable.")
+        throw PaddrError.output("CoreGraphics output is unavailable.")
         #endif
     }
 
@@ -143,17 +143,17 @@ public final class CGEventOutput: TrackpadOutputDispatching, Sendable {
             mouseType: eventType,
             mouseCursorPosition: destination,
             mouseButton: mouseButton
-        ) else { throw TrackIsBackError.output("Could not create a mouse event.") }
+        ) else { throw PaddrError.output("Could not create a mouse event.") }
         event.post(tap: .cghidEventTap)
         #else
-        throw TrackIsBackError.output("CoreGraphics output is unavailable.")
+        throw PaddrError.output("CoreGraphics output is unavailable.")
         #endif
     }
 
     private func postScroll(dx: Double, dy: Double, source: CGEventSource?) throws {
         #if canImport(CoreGraphics)
         guard dx.isFinite, dy.isFinite else {
-            throw TrackIsBackError.output("Scroll output must be finite.")
+            throw PaddrError.output("Scroll output must be finite.")
         }
         guard dx != 0 || dy != 0 else { return }
         guard let event = CGEvent(
@@ -163,10 +163,10 @@ public final class CGEventOutput: TrackpadOutputDispatching, Sendable {
             wheel1: Self.clampedScrollValue(dy),
             wheel2: Self.clampedScrollValue(dx),
             wheel3: 0
-        ) else { throw TrackIsBackError.output("Could not create a scroll event.") }
+        ) else { throw PaddrError.output("Could not create a scroll event.") }
         event.post(tap: .cghidEventTap)
         #else
-        throw TrackIsBackError.output("CoreGraphics output is unavailable.")
+        throw PaddrError.output("CoreGraphics output is unavailable.")
         #endif
     }
 
@@ -184,10 +184,10 @@ public final class CGEventOutput: TrackpadOutputDispatching, Sendable {
             keyboardEventSource: source,
             virtualKey: CGKeyCode(key.keyCode),
             keyDown: isPressed
-        ) else { throw TrackIsBackError.output("Could not create keyboard event for \(key.name).") }
+        ) else { throw PaddrError.output("Could not create keyboard event for \(key.name).") }
         event.post(tap: .cghidEventTap)
         #else
-        throw TrackIsBackError.output("CoreGraphics output is unavailable.")
+        throw PaddrError.output("CoreGraphics output is unavailable.")
         #endif
     }
 

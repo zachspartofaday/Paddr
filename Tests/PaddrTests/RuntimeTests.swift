@@ -13,7 +13,7 @@ final class RuntimeTests: XCTestCase {
             .report(report(leftTouched: false, rightTouched: true), at: 20),
             .report(neutralReport(), at: 30)
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
         configuration.right.mode = .dpad
@@ -54,7 +54,7 @@ final class RuntimeTests: XCTestCase {
             ),
             .report(neutralReport(), at: 40)
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
         configuration.left.dpadKeys.right = "space"
@@ -86,7 +86,7 @@ final class RuntimeTests: XCTestCase {
             .report(report(leftTouched: false, rightTouched: true), at: 20),
             .report(neutralReport(), at: 30)
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = TapBindingCatalog.leftMouseButton
         configuration.right.mode = .dpad
@@ -115,7 +115,7 @@ final class RuntimeTests: XCTestCase {
             .report(report(leftTouched: true, rightTouched: true), at: 10),
             .remove
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
         configuration.right.mode = .dpad
@@ -227,7 +227,7 @@ final class RuntimeTests: XCTestCase {
             .wake(at: 1_000_000_010),
             .stop
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
 
@@ -263,7 +263,7 @@ final class RuntimeTests: XCTestCase {
             .report(heldLeftReport(), at: 1_200_000_000),
             .stop
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
 
@@ -316,7 +316,7 @@ final class RuntimeTests: XCTestCase {
             .wake(at: 1_000_000_010),
             .stop
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
         configuration.right.mode = .dpad
@@ -353,7 +353,7 @@ final class RuntimeTests: XCTestCase {
             .wake(at: 1_000_000_010),
             .remove
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
         configuration.right.mode = .dpad
@@ -409,7 +409,7 @@ final class RuntimeTests: XCTestCase {
             .wake(at: 1_000_000_010),
             .stop
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
 
@@ -436,7 +436,7 @@ final class RuntimeTests: XCTestCase {
             .report(report(leftTouched: true, rightTouched: true), at: 10),
             .remove
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
         configuration.right.mode = .dpad
@@ -477,7 +477,7 @@ final class RuntimeTests: XCTestCase {
             .report(neutralReport(), at: 1_200_000_000),
             .remove
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
 
@@ -505,7 +505,7 @@ final class RuntimeTests: XCTestCase {
             .report(heldLeftReport(), at: 10),
             .report(neutralReport(), at: 20)
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
 
@@ -541,7 +541,7 @@ final class RuntimeTests: XCTestCase {
             .report(heldLeftReport(), at: 40),
             .report(neutralReport(), at: 50)
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
 
@@ -586,7 +586,7 @@ final class RuntimeTests: XCTestCase {
             .report(neutralReport(), at: 30),
             .report(heldLeftReport(), at: 40)
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
 
@@ -634,7 +634,7 @@ final class RuntimeTests: XCTestCase {
             .report(heldLeftReport(), at: 50),
             .report(neutralReport(), at: 60)
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
 
@@ -753,7 +753,7 @@ final class RuntimeTests: XCTestCase {
             .report(heldLeftReport(), at: 10),
             .report(neutralReport(), at: 20)
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
 
@@ -784,7 +784,7 @@ final class RuntimeTests: XCTestCase {
             .report(heldLeftReport(), at: 1_300_000_000),
             .remove
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
 
@@ -838,7 +838,7 @@ final class RuntimeTests: XCTestCase {
             .report(neutralReport(), at: 30),
             .stop
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
 
@@ -908,7 +908,7 @@ final class RuntimeTests: XCTestCase {
             .report([0x46, 2], at: 1_000_000_011),
             .stop
         ])
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
 
@@ -1000,7 +1000,7 @@ final class RuntimeTests: XCTestCase {
         ])
         let events = EventRecorder()
         let output = RecordingOutput()
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.mode = .dpad
         configuration.left.dpadKeys.up = "space"
 
@@ -1059,7 +1059,7 @@ final class RuntimeTests: XCTestCase {
     }
 
     private func run(
-        configuration: TrackIsBackConfiguration = .default,
+        configuration: PaddrConfiguration = .default,
         observeOnly: Bool = false,
         outputGate: OutputGate? = nil,
         hid: ScriptedHID,
@@ -1188,7 +1188,7 @@ private final class FailingReleaseOutput: TrackpadOutputDispatching, Sendable {
     func dispatch(_ actions: [TrackpadOutputAction]) throws {
         for action in actions where action.isReleaseForTesting {
             releaseStorage.withLock { $0.append(action) }
-            throw TrackIsBackError.output("Injected release failure.")
+            throw PaddrError.output("Injected release failure.")
         }
     }
 }

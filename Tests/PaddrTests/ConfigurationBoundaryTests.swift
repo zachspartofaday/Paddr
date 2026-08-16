@@ -50,7 +50,7 @@ final class ConfigurationBoundaryTests: XCTestCase {
     func testConfigurationCandidateUsesFullCurrentToOldestPrecedence() throws {
         let fileManager = FileManager.default
         let home = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let candidates: [(relativePath: String, configuration: TrackIsBackConfiguration)] = [
+        let candidates: [(relativePath: String, configuration: PaddrConfiguration)] = [
             (".config/Paddr/config.json", configuration(PadConfiguration(mode: .mouse, sensitivity: 1))),
             (".config/PuckPads/config.json", configuration(PadConfiguration(mode: .mouse, sensitivity: 2))),
             (".config/TracksBack/config.json", configuration(PadConfiguration(mode: .mouse, sensitivity: 3))),
@@ -101,11 +101,11 @@ final class ConfigurationBoundaryTests: XCTestCase {
 
     func testOldSchemaMissingWholePadUsesCoupledFallback() throws {
         let missingRight = try JSONDecoder().decode(
-            TrackIsBackConfiguration.self,
+            PaddrConfiguration.self,
             from: Data("{\"left\":{\"mode\":\"scroll\"}}".utf8)
         )
         let missingLeft = try JSONDecoder().decode(
-            TrackIsBackConfiguration.self,
+            PaddrConfiguration.self,
             from: Data("{\"right\":{\"mode\":\"mouse\"}}".utf8)
         )
 
@@ -124,12 +124,12 @@ final class ConfigurationBoundaryTests: XCTestCase {
             PadConfiguration(mode: .mouse).centerTapTrackingMode,
             .decoupled
         )
-        XCTAssertEqual(TrackIsBackConfiguration.default.left.centerTapTrackingMode, .decoupled)
-        XCTAssertEqual(TrackIsBackConfiguration.default.right.centerTapTrackingMode, .decoupled)
+        XCTAssertEqual(PaddrConfiguration.default.left.centerTapTrackingMode, .decoupled)
+        XCTAssertEqual(PaddrConfiguration.default.right.centerTapTrackingMode, .decoupled)
     }
 
     func testCenterTapTrackingModeEncodesAndRoundTripsIndependentlyForBothPads() throws {
-        var expected = TrackIsBackConfiguration.default
+        var expected = PaddrConfiguration.default
         expected.left.centerTapTrackingMode = .coupled
         expected.right.centerTapTrackingMode = .decoupled
 
@@ -143,14 +143,14 @@ final class ConfigurationBoundaryTests: XCTestCase {
         XCTAssertEqual(left["centerTapTrackingMode"] as? String, "coupled")
         XCTAssertEqual(right["centerTapTrackingMode"] as? String, "decoupled")
         XCTAssertEqual(
-            try JSONDecoder().decode(TrackIsBackConfiguration.self, from: data),
+            try JSONDecoder().decode(PaddrConfiguration.self, from: data),
             expected
         )
     }
 
     func testOldSchemaScrollSensitivityCarriesExistingValueBelowOne() throws {
         let configuration = try JSONDecoder().decode(
-            TrackIsBackConfiguration.self,
+            PaddrConfiguration.self,
             from: Data(
                 """
                 {
@@ -232,7 +232,7 @@ final class ConfigurationBoundaryTests: XCTestCase {
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("json")
         defer { try? FileManager.default.removeItem(at: file) }
-        var expected = TrackIsBackConfiguration.default
+        var expected = PaddrConfiguration.default
         expected.left.sensitivity = 4.2
         try ConfigurationStore.encoded(expected).write(to: file)
 
@@ -240,13 +240,13 @@ final class ConfigurationBoundaryTests: XCTestCase {
     }
 
     func testScrollSensitivityRoundTripsIndependently() throws {
-        var expected = TrackIsBackConfiguration.default
+        var expected = PaddrConfiguration.default
         expected.left.sensitivity = 12
         expected.left.scrollSensitivity = 0.4
 
         XCTAssertEqual(
             try JSONDecoder().decode(
-                TrackIsBackConfiguration.self,
+                PaddrConfiguration.self,
                 from: ConfigurationStore.encoded(expected)
             ),
             expected
@@ -254,12 +254,12 @@ final class ConfigurationBoundaryTests: XCTestCase {
     }
 
     func testMouseAccelerationRoundTripsIndependentlyForBothPads() throws {
-        var expected = TrackIsBackConfiguration.default
+        var expected = PaddrConfiguration.default
         expected.left.mouseAcceleration = 0.25
         expected.right.mouseAcceleration = 0.75
 
         let decoded = try JSONDecoder().decode(
-            TrackIsBackConfiguration.self,
+            PaddrConfiguration.self,
             from: ConfigurationStore.encoded(expected)
         )
 
@@ -397,7 +397,7 @@ final class ConfigurationBoundaryTests: XCTestCase {
         XCTAssertThrowsError(try configuration(pad).validated())
     }
 
-    private func configuration(_ pad: PadConfiguration) -> TrackIsBackConfiguration {
-        TrackIsBackConfiguration(left: pad, right: .init(mode: .disabled))
+    private func configuration(_ pad: PadConfiguration) -> PaddrConfiguration {
+        PaddrConfiguration(left: pad, right: .init(mode: .disabled))
     }
 }

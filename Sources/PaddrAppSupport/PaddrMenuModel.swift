@@ -32,7 +32,7 @@ public enum ProfileSelectionPresentation: Equatable, Sendable {
 @MainActor
 @Observable
 public final class PaddrMenuModel {
-    public var configuration: TrackIsBackConfiguration {
+    public var configuration: PaddrConfiguration {
         didSet {
             guard !isPublishingConfiguration, !isRejectingConfigurationEdit else { return }
             guard isInitialized, !replacesActiveConfiguration else {
@@ -47,7 +47,7 @@ public final class PaddrMenuModel {
             }
         }
     }
-    public private(set) var savedConfiguration: TrackIsBackConfiguration
+    public private(set) var savedConfiguration: PaddrConfiguration
     public private(set) var profiles: [ConfigurationProfile] = [.default]
     public private(set) var activeProfileID: ConfigurationProfileID = .default
     public var isEnabled = false {
@@ -86,7 +86,7 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var profileDocument = ConfigurationProfileDocument.default
     @ObservationIgnored private var storageWriteBlocked = false
     @ObservationIgnored private var sessionID: UUID?
-    @ObservationIgnored private var sessionConfiguration: TrackIsBackConfiguration?
+    @ObservationIgnored private var sessionConfiguration: PaddrConfiguration?
     @ObservationIgnored private var sessionTeardownCount = 0
     @ObservationIgnored private var pendingReleaseRevision: UInt64?
     @ObservationIgnored private var lifecycleEpoch: UInt64 = 0
@@ -208,7 +208,7 @@ public final class PaddrMenuModel {
               canEditActiveProfile || needsInitialSave else { return }
         let draft = configuration
         let initiatingDraftRevision = draftRevision
-        let validated: TrackIsBackConfiguration
+        let validated: PaddrConfiguration
         do {
             validated = try draft.validated()
         } catch {
@@ -330,7 +330,7 @@ public final class PaddrMenuModel {
     }
 
     private func saveAndApply(
-        _ validated: TrackIsBackConfiguration,
+        _ validated: PaddrConfiguration,
         replacingRevision initiatingDraftRevision: UInt64,
         statusGeneration initiatingStatusGeneration: UInt64,
         lifecycleEpoch initiatingLifecycleEpoch: UInt64,
@@ -339,7 +339,7 @@ public final class PaddrMenuModel {
     ) async {
         do {
             guard !storageWriteBlocked else {
-                throw TrackIsBackError.configuration(
+                throw PaddrError.configuration(
                     "Profile storage could not be loaded. Preserve or repair the original file, then relaunch Paddr before saving."
                 )
             }
@@ -467,7 +467,7 @@ public final class PaddrMenuModel {
         guard confirmed, canBeginProfileMutation(discardingDraft: false) else { return false }
         guard id != activeProfileID || !hasUnsavedChanges else {
             publishProfileOperationFailure(
-                TrackIsBackError.configuration(
+                PaddrError.configuration(
                     "Save or discard unsaved changes before deleting the active profile."
                 )
             )
@@ -542,7 +542,7 @@ public final class PaddrMenuModel {
               !profileDocumentSaveInProgress else { return false }
         guard !storageWriteBlocked else {
             publishProfileOperationFailure(
-                TrackIsBackError.configuration(
+                PaddrError.configuration(
                     "Profile storage could not be loaded. Preserve or repair the original file, then relaunch Paddr before saving."
                 )
             )
@@ -550,7 +550,7 @@ public final class PaddrMenuModel {
         }
         if discardingDraft, hasUnsavedChanges {
             publishProfileOperationFailure(
-                TrackIsBackError.configuration(
+                PaddrError.configuration(
                     "Save or discard unsaved changes before changing profiles."
                 )
             )
@@ -593,7 +593,7 @@ public final class PaddrMenuModel {
               configurationTask == nil else { return }
         guard !storageWriteBlocked else {
             publishProfileOperationFailure(
-                TrackIsBackError.configuration(
+                PaddrError.configuration(
                     "Profile storage could not be loaded. Preserve or repair the original file, then relaunch Paddr before saving."
                 )
             )
@@ -976,7 +976,7 @@ public final class PaddrMenuModel {
         while isCurrent(operation), isEnabled {
             let draft = configuration
             let revision = draftRevision
-            let validated: TrackIsBackConfiguration
+            let validated: PaddrConfiguration
             do {
                 validated = try draft.validated()
             } catch {
@@ -995,7 +995,7 @@ public final class PaddrMenuModel {
 
             do {
                 guard !storageWriteBlocked else {
-                    throw TrackIsBackError.configuration(
+                    throw PaddrError.configuration(
                         "Profile storage could not be loaded. Preserve or repair the original file, then relaunch Paddr before saving."
                     )
                 }
@@ -1369,7 +1369,7 @@ public final class PaddrMenuModel {
         return resultingGeneration
     }
 
-    private func publishConfiguration(_ configuration: TrackIsBackConfiguration) {
+    private func publishConfiguration(_ configuration: PaddrConfiguration) {
         isPublishingConfiguration = true
         defer { isPublishingConfiguration = false }
         self.configuration = configuration

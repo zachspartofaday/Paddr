@@ -32,7 +32,7 @@ public enum KeyCatalog {
             return KeyBinding(name: "code:\(code)", keyCode: code)
         }
         guard let keyCode = namedCodes[name] else {
-            throw TrackIsBackError.configuration(
+            throw PaddrError.configuration(
                 "Unknown key '\(rawName)'. Use a letter, digit, arrow name, space, return, tab, escape, shift, control, option, command, or code:N."
             )
         }

@@ -35,7 +35,7 @@ public struct ConfigurationProfileID: RawRepresentable, Codable, Hashable, Senda
 public struct ConfigurationProfile: Codable, Equatable, Identifiable, Sendable {
     public let id: ConfigurationProfileID
     public var name: String
-    public var configuration: TrackIsBackConfiguration
+    public var configuration: PaddrConfiguration
 
     public static let `default` = ConfigurationProfile(
         id: .default,
@@ -46,7 +46,7 @@ public struct ConfigurationProfile: Codable, Equatable, Identifiable, Sendable {
     public init(
         id: ConfigurationProfileID,
         name: String,
-        configuration: TrackIsBackConfiguration
+        configuration: PaddrConfiguration
     ) {
         self.id = id
         self.name = name
@@ -121,7 +121,7 @@ public struct ConfigurationProfileDocument: Codable, Equatable, Sendable {
 
     public func validated(repairingMissingActiveProfile: Bool = false) throws -> ConfigurationProfileDocument {
         guard schemaVersion == Self.currentSchemaVersion else {
-            throw TrackIsBackError.configuration(
+            throw PaddrError.configuration(
                 "Unsupported profile document schema version \(schemaVersion)."
             )
         }
@@ -133,16 +133,16 @@ public struct ConfigurationProfileDocument: Codable, Equatable, Sendable {
 
         for profile in userProfiles {
             guard profile.id != .default, UUID(uuidString: profile.id.rawValue) != nil else {
-                throw TrackIsBackError.configuration(
+                throw PaddrError.configuration(
                     "User profile \(profile.name) has an invalid stable ID."
                 )
             }
             guard seenIDs.insert(profile.id).inserted else {
-                throw TrackIsBackError.configuration("Profile IDs must be unique.")
+                throw PaddrError.configuration("Profile IDs must be unique.")
             }
             let name = try Self.validatedName(profile.name)
             guard seenNames.insert(Self.nameKey(name)).inserted else {
-                throw TrackIsBackError.configuration("Profile names must be unique, ignoring case.")
+                throw PaddrError.configuration("Profile names must be unique, ignoring case.")
             }
             validatedProfiles.append(
                 ConfigurationProfile(
@@ -164,7 +164,7 @@ public struct ConfigurationProfileDocument: Codable, Equatable, Sendable {
                 copy.activeProfileID = .default
                 return copy
             }
-            throw TrackIsBackError.configuration(
+            throw PaddrError.configuration(
                 "The active profile ID \(activeProfileID.rawValue) does not exist."
             )
         }
@@ -174,13 +174,13 @@ public struct ConfigurationProfileDocument: Codable, Equatable, Sendable {
     @discardableResult
     public mutating func createProfile(
         named proposedName: String,
-        configuration: TrackIsBackConfiguration = .default,
+        configuration: PaddrConfiguration = .default,
         id: ConfigurationProfileID = .make()
     ) throws -> ConfigurationProfile {
         let name = try availableName(proposedName)
         guard id != .default, UUID(uuidString: id.rawValue) != nil,
               profile(id: id) == nil else {
-            throw TrackIsBackError.configuration("The new profile ID is invalid or already exists.")
+            throw PaddrError.configuration("The new profile ID is invalid or already exists.")
         }
         let profile = ConfigurationProfile(
             id: id,
@@ -197,7 +197,7 @@ public struct ConfigurationProfileDocument: Codable, Equatable, Sendable {
         newID: ConfigurationProfileID = .make()
     ) throws -> ConfigurationProfile {
         guard let source = profile(id: sourceID) else {
-            throw TrackIsBackError.configuration("The profile to duplicate no longer exists.")
+            throw PaddrError.configuration("The profile to duplicate no longer exists.")
         }
         let baseName = "\(source.name) Copy"
         var candidate = baseName
@@ -211,57 +211,57 @@ public struct ConfigurationProfileDocument: Codable, Equatable, Sendable {
 
     public mutating func renameProfile(id: ConfigurationProfileID, to proposedName: String) throws {
         guard id != .default else {
-            throw TrackIsBackError.configuration("The Default profile cannot be renamed.")
+            throw PaddrError.configuration("The Default profile cannot be renamed.")
         }
         guard let index = userProfiles.firstIndex(where: { $0.id == id }) else {
-            throw TrackIsBackError.configuration("The profile to rename no longer exists.")
+            throw PaddrError.configuration("The profile to rename no longer exists.")
         }
         let name = try Self.validatedName(proposedName)
         let key = Self.nameKey(name)
         guard !profiles.contains(where: { $0.id != id && Self.nameKey($0.name) == key }) else {
-            throw TrackIsBackError.configuration("A profile named \(name) already exists.")
+            throw PaddrError.configuration("A profile named \(name) already exists.")
         }
         userProfiles[index].name = name
     }
 
     public mutating func replaceConfiguration(
         for id: ConfigurationProfileID,
-        with configuration: TrackIsBackConfiguration
+        with configuration: PaddrConfiguration
     ) throws {
         guard id != .default else {
             guard configuration == builtInDefaultProfile.configuration else {
-                throw TrackIsBackError.configuration(
+                throw PaddrError.configuration(
                     "The Default profile is built in. Duplicate it before customizing."
                 )
             }
             return
         }
         guard let index = userProfiles.firstIndex(where: { $0.id == id }) else {
-            throw TrackIsBackError.configuration("The active profile no longer exists.")
+            throw PaddrError.configuration("The active profile no longer exists.")
         }
         userProfiles[index].configuration = try configuration.validated()
     }
 
     public mutating func activateProfile(id: ConfigurationProfileID) throws {
         guard profile(id: id) != nil else {
-            throw TrackIsBackError.configuration("The profile to activate no longer exists.")
+            throw PaddrError.configuration("The profile to activate no longer exists.")
         }
         activeProfileID = id
     }
 
     public mutating func deleteProfile(id: ConfigurationProfileID) throws {
         guard id != .default else {
-            throw TrackIsBackError.configuration("The Default profile cannot be deleted.")
+            throw PaddrError.configuration("The Default profile cannot be deleted.")
         }
         guard let index = userProfiles.firstIndex(where: { $0.id == id }) else {
-            throw TrackIsBackError.configuration("The profile to delete no longer exists.")
+            throw PaddrError.configuration("The profile to delete no longer exists.")
         }
         if activeProfileID == id { activeProfileID = .default }
         userProfiles.remove(at: index)
     }
 
     private var builtInDefaultProfile: ConfigurationProfile {
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.centerTapTrackingMode = builtInDefaultCenterTapTrackingMode
         configuration.right.centerTapTrackingMode = builtInDefaultCenterTapTrackingMode
         return ConfigurationProfile(
@@ -274,7 +274,7 @@ public struct ConfigurationProfileDocument: Codable, Equatable, Sendable {
     private func availableName(_ proposedName: String) throws -> String {
         let name = try Self.validatedName(proposedName)
         guard !containsName(name) else {
-            throw TrackIsBackError.configuration("A profile named \(name) already exists.")
+            throw PaddrError.configuration("A profile named \(name) already exists.")
         }
         return name
     }
@@ -287,10 +287,10 @@ public struct ConfigurationProfileDocument: Codable, Equatable, Sendable {
     private static func validatedName(_ proposedName: String) throws -> String {
         let name = proposedName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            throw TrackIsBackError.configuration("Profile names cannot be empty.")
+            throw PaddrError.configuration("Profile names cannot be empty.")
         }
         guard UUID(uuidString: name) == nil else {
-            throw TrackIsBackError.configuration(
+            throw PaddrError.configuration(
                 "Profile names cannot be UUIDs; choose a descriptive name."
             )
         }

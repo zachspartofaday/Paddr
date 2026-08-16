@@ -97,7 +97,7 @@ public enum TrackpadSessionStopOutcome: Equatable, Sendable {
 
 public protocol TrackpadSessionControlling: Sendable {
     func start(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent>
@@ -133,7 +133,7 @@ public enum TrackpadRuntime {
     static let controllerLossDeadlineNanoseconds: UInt64 = 1_000_000_000
 
     public static func run(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate? = nil,
         stopToken: TrackpadStopToken,
@@ -191,7 +191,7 @@ public enum TrackpadRuntime {
                 }
             }
             if !cleanupFailures.isEmpty {
-                throw TrackIsBackError.output(
+                throw PaddrError.output(
                     "Could not release held outputs: \(cleanupFailures.joined(separator: "; "))."
                 )
             }
@@ -325,7 +325,7 @@ public enum TrackpadRuntime {
             case let .failure(runtimeError):
                 streamFailure = " Runtime also failed: \(runtimeError)."
             }
-            throw TrackIsBackError.output("\(error)\(streamFailure)")
+            throw PaddrError.output("\(error)\(streamFailure)")
         }
 
         return TrackpadRunResult(
@@ -341,7 +341,7 @@ private struct ControllerEpoch {
     var arbiter = OutputArbiter()
     var isArmed = false
 
-    init(configuration: TrackIsBackConfiguration) {
+    init(configuration: PaddrConfiguration) {
         leftMapper = PadMapper(side: .left, configuration: configuration.left)
         rightMapper = PadMapper(side: .right, configuration: configuration.right)
     }
@@ -355,7 +355,7 @@ private extension TrackpadPair {
 
 public actor TrackpadSession: TrackpadSessionControlling {
     public typealias Runtime = @Sendable (
-        TrackIsBackConfiguration,
+        PaddrConfiguration,
         Bool,
         OutputGate?,
         TrackpadStopToken,
@@ -381,7 +381,7 @@ public actor TrackpadSession: TrackpadSessionControlling {
     }
 
     public func start(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool = false,
         outputGate: OutputGate? = nil
     ) async -> AsyncStream<TrackpadSessionEvent> {
@@ -424,7 +424,7 @@ public actor TrackpadSession: TrackpadSessionControlling {
                     case .stopped: eventBuffer.yield(.stopped(result.summary))
                     case .deviceRemoved: eventBuffer.yield(.receiverRemoved(result.summary))
                     }
-                case let .failure(error as TrackIsBackError):
+                case let .failure(error as PaddrError):
                     if case .device = error {
                         eventBuffer.yield(.receiverUnavailable(error.description))
                     } else {
@@ -439,7 +439,7 @@ public actor TrackpadSession: TrackpadSessionControlling {
             switch outcome {
             case .success:
                 return .clean
-            case let .failure(error as TrackIsBackError):
+            case let .failure(error as PaddrError):
                 if case .output = error {
                     return .failed(error.description)
                 }
@@ -496,7 +496,7 @@ public actor TrackpadSession: TrackpadSessionControlling {
     }
 
     public static func liveRuntime(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate?,
         stopToken: TrackpadStopToken,

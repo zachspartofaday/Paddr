@@ -252,16 +252,16 @@ public struct PadConfiguration: Codable, Equatable, Sendable {
     }
 }
 
-public struct TrackIsBackConfiguration: Codable, Equatable, Sendable {
+public struct PaddrConfiguration: Codable, Equatable, Sendable {
     public var left: PadConfiguration
     public var right: PadConfiguration
 
-    public static let `default` = TrackIsBackConfiguration(
+    public static let `default` = PaddrConfiguration(
         left: PadConfiguration(mode: .scroll),
         right: PadConfiguration(mode: .mouse)
     )
 
-    public static let formerCoupledDefault = TrackIsBackConfiguration(
+    public static let formerCoupledDefault = PaddrConfiguration(
         left: PadConfiguration(mode: .scroll, centerTapTrackingMode: .coupled),
         right: PadConfiguration(mode: .mouse, centerTapTrackingMode: .coupled)
     )
@@ -283,7 +283,7 @@ public struct TrackIsBackConfiguration: Codable, Equatable, Sendable {
         right = try values.decodeIfPresent(PadConfiguration.self, forKey: .right) ?? missingRight
     }
 
-    public func validated() throws -> TrackIsBackConfiguration {
+    public func validated() throws -> PaddrConfiguration {
         var copy = self
         try copy.validate(side: .left, pad: &copy.left)
         try copy.validate(side: .right, pad: &copy.right)
@@ -292,29 +292,29 @@ public struct TrackIsBackConfiguration: Codable, Equatable, Sendable {
 
     private func validate(side: PadSide, pad: inout PadConfiguration) throws {
         guard pad.sensitivity.isFinite, ConfigurationLimits.sensitivity.contains(pad.sensitivity) else {
-            throw TrackIsBackError.configuration("\(side.rawValue) sensitivity must be between 0.1 and 20.")
+            throw PaddrError.configuration("\(side.rawValue) sensitivity must be between 0.1 and 20.")
         }
         guard pad.scrollSensitivity.isFinite,
               ConfigurationLimits.scrollSensitivity.contains(pad.scrollSensitivity) else {
-            throw TrackIsBackError.configuration("\(side.rawValue) scrollSensitivity must be between 0 and 1.")
+            throw PaddrError.configuration("\(side.rawValue) scrollSensitivity must be between 0 and 1.")
         }
         guard pad.mouseAcceleration.isFinite,
               ConfigurationLimits.mouseAcceleration.contains(pad.mouseAcceleration) else {
-            throw TrackIsBackError.configuration("\(side.rawValue) mouseAcceleration must be between 0 and 1.")
+            throw PaddrError.configuration("\(side.rawValue) mouseAcceleration must be between 0 and 1.")
         }
         guard pad.mouseDeadzone.isFinite, ConfigurationLimits.mouseDeadzone.contains(pad.mouseDeadzone) else {
-            throw TrackIsBackError.configuration("\(side.rawValue) mouseDeadzone must be between 0 and 1.")
+            throw PaddrError.configuration("\(side.rawValue) mouseDeadzone must be between 0 and 1.")
         }
         guard pad.tapMaximumMilliseconds.isFinite,
               ConfigurationLimits.tapMaximumMilliseconds.contains(pad.tapMaximumMilliseconds) else {
-            throw TrackIsBackError.configuration("\(side.rawValue) tapMaximumMilliseconds must be between 1 and 5000.")
+            throw PaddrError.configuration("\(side.rawValue) tapMaximumMilliseconds must be between 1 and 5000.")
         }
         guard pad.tapMaximumMovement.isFinite,
               ConfigurationLimits.tapMaximumMovement.contains(pad.tapMaximumMovement) else {
-            throw TrackIsBackError.configuration("\(side.rawValue) tapMaximumMovement must be between 0 and 100000.")
+            throw PaddrError.configuration("\(side.rawValue) tapMaximumMovement must be between 0 and 100000.")
         }
         guard ConfigurationLimits.containsDPadDeadzone(pad.dpadDeadzone) else {
-            throw TrackIsBackError.configuration("\(side.rawValue) dpadDeadzone must be at least 0 and less than 1.")
+            throw PaddrError.configuration("\(side.rawValue) dpadDeadzone must be at least 0 and less than 1.")
         }
         if let tapKey = pad.tapKey {
             pad.tapKey = try normalizedOutputBinding(tapKey)
@@ -343,7 +343,7 @@ public struct TrackIsBackConfiguration: Codable, Equatable, Sendable {
     }
 }
 
-public enum TrackIsBackError: Error, CustomStringConvertible, Sendable {
+public enum PaddrError: Error, CustomStringConvertible, Sendable {
     case configuration(String)
     case device(String)
     case permission(String)

@@ -8,7 +8,7 @@ import PaddrCore
 final class MenuModelTests: XCTestCase {
     func testInitializationLoadsConfigurationOffMainActorBeforePublishingSnapshot() async {
         let state = readyState(receiver: nil)
-        var stored = TrackIsBackConfiguration.default
+        var stored = PaddrConfiguration.default
         stored.left.sensitivity = 4
         state.loadedConfiguration = stored
         let loadGate = DispatchSemaphore(value: 0)
@@ -134,7 +134,7 @@ final class MenuModelTests: XCTestCase {
 
     func testEnableBeforeInitializationDoesNotStartOrPersist() async {
         let state = readyState(receiver: "Fake")
-        var stored = TrackIsBackConfiguration.default
+        var stored = PaddrConfiguration.default
         stored.left.sensitivity = 4
         state.loadedConfiguration = stored
         let loadGate = DispatchSemaphore(value: 0)
@@ -189,7 +189,7 @@ final class MenuModelTests: XCTestCase {
 
     func testEditAndEnableAfterInitializationPersistsAndActivatesNewerDraft() async {
         let state = readyState(receiver: "Fake")
-        var stored = TrackIsBackConfiguration.default
+        var stored = PaddrConfiguration.default
         stored.left.sensitivity = 4
         state.loadedConfiguration = stored
         let loadGate = DispatchSemaphore(value: 0)
@@ -214,7 +214,7 @@ final class MenuModelTests: XCTestCase {
 
     func testDraftAndDefaultsBeforeInitializationCannotReplaceLoadedConfiguration() async {
         let state = readyState(receiver: nil)
-        var stored = TrackIsBackConfiguration.default
+        var stored = PaddrConfiguration.default
         stored.left.sensitivity = 4
         state.loadedConfiguration = stored
         let loadGate = DispatchSemaphore(value: 0)
@@ -1484,7 +1484,7 @@ final class MenuModelTests: XCTestCase {
 
     func testDisablingDuringActivationSaveRecordsPersistedSnapshotWithoutStarting() async {
         let state = readyState(receiver: "Fake")
-        var stored = TrackIsBackConfiguration.default
+        var stored = PaddrConfiguration.default
         stored.left.sensitivity = 4
         state.loadedConfiguration = stored
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
@@ -1863,7 +1863,7 @@ final class MenuModelTests: XCTestCase {
 
     func testRestoreDefaultsMarksConfigurationUnsaved() async {
         let state = readyState(receiver: nil)
-        var custom = TrackIsBackConfiguration.default
+        var custom = PaddrConfiguration.default
         custom.left.sensitivity = 4
         state.loadedConfiguration = custom
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
@@ -3449,9 +3449,9 @@ final class MenuModelTests: XCTestCase {
         ConfigurationProfile,
         ConfigurationProfile
     ) {
-        var firstConfiguration = TrackIsBackConfiguration.default
+        var firstConfiguration = PaddrConfiguration.default
         firstConfiguration.left.sensitivity = 2
-        var secondConfiguration = TrackIsBackConfiguration.default
+        var secondConfiguration = PaddrConfiguration.default
         secondConfiguration.right.sensitivity = 6
         var document = ConfigurationProfileDocument.default
         let first = try document.createProfile(
@@ -3487,7 +3487,7 @@ final class MenuModelTests: XCTestCase {
                 state.loadGate?.wait()
                 state.loadRanOnMainThread = Thread.isMainThread
                 if let failure = state.loadFailure {
-                    throw TrackIsBackError.configuration(failure)
+                    throw PaddrError.configuration(failure)
                 }
                 if let document = state.loadedProfileDocument {
                     return ConfigurationProfileLoadResult(
@@ -3511,7 +3511,7 @@ final class MenuModelTests: XCTestCase {
                 defer { state.saveCompletionCount += 1 }
                 state.saveGate?.wait()
                 if let failure = state.saveFailure {
-                    throw TrackIsBackError.configuration(failure)
+                    throw PaddrError.configuration(failure)
                 }
                 state.operationRecorder?.record("save")
                 state.savedProfileDocument = $0
@@ -3577,7 +3577,7 @@ private actor ProgressPressureSession: TrackpadSessionControlling {
     }
 
     func start(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {
@@ -3605,7 +3605,7 @@ private final class MenuProgressPressureRuntime: Sendable {
     }
 
     func run(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate?,
         stopToken: TrackpadStopToken,
@@ -3646,7 +3646,7 @@ private actor ScriptedSession: TrackpadSessionControlling {
     private let keepsStreamOpen: Bool
     private(set) var startCount = 0
     private(set) var stopCount = 0
-    private(set) var startedConfigurations: [TrackIsBackConfiguration] = []
+    private(set) var startedConfigurations: [PaddrConfiguration] = []
     private var continuation: AsyncStream<TrackpadSessionEvent>.Continuation?
 
     init(events: [TrackpadSessionEvent], keepsStreamOpen: Bool = false) {
@@ -3655,7 +3655,7 @@ private actor ScriptedSession: TrackpadSessionControlling {
     }
 
     func start(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {
@@ -3685,7 +3685,7 @@ private actor ManualEventSession: TrackpadSessionControlling {
     private(set) var startCount = 0
 
     func start(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {
@@ -3719,7 +3719,7 @@ private actor RetainedEventSession: TrackpadSessionControlling {
     private(set) var startCount = 0
 
     func start(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {
@@ -3768,7 +3768,7 @@ private actor GatedSession: TrackpadSessionControlling {
     }
 
     func start(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {
@@ -3830,9 +3830,9 @@ private actor IndexedStopGate {
 
 private final class ModelDependencyState: Sendable {
     private struct State: ~Copyable {
-        var loadedConfiguration = TrackIsBackConfiguration.default
+        var loadedConfiguration = PaddrConfiguration.default
         var loadedProfileDocument: ConfigurationProfileDocument?
-        var savedConfiguration: TrackIsBackConfiguration?
+        var savedConfiguration: PaddrConfiguration?
         var savedProfileDocument: ConfigurationProfileDocument?
         var receiver: String?
         var openedPrivacySettingsAnchors: [String] = []
@@ -3855,7 +3855,7 @@ private final class ModelDependencyState: Sendable {
     }
     private let state = Mutex(State())
 
-    var loadedConfiguration: TrackIsBackConfiguration {
+    var loadedConfiguration: PaddrConfiguration {
         get { state.withLock { $0.loadedConfiguration } }
         set { state.withLock { $0.loadedConfiguration = newValue } }
     }
@@ -3863,7 +3863,7 @@ private final class ModelDependencyState: Sendable {
         get { state.withLock { $0.loadedProfileDocument } }
         set { state.withLock { $0.loadedProfileDocument = newValue } }
     }
-    var savedConfiguration: TrackIsBackConfiguration? {
+    var savedConfiguration: PaddrConfiguration? {
         get { state.withLock { $0.savedConfiguration } }
         set { state.withLock { $0.savedConfiguration = newValue } }
     }
@@ -3964,14 +3964,14 @@ private actor RecordingSession: TrackpadSessionControlling {
     private var continuation: AsyncStream<TrackpadSessionEvent>.Continuation?
     private var workerCount = 0
     private(set) var maximumWorkerCount = 0
-    private(set) var startedConfigurations: [TrackIsBackConfiguration] = []
+    private(set) var startedConfigurations: [PaddrConfiguration] = []
 
     init(recorder: OperationRecorder) {
         self.recorder = recorder
     }
 
     func start(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate?
     ) async -> AsyncStream<TrackpadSessionEvent> {

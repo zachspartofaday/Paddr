@@ -289,7 +289,7 @@ final class SessionTests: XCTestCase {
     func testStopTreatsDeviceErrorsAsCleanTeardown() async {
         let session = TrackpadSession { _, _, _, stopToken, _ in
             while stopToken.shouldContinue {}
-            throw TrackIsBackError.device("No Steam Controller 2 puck interface was found.")
+            throw PaddrError.device("No Steam Controller 2 puck interface was found.")
         }
         _ = await session.start(configuration: configuration(sensitivity: 1))
         let outcome = await session.stop()
@@ -299,7 +299,7 @@ final class SessionTests: XCTestCase {
     func testStopReportsWorkerTeardownFailure() async {
         let session = TrackpadSession { _, _, _, stopToken, _ in
             while stopToken.shouldContinue {}
-            throw TrackIsBackError.output("Could not release held outputs: injected.")
+            throw PaddrError.output("Could not release held outputs: injected.")
         }
         _ = await session.start(configuration: configuration(sensitivity: 1))
         let outcome = await session.stop()
@@ -309,8 +309,8 @@ final class SessionTests: XCTestCase {
         XCTAssertTrue(diagnostic.contains("Could not release held outputs"))
     }
 
-    private func configuration(sensitivity: Double) -> TrackIsBackConfiguration {
-        var configuration = TrackIsBackConfiguration.default
+    private func configuration(sensitivity: Double) -> PaddrConfiguration {
+        var configuration = PaddrConfiguration.default
         configuration.left.sensitivity = sensitivity
         return configuration
     }
@@ -340,7 +340,7 @@ private final class ProgressPressureRuntime: Sendable {
     }
 
     func run(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate?,
         stopToken: TrackpadStopToken,
@@ -388,7 +388,7 @@ private final class ReleasePressureRuntime: Sendable {
     }
 
     func run(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate?,
         stopToken: TrackpadStopToken,
@@ -432,7 +432,7 @@ private final class BatteryPressureRuntime: Sendable {
     }
 
     func run(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate?,
         stopToken: TrackpadStopToken,
@@ -493,7 +493,7 @@ private final class GatedRuntime: Sendable {
     var lifecycleEvents: [String] { state.withLock { $0.lifecycleEvents } }
 
     func run(
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate?,
         stopToken: TrackpadStopToken,

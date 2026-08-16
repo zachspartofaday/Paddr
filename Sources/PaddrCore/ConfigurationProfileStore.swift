@@ -53,15 +53,15 @@ public enum ConfigurationProfileStore {
         do {
             let values = try candidate.resourceValues(forKeys: [.isRegularFileKey])
             guard values.isRegularFile == true else {
-                throw TrackIsBackError.configuration(
+                throw PaddrError.configuration(
                     "Profile storage path is not a regular file: \(candidate.path)."
                 )
             }
             data = try Data(contentsOf: candidate)
-        } catch let error as TrackIsBackError {
+        } catch let error as PaddrError {
             throw error
         } catch {
-            throw TrackIsBackError.configuration(
+            throw PaddrError.configuration(
                 "Could not read profile storage at \(candidate.path): \(error)"
             )
         }
@@ -78,7 +78,7 @@ public enum ConfigurationProfileStore {
 
             let legacy = try decodeLegacyConfiguration(data)
             var migrated = ConfigurationProfileDocument.default
-            if legacy == TrackIsBackConfiguration.formerCoupledDefault {
+            if legacy == PaddrConfiguration.formerCoupledDefault {
                 migrated.builtInDefaultCenterTapTrackingMode = .coupled
             } else if legacy != .default {
                 let previous = try migrated.createProfile(
@@ -94,15 +94,15 @@ public enum ConfigurationProfileStore {
                 )
                 try writeAtomically(try encoded(migrated), destination)
             } catch {
-                throw TrackIsBackError.configuration(
+                throw PaddrError.configuration(
                     "Could not migrate configuration to profiles at \(destination.path). The original file at \(candidate.path) was preserved: \(error)"
                 )
             }
             return ConfigurationProfileLoadResult(document: migrated)
-        } catch let error as TrackIsBackError {
+        } catch let error as PaddrError {
             throw error
         } catch {
-            throw TrackIsBackError.configuration(
+            throw PaddrError.configuration(
                 "Could not load profile storage at \(candidate.path): \(error)"
             )
         }
@@ -121,30 +121,30 @@ public enum ConfigurationProfileStore {
                 withIntermediateDirectories: true
             )
             try writeAtomically(data, destination)
-        } catch let error as TrackIsBackError {
+        } catch let error as PaddrError {
             throw error
         } catch {
-            throw TrackIsBackError.configuration(
+            throw PaddrError.configuration(
                 "Could not save profiles at \(destination.path): \(error)"
             )
         }
     }
 
-    static func decodeConfiguration(from data: Data) throws -> TrackIsBackConfiguration {
+    static func decodeConfiguration(from data: Data) throws -> PaddrConfiguration {
         try decodeConfigurationInput(from: data).configuration
     }
 
     static func decodeConfigurationInput(
         from data: Data
     ) throws -> (
-        configuration: TrackIsBackConfiguration,
+        configuration: PaddrConfiguration,
         profileDocument: ConfigurationProfileDocument?
     ) {
         if try isProfileDocument(data) {
             let document = try JSONDecoder().decode(ConfigurationProfileDocument.self, from: data)
             let validated = try document.validated()
             guard let active = validated.activeProfile else {
-                throw TrackIsBackError.configuration("The active profile does not exist.")
+                throw PaddrError.configuration("The active profile does not exist.")
             }
             return (active.configuration, validated)
         }
@@ -153,21 +153,21 @@ public enum ConfigurationProfileStore {
 
     static func isProfileDocument(_ data: Data) throws -> Bool {
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw TrackIsBackError.configuration("Configuration JSON must contain an object.")
+            throw PaddrError.configuration("Configuration JSON must contain an object.")
         }
         return object["schemaVersion"] != nil
             || object["activeProfileID"] != nil
             || object["userProfiles"] != nil
     }
 
-    private static func decodeLegacyConfiguration(_ data: Data) throws -> TrackIsBackConfiguration {
+    private static func decodeLegacyConfiguration(_ data: Data) throws -> PaddrConfiguration {
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               object["left"] != nil || object["right"] != nil else {
-            throw TrackIsBackError.configuration(
+            throw PaddrError.configuration(
                 "Configuration JSON is neither a profile document nor a legacy left/right configuration."
             )
         }
-        return try JSONDecoder().decode(TrackIsBackConfiguration.self, from: data).validated()
+        return try JSONDecoder().decode(PaddrConfiguration.self, from: data).validated()
     }
 
     private static func atomicWrite(_ data: Data, _ destination: URL) throws {

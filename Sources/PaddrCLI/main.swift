@@ -3,7 +3,7 @@ import Foundation
 import PaddrCore
 
 private struct CLIOptions {
-    var configuration = TrackIsBackConfiguration.default
+    var configuration = PaddrConfiguration.default
     var configurationURL: URL?
     var profileStoreURL: URL?
     var profileDocument: ConfigurationProfileDocument?
@@ -86,7 +86,7 @@ private func help() -> String {
 
 private func value(after option: String, in args: [String]) throws -> String? {
     guard let index = args.firstIndex(of: option) else { return nil }
-    guard index + 1 < args.count else { throw TrackIsBackError.configuration("\(option) requires a value.") }
+    guard index + 1 < args.count else { throw PaddrError.configuration("\(option) requires a value.") }
     return args[index + 1]
 }
 
@@ -103,21 +103,21 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
         return options
     }
     for option in ["--config", "--profile-store"] where args.filter({ $0 == option }).count > 1 {
-        throw TrackIsBackError.configuration("\(option) may only be specified once.")
+        throw PaddrError.configuration("\(option) may only be specified once.")
     }
     let explicitConfigurationURL = try value(after: "--config", in: args).map(url)
     let profileStoreURL = try value(after: "--profile-store", in: args).map(url)
     let selectProfile = try value(after: "--select-profile", in: args)
     let listsProfiles = args.contains("--list-profiles")
     guard !(listsProfiles && selectProfile != nil) else {
-        throw TrackIsBackError.configuration(
+        throw PaddrError.configuration(
             "--list-profiles and --select-profile are mutually exclusive."
         )
     }
     let isProfileOperation = listsProfiles || selectProfile != nil
     if isProfileOperation {
         guard explicitConfigurationURL == nil else {
-            throw TrackIsBackError.configuration(
+            throw PaddrError.configuration(
                 "--config cannot be combined with profile operations; use --profile-store for canonical storage."
             )
         }
@@ -128,20 +128,20 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
                 operationIndex += 1
             case "--profile-store", "--select-profile":
                 guard operationIndex + 1 < args.count else {
-                    throw TrackIsBackError.configuration(
+                    throw PaddrError.configuration(
                         "\(args[operationIndex]) requires a value."
                     )
                 }
                 operationIndex += 2
             default:
-                throw TrackIsBackError.configuration(
+                throw PaddrError.configuration(
                     "Profile list/select operations cannot be combined with runtime or mapping options."
                 )
             }
         }
     }
 
-    let configuration: TrackIsBackConfiguration
+    let configuration: PaddrConfiguration
     let profileDocument: ConfigurationProfileDocument?
     if let explicitConfigurationURL {
         let loaded = try ConfigurationStore.loadInput(from: explicitConfigurationURL)
@@ -164,7 +164,7 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
 
     func parseDouble(_ raw: String, option: String) throws -> Double {
         guard let value = Double(raw), value.isFinite else {
-            throw TrackIsBackError.configuration("\(option) requires a finite number.")
+            throw PaddrError.configuration("\(option) requires a finite number.")
         }
         return value
     }
@@ -179,7 +179,7 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
         let argument = args[index]
         func nextValue() throws -> String {
             index += 1
-            guard index < args.count else { throw TrackIsBackError.configuration("\(argument) requires a value.") }
+            guard index < args.count else { throw PaddrError.configuration("\(argument) requires a value.") }
             return args[index]
         }
 
@@ -196,7 +196,7 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
         case "--write-config": options.writeConfigurationURL = url(try nextValue())
         case "--duration":
             let duration = try parseDouble(nextValue(), option: argument)
-            guard duration > 0 else { throw TrackIsBackError.configuration("--duration must be positive.") }
+            guard duration > 0 else { throw PaddrError.configuration("--duration must be positive.") }
             options.durationSeconds = duration
         case "--tap-max-ms":
             let value = try parseDouble(nextValue(), option: argument)
@@ -209,7 +209,7 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
         case "--left-mode", "--right-mode":
             let side: PadSide = argument.hasPrefix("--left") ? .left : .right
             guard let mode = PadMode(rawValue: try nextValue()) else {
-                throw TrackIsBackError.configuration("\(argument) requires disabled, mouse, scroll, or dpad.")
+                throw PaddrError.configuration("\(argument) requires disabled, mouse, scroll, or dpad.")
             }
             setPad(side) { $0.mode = mode }
         case "--left-sensitivity", "--right-sensitivity":
@@ -224,7 +224,7 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
             let side: PadSide = argument.hasPrefix("--left") ? .left : .right
             let value = try parseDouble(nextValue(), option: argument)
             guard ConfigurationLimits.scrollSensitivity.contains(value) else {
-                throw TrackIsBackError.configuration("\(argument) must be between 0 and 1.")
+                throw PaddrError.configuration("\(argument) must be between 0 and 1.")
             }
             setPad(side) { $0.scrollSensitivity = value }
         case "--left-mouse-deadzone", "--right-mouse-deadzone":
@@ -234,7 +234,7 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
         case "--left-center-tap-tracking", "--right-center-tap-tracking":
             let side: PadSide = argument.hasPrefix("--left") ? .left : .right
             guard let mode = CenterTapTrackingMode(rawValue: try nextValue()) else {
-                throw TrackIsBackError.configuration(
+                throw PaddrError.configuration(
                     "\(argument) requires coupled or decoupled. Use coupled to make the tap radius a pointer dead zone, or decoupled to track inside it."
                 )
             }
@@ -246,7 +246,7 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
         case "--left-layout", "--right-layout":
             let side: PadSide = argument.hasPrefix("--left") ? .left : .right
             guard let layout = PadZoneLayout(rawValue: try nextValue()) else {
-                throw TrackIsBackError.configuration(
+                throw PaddrError.configuration(
                     "\(argument) requires radial-four, four-corners, horizontal-two, vertical-two, or grid-nine."
                 )
             }
@@ -292,7 +292,7 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
                 }
             }
         default:
-            throw TrackIsBackError.configuration("Unknown option: \(argument)")
+            throw PaddrError.configuration("Unknown option: \(argument)")
         }
         index += 1
     }
@@ -301,7 +301,7 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
     return options
 }
 
-private func printConfiguration(_ configuration: TrackIsBackConfiguration) throws {
+private func printConfiguration(_ configuration: PaddrConfiguration) throws {
     FileHandle.standardOutput.write(try ConfigurationStore.encoded(configuration))
 }
 
@@ -313,15 +313,15 @@ private func printProfiles(_ document: ConfigurationProfileDocument) {
 }
 
 private func canonicalDocument(
-    for configuration: TrackIsBackConfiguration,
+    for configuration: PaddrConfiguration,
     preserving source: ConfigurationProfileDocument?
 ) throws -> ConfigurationProfileDocument {
     var document = source ?? .default
-    if source == nil, configuration == TrackIsBackConfiguration.formerCoupledDefault {
+    if source == nil, configuration == PaddrConfiguration.formerCoupledDefault {
         document.builtInDefaultCenterTapTrackingMode = .coupled
     }
     guard let builtInDefaultConfiguration = document.profile(id: .default)?.configuration else {
-        throw TrackIsBackError.configuration("The built-in Default profile is unavailable.")
+        throw PaddrError.configuration("The built-in Default profile is unavailable.")
     }
     if document.activeProfileID == .default, configuration != builtInDefaultConfiguration {
         var candidate = "CLI configuration"
@@ -342,7 +342,7 @@ private func run(_ options: CLIOptions) throws {
     print("Input monitoring: \(Permissions.inputMonitoringAccess(requestingIfUndetermined: false) == .granted ? "granted" : "needed to receive puck reports")")
     print("Accessibility: \(Permissions.accessibilityTrusted(prompt: false) ? "granted" : "needed for live output")")
     guard let deviceSummary = TritonHIDDevice.probe() else {
-        throw TrackIsBackError.device("No Steam Controller 2 puck interface was found.")
+        throw PaddrError.device("No Steam Controller 2 puck interface was found.")
     }
     print("Selected device: \(deviceSummary.description)")
     print("Left pad: \(options.configuration.left.mode.rawValue), pointer sensitivity \(options.configuration.left.sensitivity), pointer acceleration \(options.configuration.left.mouseAcceleration), scroll sensitivity \(options.configuration.left.scrollSensitivity), center tap tracking \(options.configuration.left.centerTapTrackingMode.rawValue), tap \(options.configuration.left.tapKey ?? "none")")
@@ -354,7 +354,7 @@ private func run(_ options: CLIOptions) throws {
         return
     }
     if !options.observeOnly, !Permissions.accessibilityTrusted(prompt: true) {
-        throw TrackIsBackError.permission("Accessibility is required for mouse, scroll, and keyboard output. Grant it, then rerun.")
+        throw PaddrError.permission("Accessibility is required for mouse, scroll, and keyboard output. Grant it, then rerun.")
     }
 
     let stop = TrackpadStopToken()
@@ -395,17 +395,17 @@ do {
     }
     if options.listProfiles {
         guard let document = options.profileDocument else {
-            throw TrackIsBackError.configuration("Profile storage is unavailable.")
+            throw PaddrError.configuration("Profile storage is unavailable.")
         }
         printProfiles(document)
         exit(0)
     }
     if let selector = options.selectProfile {
         guard var document = options.profileDocument else {
-            throw TrackIsBackError.configuration("Profile storage is unavailable.")
+            throw PaddrError.configuration("Profile storage is unavailable.")
         }
         guard let profile = document.profile(matching: selector) else {
-            throw TrackIsBackError.configuration(
+            throw PaddrError.configuration(
                 "No profile matches \(selector). Use --list-profiles to see names and stable IDs."
             )
         }

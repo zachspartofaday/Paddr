@@ -4,11 +4,11 @@ import XCTest
 
 final class ConfigurationProfileTests: XCTestCase {
     func testCanonicalDocumentRoundTripsIndependentCompleteConfigurations() throws {
-        var first = TrackIsBackConfiguration.default
+        var first = PaddrConfiguration.default
         first.left.sensitivity = 2.5
         first.left.mouseAcceleration = 0.3
         first.right.tapKey = "space"
-        var second = TrackIsBackConfiguration.default
+        var second = PaddrConfiguration.default
         second.left.mode = .dpad
         second.left.zoneLayout = .gridNine
         second.left.gridKeys.center = "return"
@@ -234,7 +234,7 @@ final class ConfigurationProfileTests: XCTestCase {
     }
 
     func testDuplicatePreservesExplicitMixedTrackingModes() throws {
-        var sourceConfiguration = TrackIsBackConfiguration.default
+        var sourceConfiguration = PaddrConfiguration.default
         sourceConfiguration.left.centerTapTrackingMode = .coupled
         sourceConfiguration.right.centerTapTrackingMode = .decoupled
         var document = ConfigurationProfileDocument.default
@@ -257,7 +257,7 @@ final class ConfigurationProfileTests: XCTestCase {
 
         XCTAssertThrowsError(try document.renameProfile(id: .default, to: "Other"))
         XCTAssertThrowsError(try document.deleteProfile(id: .default))
-        var changed = TrackIsBackConfiguration.default
+        var changed = PaddrConfiguration.default
         changed.left.sensitivity = 3
         XCTAssertThrowsError(try document.replaceConfiguration(for: .default, with: changed))
         XCTAssertNoThrow(try document.replaceConfiguration(for: .default, with: .default))
@@ -323,7 +323,7 @@ final class ConfigurationProfileTests: XCTestCase {
         XCTAssertTrue(result.document.userProfiles.isEmpty)
         XCTAssertEqual(
             result.document.activeProfile?.configuration,
-            TrackIsBackConfiguration.formerCoupledDefault
+            PaddrConfiguration.formerCoupledDefault
         )
         XCTAssertEqual(result.document.builtInDefaultCenterTapTrackingMode, .coupled)
         XCTAssertEqual(
@@ -459,7 +459,7 @@ final class ConfigurationProfileTests: XCTestCase {
         """
         let legacyData = Data(legacyJSON.utf8)
         let legacy = try JSONDecoder().decode(
-            TrackIsBackConfiguration.self,
+            PaddrConfiguration.self,
             from: legacyData
         ).validated()
         try legacyData.write(to: fixture.url)
@@ -496,7 +496,7 @@ final class ConfigurationProfileTests: XCTestCase {
     func testMigrationFailurePreservesOriginalBytes() throws {
         let fixture = try temporaryStore()
         defer { try? FileManager.default.removeItem(at: fixture.home) }
-        var legacy = TrackIsBackConfiguration.default
+        var legacy = PaddrConfiguration.default
         legacy.left.sensitivity = 5
         let original = try ConfigurationStore.encoded(legacy)
         try original.write(to: fixture.url)
@@ -553,7 +553,7 @@ final class ConfigurationProfileTests: XCTestCase {
         let fixture = try temporaryStore()
         defer { try? FileManager.default.removeItem(at: fixture.home) }
         let legacyURL = fixture.home.appendingPathComponent("legacy.json")
-        var configuration = TrackIsBackConfiguration.default
+        var configuration = PaddrConfiguration.default
         configuration.left.sensitivity = 3.5
 
         try ConfigurationStore.save(configuration, to: legacyURL)

@@ -179,7 +179,7 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
         }
         guard !opened.isEmpty else {
             IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
-            throw TrackIsBackError.device(
+            throw PaddrError.device(
                 "Could not passively open any SC2 puck interface (\(failures.joined(separator: "; ")))."
             )
         }
@@ -216,11 +216,11 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
     public static func open() throws -> TritonHIDDevice {
         #if canImport(IOKit)
         guard let result = selectedDevices() else {
-            throw TrackIsBackError.device("No Steam Controller 2 puck interface was found. Connect through the puck.")
+            throw PaddrError.device("No Steam Controller 2 puck interface was found. Connect through the puck.")
         }
         return try TritonHIDDevice(manager: result.manager, candidates: result.candidates, productID: result.productID)
         #else
-        throw TrackIsBackError.device("IOHID is unavailable on this platform.")
+        throw PaddrError.device("IOHID is unavailable on this platform.")
         #endif
     }
 
@@ -290,7 +290,7 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
         }
         return callbackState.isRemoved ? .deviceRemoved : .stopped
         #else
-        throw TrackIsBackError.device("IOHID is unavailable on this platform.")
+        throw PaddrError.device("IOHID is unavailable on this platform.")
         #endif
     }
 
