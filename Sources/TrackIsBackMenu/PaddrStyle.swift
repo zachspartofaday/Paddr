@@ -59,7 +59,7 @@ enum PaddrStyle {
     static let guideWindowSize = NSSize(width: 680, height: 430)
     static let minimumGuideWindowSize = NSSize(width: 560, height: 430)
     static let padColumnWidth: CGFloat = 530
-    static let padConfigurationCardHeight: CGFloat = 380
+    static let padConfigurationCardHeight: CGFloat = 420
     static let zoneMapWidth: CGFloat = 190
     static let zoneMapHeight: CGFloat = 182
     static let padPreviewCornerRadius: CGFloat = 30

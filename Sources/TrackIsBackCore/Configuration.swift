@@ -16,6 +16,11 @@ public enum PadMode: String, Codable, CaseIterable, Sendable {
     }
 }
 
+public enum CenterTapTrackingMode: String, Codable, CaseIterable, Sendable {
+    case coupled
+    case decoupled
+}
+
 public enum ConfigurationLimits {
     public static let sensitivity = 0.1...20.0
     public static let scrollSensitivity = 0.0...1.0
@@ -130,6 +135,7 @@ public struct PadConfiguration: Codable, Equatable, Sendable {
     public var scrollSensitivity: Double
     public var mouseAcceleration: Double
     public var mouseDeadzone: Double
+    public var centerTapTrackingMode: CenterTapTrackingMode
     public var tapKey: String?
     public var tapMaximumMilliseconds: Double
     public var tapMaximumMovement: Double
@@ -144,6 +150,7 @@ public struct PadConfiguration: Codable, Equatable, Sendable {
         scrollSensitivity: Double = 1,
         mouseAcceleration: Double = 0,
         mouseDeadzone: Double = 0,
+        centerTapTrackingMode: CenterTapTrackingMode = .decoupled,
         tapKey: String? = nil,
         tapMaximumMilliseconds: Double = 250,
         tapMaximumMovement: Double = 2_200,
@@ -157,6 +164,7 @@ public struct PadConfiguration: Codable, Equatable, Sendable {
         self.scrollSensitivity = scrollSensitivity
         self.mouseAcceleration = mouseAcceleration
         self.mouseDeadzone = mouseDeadzone
+        self.centerTapTrackingMode = centerTapTrackingMode
         self.tapKey = tapKey
         self.tapMaximumMilliseconds = tapMaximumMilliseconds
         self.tapMaximumMovement = tapMaximumMovement
@@ -215,8 +223,8 @@ public struct PadConfiguration: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case mode, sensitivity, scrollSensitivity, mouseAcceleration, mouseDeadzone, tapKey
-        case tapMaximumMilliseconds, tapMaximumMovement, dpadDeadzone, zoneLayout, dpadKeys, gridKeys
+        case mode, sensitivity, scrollSensitivity, mouseAcceleration, mouseDeadzone, centerTapTrackingMode
+        case tapKey, tapMaximumMilliseconds, tapMaximumMovement, dpadDeadzone, zoneLayout, dpadKeys, gridKeys
     }
 
     public init(from decoder: Decoder) throws {
@@ -229,6 +237,10 @@ public struct PadConfiguration: Codable, Equatable, Sendable {
                 ?? min(sensitivity, ConfigurationLimits.scrollSensitivity.upperBound),
             mouseAcceleration: try values.decodeIfPresent(Double.self, forKey: .mouseAcceleration) ?? 0,
             mouseDeadzone: try values.decodeIfPresent(Double.self, forKey: .mouseDeadzone) ?? 0,
+            centerTapTrackingMode: try values.decodeIfPresent(
+                CenterTapTrackingMode.self,
+                forKey: .centerTapTrackingMode
+            ) ?? .coupled,
             tapKey: try values.decodeIfPresent(String.self, forKey: .tapKey),
             tapMaximumMilliseconds: try values.decodeIfPresent(Double.self, forKey: .tapMaximumMilliseconds) ?? 250,
             tapMaximumMovement: try values.decodeIfPresent(Double.self, forKey: .tapMaximumMovement) ?? 2_200,
@@ -249,6 +261,11 @@ public struct TrackIsBackConfiguration: Codable, Equatable, Sendable {
         right: PadConfiguration(mode: .mouse)
     )
 
+    public static let formerCoupledDefault = TrackIsBackConfiguration(
+        left: PadConfiguration(mode: .scroll, centerTapTrackingMode: .coupled),
+        right: PadConfiguration(mode: .mouse, centerTapTrackingMode: .coupled)
+    )
+
     private enum CodingKeys: String, CodingKey { case left, right }
 
     public init(left: PadConfiguration, right: PadConfiguration) {
@@ -258,8 +275,12 @@ public struct TrackIsBackConfiguration: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
-        left = try values.decodeIfPresent(PadConfiguration.self, forKey: .left) ?? Self.default.left
-        right = try values.decodeIfPresent(PadConfiguration.self, forKey: .right) ?? Self.default.right
+        var missingLeft = Self.default.left
+        var missingRight = Self.default.right
+        missingLeft.centerTapTrackingMode = .coupled
+        missingRight.centerTapTrackingMode = .coupled
+        left = try values.decodeIfPresent(PadConfiguration.self, forKey: .left) ?? missingLeft
+        right = try values.decodeIfPresent(PadConfiguration.self, forKey: .right) ?? missingRight
     }
 
     public func validated() throws -> TrackIsBackConfiguration {

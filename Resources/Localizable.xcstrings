@@ -1590,12 +1590,13 @@
         }
       }
     },
-    "The radius starts at the pad center. Movement pauses inside it, and leaving it cancels the tap.": {
+    "The radius starts at the pad center. Leaving it cancels the tap. At 0%, taps use the maximum-movement limit.": {
+      "comment": "Help text for the Pointer-mode center tap radius slider.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The radius starts at the pad center. Movement pauses inside it, and leaving it cancels the tap."
+            "value": "The radius starts at the pad center. Leaving it cancels the tap. At 0%, taps use the maximum-movement limit."
           }
         }
       }
@@ -1687,6 +1688,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Touches inside the neutral zone do not emit an action."
+          }
+        }
+      }
+    },
+    "Track pointer inside tap radius": {
+      "comment": "Per-pad Pointer-mode toggle. On means pointer tracking continues inside and across the center tap radius.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track pointer inside tap radius"
           }
         }
       }
@@ -1861,6 +1873,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Welcome to Paddr"
+          }
+        }
+      }
+    },
+    "When on, pointer movement continues inside and across the center tap radius. When off, the radius also acts as a pointer dead zone.": {
+      "comment": "Help text for the per-pad center tap tracking toggle.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When on, pointer movement continues inside and across the center tap radius. When off, the radius also acts as a pointer dead zone."
           }
         }
       }

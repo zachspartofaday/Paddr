@@ -78,7 +78,9 @@ public enum ConfigurationProfileStore {
 
             let legacy = try decodeLegacyConfiguration(data)
             var migrated = ConfigurationProfileDocument.default
-            if legacy != .default {
+            if legacy == TrackIsBackConfiguration.formerCoupledDefault {
+                migrated.builtInDefaultCenterTapTrackingMode = .coupled
+            } else if legacy != .default {
                 let previous = try migrated.createProfile(
                     named: "Previous configuration",
                     configuration: legacy

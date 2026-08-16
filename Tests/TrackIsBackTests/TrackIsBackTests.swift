@@ -308,7 +308,12 @@ final class TrackIsBackTests: XCTestCase {
     func testMouseCenterTapZoneSuppressesMovementAndAllowsTap() throws {
         var mapper = PadMapper(
             side: .right,
-            configuration: PadConfiguration(mode: .mouse, mouseDeadzone: 0.2, tapKey: "space")
+            configuration: PadConfiguration(
+                mode: .mouse,
+                mouseDeadzone: 0.2,
+                centerTapTrackingMode: .coupled,
+                tapKey: "space"
+            )
         )
         _ = try mapper.process(sample(touched: true, x: 0, y: 0, time: 1_000_000))
         XCTAssertTrue(try mapper.process(sample(touched: true, x: 2_000, y: 1_000, time: 10_000_000)).isEmpty)
@@ -318,7 +323,12 @@ final class TrackIsBackTests: XCTestCase {
     }
 
     func testFullMouseCenterTapRadiusIncludesPadEdge() throws {
-        let configuration = PadConfiguration(mode: .mouse, mouseDeadzone: 1, tapKey: "space")
+        let configuration = PadConfiguration(
+            mode: .mouse,
+            mouseDeadzone: 1,
+            centerTapTrackingMode: .coupled,
+            tapKey: "space"
+        )
         var mapper = PadMapper(side: .right, configuration: configuration)
 
         XCTAssertNoThrow(try TrackIsBackConfiguration(left: .init(mode: .disabled), right: configuration).validated())
@@ -332,7 +342,12 @@ final class TrackIsBackTests: XCTestCase {
     func testLeavingMouseCenterTapZoneDoesNotJumpCursor() throws {
         var mapper = PadMapper(
             side: .right,
-            configuration: PadConfiguration(mode: .mouse, mouseDeadzone: 0.2, tapKey: "space")
+            configuration: PadConfiguration(
+                mode: .mouse,
+                mouseDeadzone: 0.2,
+                centerTapTrackingMode: .coupled,
+                tapKey: "space"
+            )
         )
         _ = try mapper.process(sample(touched: true, x: 0, y: 0, time: 1))
         XCTAssertTrue(try mapper.process(sample(touched: true, x: 10_000, y: 0, time: 2)).isEmpty)
@@ -343,10 +358,267 @@ final class TrackIsBackTests: XCTestCase {
         XCTAssertTrue(try mapper.process(sample(touched: false, x: 10_700, y: 0, time: 4)).isEmpty)
     }
 
-    func testMovedTouchDoesNotTap() throws {
+    func testDecoupledPointerTracksInsideAndAcrossCenterTapRadius() throws {
         var mapper = PadMapper(
             side: .right,
-            configuration: PadConfiguration(mode: .mouse, tapKey: "space", tapMaximumMovement: 100)
+            configuration: PadConfiguration(
+                mode: .mouse,
+                mouseDeadzone: 0.2,
+                centerTapTrackingMode: .decoupled
+            )
+        )
+
+        XCTAssertTrue(try mapper.process(sample(touched: true, time: 1)).isEmpty)
+        XCTAssertEqual(
+            try mapper.process(sample(touched: true, x: 700, time: 2)),
+            [.mouseMove(dx: 1, dy: 0)]
+        )
+        XCTAssertEqual(
+            try mapper.process(sample(touched: true, x: 7_000, time: 3)),
+            [.mouseMove(dx: 9, dy: 0)]
+        )
+        XCTAssertEqual(
+            try mapper.process(sample(touched: true, x: 6_300, time: 4)),
+            [.mouseMove(dx: -1, dy: 0)]
+        )
+        XCTAssertEqual(
+            try mapper.process(sample(touched: true, x: 7_000, time: 5)),
+            [.mouseMove(dx: 1, dy: 0)]
+        )
+    }
+
+    func testCenterTapTrackingAndTapEligibilityUseExactNormalizedBoundary() throws {
+        let exactBoundary: Int16 = 16_384
+        let oneUnitOutside: Int16 = 16_385
+        let tapActions: [TrackpadOutputAction] = [
+            .key(try KeyCatalog.resolve("space"), isPressed: true),
+            .key(try KeyCatalog.resolve("space"), isPressed: false)
+        ]
+
+        var coupledAtBoundary = PadMapper(
+            side: .right,
+            configuration: PadConfiguration(
+                mode: .mouse,
+                mouseDeadzone: 0.5,
+                centerTapTrackingMode: .coupled
+            )
+        )
+        _ = try coupledAtBoundary.process(sample(touched: true, x: 15_684, time: 1))
+        XCTAssertTrue(
+            try coupledAtBoundary.process(
+                sample(touched: true, x: exactBoundary, time: 2)
+            ).isEmpty
+        )
+
+        var coupledCrossing = PadMapper(
+            side: .right,
+            configuration: PadConfiguration(
+                mode: .mouse,
+                mouseDeadzone: 0.5,
+                centerTapTrackingMode: .coupled
+            )
+        )
+        _ = try coupledCrossing.process(sample(touched: true, x: 15_685, time: 1))
+        XCTAssertTrue(
+            try coupledCrossing.process(
+                sample(touched: true, x: oneUnitOutside, time: 2)
+            ).isEmpty
+        )
+        XCTAssertEqual(
+            try coupledCrossing.process(sample(touched: true, x: 17_085, time: 3)),
+            [.mouseMove(dx: 1, dy: 0)]
+        )
+
+        var decoupledAtBoundary = PadMapper(
+            side: .right,
+            configuration: PadConfiguration(
+                mode: .mouse,
+                mouseDeadzone: 0.5,
+                centerTapTrackingMode: .decoupled,
+                tapKey: "space"
+            )
+        )
+        _ = try decoupledAtBoundary.process(sample(touched: true, x: 15_684, time: 1))
+        XCTAssertEqual(
+            try decoupledAtBoundary.process(
+                sample(touched: true, x: exactBoundary, time: 2)
+            ),
+            [.mouseMove(dx: 1, dy: 0)]
+        )
+        XCTAssertEqual(
+            try decoupledAtBoundary.process(
+                sample(touched: false, x: exactBoundary, time: 3)
+            ),
+            tapActions
+        )
+
+        var decoupledCrossing = PadMapper(
+            side: .right,
+            configuration: PadConfiguration(
+                mode: .mouse,
+                mouseDeadzone: 0.5,
+                centerTapTrackingMode: .decoupled,
+                tapKey: "space"
+            )
+        )
+        _ = try decoupledCrossing.process(sample(touched: true, x: 15_685, time: 1))
+        XCTAssertEqual(
+            try decoupledCrossing.process(
+                sample(touched: true, x: oneUnitOutside, time: 2)
+            ),
+            [.mouseMove(dx: 1, dy: 0)]
+        )
+        XCTAssertTrue(
+            try decoupledCrossing.process(
+                sample(touched: false, x: oneUnitOutside, time: 3)
+            ).isEmpty
+        )
+    }
+
+    func testDecoupledFirstTouchIsBaselineWithoutCatchUpAtRadiusZero() throws {
+        var mapper = PadMapper(
+            side: .right,
+            configuration: PadConfiguration(
+                mode: .mouse,
+                mouseDeadzone: 0,
+                centerTapTrackingMode: .decoupled
+            )
+        )
+
+        XCTAssertTrue(
+            try mapper.process(sample(touched: false, x: -20_000, time: 1)).isEmpty
+        )
+        XCTAssertTrue(
+            try mapper.process(sample(touched: true, x: 0, time: 2)).isEmpty
+        )
+        XCTAssertEqual(
+            try mapper.process(sample(touched: true, x: 700, time: 3)),
+            [.mouseMove(dx: 1, dy: 0)]
+        )
+    }
+
+    func testDecoupledFullRadiusStillTracksPointerAtPadEdge() throws {
+        var mapper = PadMapper(
+            side: .right,
+            configuration: PadConfiguration(
+                mode: .mouse,
+                mouseDeadzone: 1,
+                centerTapTrackingMode: .decoupled
+            )
+        )
+
+        XCTAssertTrue(
+            try mapper.process(sample(touched: true, x: 32_067, time: 1)).isEmpty
+        )
+        XCTAssertEqual(
+            try mapper.process(sample(touched: true, x: .max, time: 2)),
+            [.mouseMove(dx: 1, dy: 0)]
+        )
+    }
+
+    func testDecoupledMovementInsidePositiveRadiusCanStillTap() throws {
+        var mapper = PadMapper(
+            side: .right,
+            configuration: PadConfiguration(
+                mode: .mouse,
+                mouseDeadzone: 0.5,
+                centerTapTrackingMode: .decoupled,
+                tapKey: "space",
+                tapMaximumMovement: 100
+            )
+        )
+
+        _ = try mapper.process(sample(touched: true, time: 1_000_000))
+        XCTAssertEqual(
+            try mapper.process(sample(touched: true, x: 700, time: 2_000_000)),
+            [.mouseMove(dx: 1, dy: 0)]
+        )
+        XCTAssertEqual(
+            try mapper.process(sample(touched: false, x: 700, time: 20_000_000)),
+            [
+                .key(try KeyCatalog.resolve("space"), isPressed: true),
+                .key(try KeyCatalog.resolve("space"), isPressed: false)
+            ]
+        )
+    }
+
+    func testDecoupledInsideMotionPreservesAcceleration() throws {
+        var mapper = PadMapper(
+            side: .right,
+            configuration: PadConfiguration(
+                mode: .mouse,
+                mouseAcceleration: 1,
+                mouseDeadzone: 0.5,
+                centerTapTrackingMode: .decoupled
+            )
+        )
+
+        _ = try mapper.process(sample(touched: true, time: 1_000_000))
+        XCTAssertEqual(
+            try mapper.process(sample(touched: true, x: 700, time: 2_000_000)),
+            [.mouseMove(dx: 4, dy: 0)]
+        )
+    }
+
+    func testCenterTapTrackingModeIsIndependentPerPad() throws {
+        var left = PadMapper(
+            side: .left,
+            configuration: PadConfiguration(
+                mode: .mouse,
+                mouseDeadzone: 0.5,
+                centerTapTrackingMode: .coupled
+            )
+        )
+        var right = PadMapper(
+            side: .right,
+            configuration: PadConfiguration(
+                mode: .mouse,
+                mouseDeadzone: 0.5,
+                centerTapTrackingMode: .decoupled
+            )
+        )
+
+        _ = try left.process(sample(touched: true, time: 1))
+        _ = try right.process(sample(touched: true, time: 1))
+
+        XCTAssertTrue(try left.process(sample(touched: true, x: 700, time: 2)).isEmpty)
+        XCTAssertEqual(
+            try right.process(sample(touched: true, x: 700, time: 2)),
+            [.mouseMove(dx: 1, dy: 0)]
+        )
+    }
+
+    func testDecoupledLeavingTapRadiusCancelsTapWhileTrackingCrossing() throws {
+        var mapper = PadMapper(
+            side: .right,
+            configuration: PadConfiguration(
+                mode: .mouse,
+                mouseDeadzone: 0.2,
+                centerTapTrackingMode: .decoupled,
+                tapKey: "space"
+            )
+        )
+
+        _ = try mapper.process(sample(touched: true, time: 1_000_000))
+        XCTAssertEqual(
+            try mapper.process(sample(touched: true, x: 7_000, time: 2_000_000)),
+            [.mouseMove(dx: 10, dy: 0)]
+        )
+        XCTAssertTrue(
+            try mapper.process(sample(touched: false, x: 7_000, time: 20_000_000)).isEmpty
+        )
+    }
+
+    func testRadiusZeroDecoupledMovementStillUsesTapMaximumMovement() throws {
+        var mapper = PadMapper(
+            side: .right,
+            configuration: PadConfiguration(
+                mode: .mouse,
+                mouseDeadzone: 0,
+                centerTapTrackingMode: .decoupled,
+                tapKey: "space",
+                tapMaximumMovement: 100
+            )
         )
         _ = try mapper.process(sample(touched: true, x: 0, y: 0, time: 1_000_000))
         _ = try mapper.process(sample(touched: true, x: 1_000, y: 0, time: 20_000_000))
@@ -419,7 +691,12 @@ final class TrackIsBackTests: XCTestCase {
 
         var deadzoneAndLift = PadMapper(
             side: .right,
-            configuration: PadConfiguration(mode: .mouse, mouseAcceleration: 0, mouseDeadzone: 0.2)
+            configuration: PadConfiguration(
+                mode: .mouse,
+                mouseAcceleration: 0,
+                mouseDeadzone: 0.2,
+                centerTapTrackingMode: .coupled
+            )
         )
         _ = try deadzoneAndLift.process(sample(touched: true, time: 1))
         XCTAssertTrue(

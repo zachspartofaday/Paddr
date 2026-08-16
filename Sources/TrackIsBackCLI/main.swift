@@ -47,6 +47,10 @@ private func help() -> String {
       --right-scroll-sensitivity N  Right scroll sensitivity, 0...1.
       --left-tap ACTION|none        Tap a key, mouse-left, or mouse-right; likewise --right-tap.
       --left-mouse-deadzone N       Center tap radius from 0...1; likewise --right-mouse-deadzone.
+      --left-center-tap-tracking MODE
+                                    Left coupled uses the radius as a dead zone; decoupled tracks inside it.
+      --right-center-tap-tracking MODE
+                                    Right coupled uses the radius as a dead zone; decoupled tracks inside it.
       --left-up ACTION              Left D-pad up-zone action; likewise --left-right/--left-down/--left-left.
       --right-up ACTION             Right D-pad up-zone action; likewise --right-right/--right-down/--right-left.
       --left-deadzone N             Left D-pad center deadzone from 0..<1.
@@ -227,6 +231,14 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
             let side: PadSide = argument.hasPrefix("--left") ? .left : .right
             let value = try parseDouble(nextValue(), option: argument)
             setPad(side) { $0.mouseDeadzone = value }
+        case "--left-center-tap-tracking", "--right-center-tap-tracking":
+            let side: PadSide = argument.hasPrefix("--left") ? .left : .right
+            guard let mode = CenterTapTrackingMode(rawValue: try nextValue()) else {
+                throw TrackIsBackError.configuration(
+                    "\(argument) requires coupled or decoupled. Use coupled to make the tap radius a pointer dead zone, or decoupled to track inside it."
+                )
+            }
+            setPad(side) { $0.centerTapTrackingMode = mode }
         case "--left-deadzone", "--right-deadzone":
             let side: PadSide = argument.hasPrefix("--left") ? .left : .right
             let value = try parseDouble(nextValue(), option: argument)
@@ -305,7 +317,13 @@ private func canonicalDocument(
     preserving source: ConfigurationProfileDocument?
 ) throws -> ConfigurationProfileDocument {
     var document = source ?? .default
-    if document.activeProfileID == .default, configuration != .default {
+    if source == nil, configuration == TrackIsBackConfiguration.formerCoupledDefault {
+        document.builtInDefaultCenterTapTrackingMode = .coupled
+    }
+    guard let builtInDefaultConfiguration = document.profile(id: .default)?.configuration else {
+        throw TrackIsBackError.configuration("The built-in Default profile is unavailable.")
+    }
+    if document.activeProfileID == .default, configuration != builtInDefaultConfiguration {
         var candidate = "CLI configuration"
         var suffix = 2
         while document.profile(matching: candidate) != nil {
@@ -327,8 +345,8 @@ private func run(_ options: CLIOptions) throws {
         throw TrackIsBackError.device("No Steam Controller 2 puck interface was found.")
     }
     print("Selected device: \(deviceSummary.description)")
-    print("Left pad: \(options.configuration.left.mode.rawValue), pointer sensitivity \(options.configuration.left.sensitivity), pointer acceleration \(options.configuration.left.mouseAcceleration), scroll sensitivity \(options.configuration.left.scrollSensitivity), tap \(options.configuration.left.tapKey ?? "none")")
-    print("Right pad: \(options.configuration.right.mode.rawValue), pointer sensitivity \(options.configuration.right.sensitivity), pointer acceleration \(options.configuration.right.mouseAcceleration), scroll sensitivity \(options.configuration.right.scrollSensitivity), tap \(options.configuration.right.tapKey ?? "none")")
+    print("Left pad: \(options.configuration.left.mode.rawValue), pointer sensitivity \(options.configuration.left.sensitivity), pointer acceleration \(options.configuration.left.mouseAcceleration), scroll sensitivity \(options.configuration.left.scrollSensitivity), center tap tracking \(options.configuration.left.centerTapTrackingMode.rawValue), tap \(options.configuration.left.tapKey ?? "none")")
+    print("Right pad: \(options.configuration.right.mode.rawValue), pointer sensitivity \(options.configuration.right.sensitivity), pointer acceleration \(options.configuration.right.mouseAcceleration), scroll sensitivity \(options.configuration.right.scrollSensitivity), center tap tracking \(options.configuration.right.centerTapTrackingMode.rawValue), tap \(options.configuration.right.tapKey ?? "none")")
     print("Controller feature reports: unavailable by design")
 
     if options.dryRun {

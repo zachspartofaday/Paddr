@@ -99,6 +99,55 @@ final class ConfigurationBoundaryTests: XCTestCase {
         XCTAssertEqual(loaded.right.mouseAcceleration, 0)
     }
 
+    func testOldSchemaMissingWholePadUsesCoupledFallback() throws {
+        let missingRight = try JSONDecoder().decode(
+            TrackIsBackConfiguration.self,
+            from: Data("{\"left\":{\"mode\":\"scroll\"}}".utf8)
+        )
+        let missingLeft = try JSONDecoder().decode(
+            TrackIsBackConfiguration.self,
+            from: Data("{\"right\":{\"mode\":\"mouse\"}}".utf8)
+        )
+
+        XCTAssertEqual(missingRight.left.centerTapTrackingMode, .coupled)
+        XCTAssertEqual(missingRight.right.mode, .mouse)
+        XCTAssertEqual(missingRight.right.centerTapTrackingMode, .coupled)
+        XCTAssertEqual(missingLeft.left.mode, .scroll)
+        XCTAssertEqual(missingLeft.left.centerTapTrackingMode, .coupled)
+        XCTAssertEqual(missingLeft.right.centerTapTrackingMode, .coupled)
+    }
+
+    func testNewPadAndBuiltInDefaultsUseDecoupledCenterTapTracking() {
+        XCTAssertEqual(CenterTapTrackingMode.coupled.rawValue, "coupled")
+        XCTAssertEqual(CenterTapTrackingMode.decoupled.rawValue, "decoupled")
+        XCTAssertEqual(
+            PadConfiguration(mode: .mouse).centerTapTrackingMode,
+            .decoupled
+        )
+        XCTAssertEqual(TrackIsBackConfiguration.default.left.centerTapTrackingMode, .decoupled)
+        XCTAssertEqual(TrackIsBackConfiguration.default.right.centerTapTrackingMode, .decoupled)
+    }
+
+    func testCenterTapTrackingModeEncodesAndRoundTripsIndependentlyForBothPads() throws {
+        var expected = TrackIsBackConfiguration.default
+        expected.left.centerTapTrackingMode = .coupled
+        expected.right.centerTapTrackingMode = .decoupled
+
+        let data = try ConfigurationStore.encoded(expected)
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let left = try XCTUnwrap(object["left"] as? [String: Any])
+        let right = try XCTUnwrap(object["right"] as? [String: Any])
+
+        XCTAssertEqual(left["centerTapTrackingMode"] as? String, "coupled")
+        XCTAssertEqual(right["centerTapTrackingMode"] as? String, "decoupled")
+        XCTAssertEqual(
+            try JSONDecoder().decode(TrackIsBackConfiguration.self, from: data),
+            expected
+        )
+    }
+
     func testOldSchemaScrollSensitivityCarriesExistingValueBelowOne() throws {
         let configuration = try JSONDecoder().decode(
             TrackIsBackConfiguration.self,
@@ -228,6 +277,7 @@ final class ConfigurationBoundaryTests: XCTestCase {
                             mode: .mouse,
                             sensitivity: sensitivity,
                             mouseDeadzone: radius,
+                            centerTapTrackingMode: .decoupled,
                             tapMaximumMilliseconds: milliseconds,
                             tapMaximumMovement: movement,
                             dpadDeadzone: 0
@@ -305,6 +355,7 @@ final class ConfigurationBoundaryTests: XCTestCase {
         XCTAssertEqual(pad.sensitivity, sensitivity, file: file, line: line)
         XCTAssertEqual(pad.mouseAcceleration, 0, file: file, line: line)
         XCTAssertEqual(pad.mouseDeadzone, 0, file: file, line: line)
+        XCTAssertEqual(pad.centerTapTrackingMode, .coupled, file: file, line: line)
         XCTAssertNil(pad.tapKey, file: file, line: line)
         XCTAssertEqual(pad.tapMaximumMilliseconds, 250, file: file, line: line)
         XCTAssertEqual(pad.tapMaximumMovement, 2_200, file: file, line: line)

@@ -59,25 +59,46 @@ public struct ConfigurationProfileDocument: Codable, Equatable, Sendable {
 
     public var schemaVersion: Int
     public var activeProfileID: ConfigurationProfileID
+    public var builtInDefaultCenterTapTrackingMode: CenterTapTrackingMode
     public private(set) var userProfiles: [ConfigurationProfile]
 
     public static let `default` = ConfigurationProfileDocument(
         activeProfileID: .default,
-        userProfiles: []
+        userProfiles: [],
+        builtInDefaultCenterTapTrackingMode: .decoupled
     )
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion, activeProfileID, builtInDefaultCenterTapTrackingMode, userProfiles
+    }
 
     public init(
         activeProfileID: ConfigurationProfileID,
         userProfiles: [ConfigurationProfile],
+        builtInDefaultCenterTapTrackingMode: CenterTapTrackingMode = .decoupled,
         schemaVersion: Int = currentSchemaVersion
     ) {
         self.schemaVersion = schemaVersion
         self.activeProfileID = activeProfileID
+        self.builtInDefaultCenterTapTrackingMode = builtInDefaultCenterTapTrackingMode
         self.userProfiles = userProfiles
     }
 
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            activeProfileID: try values.decode(ConfigurationProfileID.self, forKey: .activeProfileID),
+            userProfiles: try values.decode([ConfigurationProfile].self, forKey: .userProfiles),
+            builtInDefaultCenterTapTrackingMode: try values.decodeIfPresent(
+                CenterTapTrackingMode.self,
+                forKey: .builtInDefaultCenterTapTrackingMode
+            ) ?? .coupled,
+            schemaVersion: try values.decode(Int.self, forKey: .schemaVersion)
+        )
+    }
+
     public var profiles: [ConfigurationProfile] {
-        [.default] + userProfiles
+        [builtInDefaultProfile] + userProfiles
     }
 
     public var activeProfile: ConfigurationProfile? {
@@ -85,7 +106,7 @@ public struct ConfigurationProfileDocument: Codable, Equatable, Sendable {
     }
 
     public func profile(id: ConfigurationProfileID) -> ConfigurationProfile? {
-        if id == .default { return .default }
+        if id == .default { return builtInDefaultProfile }
         return userProfiles.first { $0.id == id }
     }
 
@@ -135,6 +156,7 @@ public struct ConfigurationProfileDocument: Codable, Equatable, Sendable {
         var copy = ConfigurationProfileDocument(
             activeProfileID: activeProfileID,
             userProfiles: validatedProfiles,
+            builtInDefaultCenterTapTrackingMode: builtInDefaultCenterTapTrackingMode,
             schemaVersion: schemaVersion
         )
         guard copy.profile(id: copy.activeProfileID) != nil else {
@@ -207,7 +229,7 @@ public struct ConfigurationProfileDocument: Codable, Equatable, Sendable {
         with configuration: TrackIsBackConfiguration
     ) throws {
         guard id != .default else {
-            guard configuration == .default else {
+            guard configuration == builtInDefaultProfile.configuration else {
                 throw TrackIsBackError.configuration(
                     "The Default profile is built in. Duplicate it before customizing."
                 )
@@ -236,6 +258,17 @@ public struct ConfigurationProfileDocument: Codable, Equatable, Sendable {
         }
         if activeProfileID == id { activeProfileID = .default }
         userProfiles.remove(at: index)
+    }
+
+    private var builtInDefaultProfile: ConfigurationProfile {
+        var configuration = TrackIsBackConfiguration.default
+        configuration.left.centerTapTrackingMode = builtInDefaultCenterTapTrackingMode
+        configuration.right.centerTapTrackingMode = builtInDefaultCenterTapTrackingMode
+        return ConfigurationProfile(
+            id: .default,
+            name: ConfigurationProfile.default.name,
+            configuration: configuration
+        )
     }
 
     private func availableName(_ proposedName: String) throws -> String {
