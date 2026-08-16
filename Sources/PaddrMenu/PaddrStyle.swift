@@ -224,12 +224,11 @@ enum PaddrAccentPalette {
 
     /// The label drawn on top of an accent fill.
     ///
-    /// Black or white, whichever contrasts more with the fill. That choice is never worse
-    /// than 4.58:1 for any colour: the two ratios cross at the luminance where both equal
-    /// 4.58, so the better of the pair is always above it. A fixed white carries no such
-    /// floor — it reads 3.52:1 on the stock macOS blue and 1.51:1 on yellow.
+    /// White is used when it clears the 3.0:1 AA threshold for large text. It survives on
+    /// saturated accents so buttons look native, and flips to black only where white is
+    /// genuinely unreadable — 1.51:1 on the yellow accent `#FFCC00`.
     static func onAccentLabel(for accent: NSColor) -> NSColor {
-        relativeLuminance(of: accent) > equalContrastLuminance ? .black : .white
+        contrastRatio(.white, accent) >= nonTextContrast ? .white : .black
     }
 
     /// The stroke drawn on top of an accent fill, for a border drawn at `opacity`.

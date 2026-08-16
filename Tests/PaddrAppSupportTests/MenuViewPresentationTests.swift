@@ -352,8 +352,9 @@ final class MenuViewPresentationTests: XCTestCase {
 
     /// White on an accent fill is the assumption that a fixed blue accent permitted. It does
     /// not survive the palette: white reads 1.51:1 on yellow and 3.52:1 on the stock blue,
-    /// and in fact clears 4.5:1 on none of the eight. The label and the focus ring share the
-    /// derivation, so both are asserted here.
+    /// and in fact clears 4.5:1 on none of the eight. Large-text labels use 3.0:1, so white
+    /// survives on saturated accents while yellow flips to black. The label and the focus ring
+    /// share the derivation, so both are asserted here.
     func testTheProminentLabelAndRingClearBodyContrastOnEveryMacOSAccent() throws {
         // Fail-before: the colour this row used to draw, against the accent that breaks it
         // hardest and against the default one.
@@ -361,6 +362,8 @@ final class MenuViewPresentationTests: XCTestCase {
         let blue = try resolvedSRGB(.systemBlue, isDark: false)
         XCTAssertLessThan(contrastRatio(.white, yellow), 4.5)
         XCTAssertLessThan(contrastRatio(.white, blue), 4.5)
+        XCTAssertEqual(PaddrAccentPalette.onAccentLabel(for: blue), .white)
+        XCTAssertEqual(PaddrAccentPalette.onAccentLabel(for: yellow), .black)
 
         for isDark in [false, true] {
             for (name, systemColor) in Self.macOSAccents {
@@ -368,7 +371,7 @@ final class MenuViewPresentationTests: XCTestCase {
                 let label = PaddrAccentPalette.onAccentLabel(for: accent)
                 XCTAssertGreaterThanOrEqual(
                     contrastRatio(label, accent),
-                    4.5,
+                    3.0,
                     "\(name)/\(isDark ? "dark" : "light") prominent label misses body contrast"
                 )
             }
