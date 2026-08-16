@@ -126,11 +126,14 @@ struct PaddrControlSurface: ViewModifier {
         RoundedRectangle(cornerRadius: PaddrStyle.Radius.control)
     }
 
+    /// The label colour. The prominent row's label sits on solid accent, and the accent is
+    /// the viewer's macOS accent — so the label is derived from the fill rather than fixed:
+    /// white is unreadable on yellow, and misses 4.5:1 on the stock blue too.
     private var labelStyle: AnyShapeStyle {
         switch state.row {
         case .rest: AnyShapeStyle(.primary)
         case .selected: AnyShapeStyle(PaddrStyle.accentText)
-        case .prominent: AnyShapeStyle(Color.white)
+        case .prominent: AnyShapeStyle(PaddrStyle.onAccent)
         case .disabled: AnyShapeStyle(.secondary)
         }
     }
@@ -164,11 +167,16 @@ struct PaddrControlSurface: ViewModifier {
         }
     }
 
-    private var strokeColor: Color? {
+    /// Every row strokes. The prominent row's was `nil`, which made the interaction
+    /// overlay's stroke term inert on exactly the row that needed it most — a primary button
+    /// read hover and press through the fill delta alone. It cannot stroke in accent, for
+    /// the same reason the focus ring cannot: its fill *is* the accent. It strokes in the
+    /// derived on-accent rim instead.
+    var strokeColor: Color? {
         switch state.row {
         case .rest, .disabled: Color(nsColor: .separatorColor)
         case .selected: PaddrStyle.accent
-        case .prominent: nil
+        case .prominent: PaddrStyle.onAccentStroke
         }
     }
 
@@ -178,7 +186,7 @@ struct PaddrControlSurface: ViewModifier {
         case .rest: 0.50
         case .selected: 0.70
         case .disabled: 0.50 * 0.4
-        case .prominent: 0
+        case .prominent: PaddrStyle.prominentStrokeOpacity
         }
     }
 
@@ -208,8 +216,12 @@ struct PaddrControlSurface: ViewModifier {
     /// 2pt of clearance, so a halo drawn outside the shape would clip. An inset ring has to
     /// contrast with the fill it is drawn on top of, and the prominent row is solid accent:
     /// an accent ring there is the same colour as the button, which is no ring at all.
+    ///
+    /// A fixed white ring was the first repair and is no longer sufficient: once the accent
+    /// became the viewer's, a white ring on a yellow accent is the same defect again, at
+    /// 1.51:1. The ring takes the same derived on-accent colour as the label.
     var focusRingColor: Color {
-        state.row == .prominent ? Color.white : PaddrStyle.accent
+        state.row == .prominent ? PaddrStyle.onAccent : PaddrStyle.accent
     }
 
     @ViewBuilder

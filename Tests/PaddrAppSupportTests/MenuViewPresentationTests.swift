@@ -275,16 +275,7 @@ final class MenuViewPresentationTests: XCTestCase {
     /// `Next` and `Get Started`, both permission `Request` buttons) with no focus indication
     /// at all. The ring is inset rather than outset, so it must contrast with its own fill.
     func testTheFocusRingContrastsWithEveryRowsOwnFill() {
-        // One state per case of `PaddrControlRow`; the row assertion fails if a case is
-        // added without a partner here.
-        let rows: [(PaddrControlRow, PaddrControlState)] = [
-            (.rest, PaddrControlState()),
-            (.selected, PaddrControlState(isSelected: true)),
-            (.prominent, PaddrControlState(isProminent: true)),
-            (.disabled, PaddrControlState(isEnabled: false))
-        ]
-
-        for (expected, state) in rows {
+        for (expected, state) in Self.rowStates {
             XCTAssertEqual(state.row, expected)
             let surface = PaddrControlSurface(state: state)
             XCTAssertNotEqual(
@@ -294,13 +285,185 @@ final class MenuViewPresentationTests: XCTestCase {
             )
         }
 
+        // The prominent ring was a fixed white, which held only while the accent was a fixed
+        // blue. It is now the derived on-accent colour — the same one the prominent label
+        // takes — because a white ring on a yellow accent is this defect a third time.
+        // `testTheProminentLabelAndRingClearBodyContrastOnEveryMacOSAccent` is what pins the
+        // ratio; this pins that the ring and the label are the same derivation.
         XCTAssertEqual(
             PaddrControlSurface(state: PaddrControlState(isProminent: true)).focusRingColor,
-            Color.white
+            PaddrStyle.onAccent
         )
         XCTAssertEqual(
             PaddrControlSurface(state: PaddrControlState()).focusRingColor,
             PaddrStyle.accent
+        )
+    }
+
+    /// Every row strokes, so the interaction overlay's stroke term reaches every row. The
+    /// prominent row's stroke was `nil`, which made hover and press on a primary button read
+    /// through the fill delta alone — the suppression family this slice already closed twice,
+    /// arriving through the stroke instead of through the row resolver.
+    func testTheProminentRowStrokesSoTheOverlayReachesIt() {
+        for (row, state) in Self.rowStates {
+            XCTAssertEqual(state.row, row)
+            XCTAssertNotNil(
+                PaddrControlSurface(state: state).strokeColor,
+                "The \(row) row draws no stroke, so the overlay's stroke term is inert on it"
+            )
+        }
+
+        let prominent = PaddrControlSurface(state: PaddrControlState(isProminent: true))
+        XCTAssertEqual(prominent.strokeColor, PaddrStyle.onAccentStroke)
+        XCTAssertEqual(prominent.resolvedStrokeOpacity, 0.6, accuracy: 0.0001)
+        // The base leaves headroom for the overlay on purpose: at full opacity the clamp
+        // would swallow the term and reinstate the defect above.
+        XCTAssertEqual(
+            PaddrControlSurface(state: PaddrControlState(isProminent: true, isHovering: true))
+                .resolvedStrokeOpacity,
+            0.96,
+            accuracy: 0.0001
+        )
+        XCTAssertGreaterThan(
+            PaddrControlSurface(state: PaddrControlState(isProminent: true, isPressed: true))
+                .resolvedStrokeOpacity,
+            prominent.resolvedStrokeOpacity
+        )
+    }
+
+    /// Status and label text is derived from the viewer's accent, so it has to clear 4.5:1
+    /// for an accent this machine may never have selected. Driven over the whole macOS
+    /// accent set in both appearances rather than over the one accent the test host runs
+    /// with.
+    func testAccentTextClearsBodyContrastOnEveryMacOSAccent() throws {
+        for isDark in [false, true] {
+            let background = try resolvedSRGB(.windowBackgroundColor, isDark: isDark)
+            for (name, systemColor) in Self.macOSAccents {
+                let accent = try resolvedSRGB(systemColor, isDark: isDark)
+                let derived = PaddrAccentPalette.text(from: accent, on: background)
+                XCTAssertGreaterThanOrEqual(
+                    contrastRatio(derived, background),
+                    4.5,
+                    "\(name)/\(isDark ? "dark" : "light") status text misses body contrast"
+                )
+            }
+        }
+    }
+
+    /// White on an accent fill is the assumption that a fixed blue accent permitted. It does
+    /// not survive the palette: white reads 1.51:1 on yellow and 3.52:1 on the stock blue,
+    /// and in fact clears 4.5:1 on none of the eight. The label and the focus ring share the
+    /// derivation, so both are asserted here.
+    func testTheProminentLabelAndRingClearBodyContrastOnEveryMacOSAccent() throws {
+        // Fail-before: the colour this row used to draw, against the accent that breaks it
+        // hardest and against the default one.
+        let yellow = try resolvedSRGB(.systemYellow, isDark: false)
+        let blue = try resolvedSRGB(.systemBlue, isDark: false)
+        XCTAssertLessThan(contrastRatio(.white, yellow), 4.5)
+        XCTAssertLessThan(contrastRatio(.white, blue), 4.5)
+
+        for isDark in [false, true] {
+            for (name, systemColor) in Self.macOSAccents {
+                let accent = try resolvedSRGB(systemColor, isDark: isDark)
+                let label = PaddrAccentPalette.onAccentLabel(for: accent)
+                XCTAssertGreaterThanOrEqual(
+                    contrastRatio(label, accent),
+                    4.5,
+                    "\(name)/\(isDark ? "dark" : "light") prominent label misses body contrast"
+                )
+            }
+        }
+    }
+
+    /// The prominent stroke is a non-text boundary, so it targets 3:1 — and the rim that has
+    /// to clear it is the composited one, drawn at the base opacity over the accent fill,
+    /// not the colour in isolation.
+    func testTheProminentStrokeClearsNonTextContrastOnEveryMacOSAccent() throws {
+        let opacity = PaddrStyle.prominentStrokeOpacity
+        for isDark in [false, true] {
+            for (name, systemColor) in Self.macOSAccents {
+                let accent = try resolvedSRGB(systemColor, isDark: isDark)
+                let stroke = PaddrAccentPalette.onAccentStroke(for: accent, drawnAt: opacity)
+                let label = "\(name)/\(isDark ? "dark" : "light")"
+                XCTAssertGreaterThanOrEqual(
+                    contrastRatio(stroke, accent),
+                    3.0,
+                    "\(label) prominent stroke misses non-text contrast"
+                )
+                XCTAssertGreaterThanOrEqual(
+                    contrastRatio(composite(stroke, over: accent, opacity: opacity), accent),
+                    3.0,
+                    "\(label) prominent rim misses non-text contrast as drawn"
+                )
+            }
+        }
+    }
+
+    /// One state per case of `PaddrControlRow`; a case added without a partner here fails the
+    /// row assertion at every use site.
+    private static let rowStates: [(PaddrControlRow, PaddrControlState)] = [
+        (.rest, PaddrControlState()),
+        (.selected, PaddrControlState(isSelected: true)),
+        (.prominent, PaddrControlState(isProminent: true)),
+        (.disabled, PaddrControlState(isEnabled: false))
+    ]
+
+    /// The eight accents System Settings offers, as the system colours they are drawn from.
+    /// Taken as system colours rather than as literals so the set tracks Apple's palette,
+    /// and resolved per appearance because the palette differs between the two.
+    private static let macOSAccents: [(String, NSColor)] = [
+        ("blue", .systemBlue),
+        ("purple", .systemPurple),
+        ("pink", .systemPink),
+        ("red", .systemRed),
+        ("orange", .systemOrange),
+        ("yellow", .systemYellow),
+        ("green", .systemGreen),
+        ("graphite", .systemGray)
+    ]
+
+    private func resolvedSRGB(_ color: NSColor, isDark: Bool) throws -> NSColor {
+        let appearance = try XCTUnwrap(NSAppearance(named: isDark ? .darkAqua : .aqua))
+        var resolved: NSColor?
+        appearance.performAsCurrentDrawingAppearance {
+            resolved = color.usingColorSpace(.sRGB)
+        }
+        return try XCTUnwrap(resolved)
+    }
+
+    /// WCAG 2.1 contrast, implemented here rather than borrowed from `PaddrAccentPalette`:
+    /// a derivation checked with its own arithmetic proves nothing about the ratio.
+    private func contrastRatio(_ one: NSColor, _ other: NSColor) -> Double {
+        func luminance(_ color: NSColor) -> Double {
+            guard let srgb = color.usingColorSpace(.sRGB) else { return 0 }
+            func channel(_ component: CGFloat) -> Double {
+                let value = Double(component)
+                return value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * channel(srgb.redComponent)
+                + 0.7152 * channel(srgb.greenComponent)
+                + 0.0722 * channel(srgb.blueComponent)
+        }
+        let first = luminance(one)
+        let second = luminance(other)
+        return (max(first, second) + 0.05) / (min(first, second) + 0.05)
+    }
+
+    /// Source-over compositing of a partly transparent stroke on an opaque fill.
+    private func composite(_ source: NSColor, over destination: NSColor, opacity: Double) -> NSColor {
+        guard
+            let source = source.usingColorSpace(.sRGB),
+            let destination = destination.usingColorSpace(.sRGB)
+        else { return destination }
+        let alpha = CGFloat(opacity)
+        func mix(_ over: CGFloat, _ under: CGFloat) -> CGFloat {
+            (over * alpha) + (under * (1 - alpha))
+        }
+        return NSColor(
+            srgbRed: mix(source.redComponent, destination.redComponent),
+            green: mix(source.greenComponent, destination.greenComponent),
+            blue: mix(source.blueComponent, destination.blueComponent),
+            alpha: 1
         )
     }
 

@@ -108,7 +108,35 @@ enum PaddrStyle {
         static let labelColumnWide: CGFloat = 152
     }
 
-    static let accent = Color(red: 26.0 / 255.0, green: 159.0 / 255.0, blue: 1)
+    /// The product accent is the viewer's macOS accent colour, not a fixed blue. Every
+    /// accent-bearing surface in `PaddrMenu` reads it through this token, so a yellow,
+    /// green, or graphite accent reaches all of them at once — and none of them may pair a
+    /// hard-coded partner colour with it, because no fixed colour survives that range.
+    static let accent = Color(nsColor: .controlAccentColor)
+
+    /// The label drawn *on top of* an accent fill: black or white, whichever clears 4.5:1
+    /// against the fill. The fixed white this replaced clears it on none of the eight
+    /// accents macOS offers — 1.51:1 on yellow, 3.52:1 on the stock blue.
+    static let onAccent = Color(nsColor: NSColor(name: nil) { appearance in
+        PaddrAccentPalette.onAccentLabel(
+            for: PaddrAccentPalette.srgb(.controlAccentColor, in: appearance)
+        )
+    })
+
+    /// The stroke drawn on top of an accent fill, derived so the rim as *drawn* — that is,
+    /// composited at ``prominentStrokeOpacity`` — clears the 3:1 non-text ratio.
+    static let onAccentStroke = Color(nsColor: NSColor(name: nil) { appearance in
+        PaddrAccentPalette.onAccentStroke(
+            for: PaddrAccentPalette.srgb(.controlAccentColor, in: appearance),
+            drawnAt: prominentStrokeOpacity
+        )
+    })
+
+    /// The prominent row's base stroke opacity. Below 1 on purpose: the interaction
+    /// overlay's stroke term is additive, so a base at full opacity would clamp it away and
+    /// leave hover on a primary button reading through fill alone.
+    static let prominentStrokeOpacity: Double = 0.6
+
     static let active = Color(nsColor: .systemGreen)
 
     /// Green status text clears 4.5:1 in light appearance while retaining the
@@ -119,12 +147,16 @@ enum PaddrStyle {
             : NSColor(srgbRed: 0, green: 0.42, blue: 0.18, alpha: 1)
     })
 
-    /// Accent for text: the bright product accent reads at only ~2.8:1 against light
-    /// backgrounds, so light appearance gets a darker variant that clears 4.5:1.
+    /// Accent for text on the panel background. A raw accent does not generally clear 4.5:1
+    /// against either background — the stock macOS blue reads 3.5:1 on the light one — and
+    /// the accent is now the viewer's, so this cannot be a hand-tuned pair of blues. It is
+    /// derived from whatever accent is selected, against the window background of the
+    /// current appearance.
     static let accentText = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor(srgbRed: 26.0 / 255.0, green: 159.0 / 255.0, blue: 1, alpha: 1)
-            : NSColor(srgbRed: 0, green: 0.42, blue: 0.75, alpha: 1)
+        PaddrAccentPalette.text(
+            from: PaddrAccentPalette.srgb(.controlAccentColor, in: appearance),
+            on: PaddrAccentPalette.srgb(.windowBackgroundColor, in: appearance)
+        )
     })
 
     /// Warning text partner to `accentText`: system orange also fails contrast on
@@ -149,6 +181,163 @@ enum PaddrStyle {
     static let zoneInspectorWidth: CGFloat = 266
     static let behaviorPickerWidth: CGFloat = 272
     static let sliderMinimumWidth: CGFloat = 160
+}
+
+/// Turns an arbitrary accent colour into colours that meet WCAG contrast against the surface
+/// they are drawn on.
+///
+/// This exists because the accent stopped being ours. `NSColor.controlAccentColor` is
+/// whatever the viewer picked in System Settings — blue, purple, pink, red, orange, yellow,
+/// green, or graphite — so no derived colour can be hand-tuned to a hue. Every entry point is
+/// a *pure function of its input colours*, which is what lets the tests drive the real macOS
+/// accent set through them instead of only the accent this machine happens to have set.
+///
+/// Derivation is always the *smallest* blend toward black or white that clears the target, so
+/// a colour that already clears it is returned unchanged and the result stays as close to the
+/// accent as the ratio allows.
+enum PaddrAccentPalette {
+    /// WCAG 2.1 AA for body text.
+    static let textContrast: Double = 4.5
+    /// WCAG 2.1 AA for a non-text boundary — a stroke or a component edge. Matches the
+    /// ratios LimitlessQuilter documents.
+    static let nonTextContrast: Double = 3.0
+
+    /// The step of the blend search. 1% of the way to the endpoint is finer than any
+    /// perceptible step and keeps the search exact enough to assert on.
+    private static let step = 0.01
+
+    /// Status and label text on the window background.
+    ///
+    /// The blend direction is chosen from the *background*, not the accent: on a light
+    /// background every accent darkens, on a dark one every accent lightens. Both endpoints
+    /// (black on light, white on dark) clear 4.5:1 by a wide margin, so the search always
+    /// terminates on a colour that meets the target.
+    static func text(from accent: NSColor, on background: NSColor) -> NSColor {
+        let towardBlack = relativeLuminance(of: background) > equalContrastLuminance
+        return smallestBlend(
+            of: accent,
+            toward: towardBlack ? .black : .white,
+            clearing: textContrast,
+            against: background
+        )
+    }
+
+    /// The label drawn on top of an accent fill.
+    ///
+    /// Black or white, whichever contrasts more with the fill. That choice is never worse
+    /// than 4.58:1 for any colour: the two ratios cross at the luminance where both equal
+    /// 4.58, so the better of the pair is always above it. A fixed white carries no such
+    /// floor — it reads 3.52:1 on the stock macOS blue and 1.51:1 on yellow.
+    static func onAccentLabel(for accent: NSColor) -> NSColor {
+        relativeLuminance(of: accent) > equalContrastLuminance ? .black : .white
+    }
+
+    /// The stroke drawn on top of an accent fill, for a border drawn at `opacity`.
+    ///
+    /// The rim that has to clear 3:1 is the one on screen, and a partly transparent stroke
+    /// over a solid fill *is* a blend of the two: drawing a colour blended `u` of the way to
+    /// black at opacity `a` paints exactly the colour blended `u * a` of the way. So the
+    /// search finds the blend the composite needs and divides it back out, rather than
+    /// deriving a colour that only meets the ratio at an opacity the control never uses.
+    static func onAccentStroke(for accent: NSColor, drawnAt opacity: Double) -> NSColor {
+        // Darken by preference — a rim darker than its fill is the conventional bezel — and
+        // lighten only for an accent too dark for black to separate from.
+        let target: NSColor =
+            contrastRatio(.black, accent) >= nonTextContrast ? .black : .white
+        let composited = smallestBlendAmount(
+            of: accent,
+            toward: target,
+            clearing: nonTextContrast,
+            against: accent
+        )
+        let amount = min(1, composited / max(opacity, step))
+        return blend(accent, toward: target, amount: amount)
+    }
+
+    /// Resolves a dynamic system colour — the accent and the window background both are —
+    /// into concrete sRGB components under one appearance.
+    static func srgb(_ color: NSColor, in appearance: NSAppearance) -> NSColor {
+        var resolved: NSColor?
+        appearance.performAsCurrentDrawingAppearance {
+            resolved = color.usingColorSpace(.sRGB)
+        }
+        return resolved ?? color.usingColorSpace(.sRGB) ?? color
+    }
+
+    /// WCAG 2.1 relative luminance.
+    static func relativeLuminance(of color: NSColor) -> Double {
+        let srgb = color.usingColorSpace(.sRGB) ?? color
+        func linear(_ component: CGFloat) -> Double {
+            let value = Double(component)
+            return value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linear(srgb.redComponent)
+            + 0.7152 * linear(srgb.greenComponent)
+            + 0.0722 * linear(srgb.blueComponent)
+    }
+
+    /// WCAG 2.1 contrast ratio, which is symmetric in its arguments.
+    static func contrastRatio(_ one: NSColor, _ other: NSColor) -> Double {
+        let a = relativeLuminance(of: one)
+        let b = relativeLuminance(of: other)
+        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+    }
+
+    /// The luminance at which black and white contrast equally — the crossover the
+    /// black-or-white choice turns on.
+    private static let equalContrastLuminance = sqrt(1.05 * 0.05) - 0.05
+
+    private static func smallestBlend(
+        of color: NSColor,
+        toward target: NSColor,
+        clearing ratio: Double,
+        against background: NSColor
+    ) -> NSColor {
+        blend(
+            color,
+            toward: target,
+            amount: smallestBlendAmount(
+                of: color,
+                toward: target,
+                clearing: ratio,
+                against: background
+            )
+        )
+    }
+
+    /// Contrast is monotone along a blend toward black or white, so the first amount that
+    /// clears the target is the smallest one that does. A full blend that still falls short
+    /// returns 1: the best the endpoint offers, never a colour below it.
+    private static func smallestBlendAmount(
+        of color: NSColor,
+        toward target: NSColor,
+        clearing ratio: Double,
+        against background: NSColor
+    ) -> Double {
+        var amount = 0.0
+        while amount < 1 {
+            if contrastRatio(blend(color, toward: target, amount: amount), background) >= ratio {
+                return amount
+            }
+            amount += step
+        }
+        return 1
+    }
+
+    /// A straight component blend in sRGB, which is the space the compositor draws these
+    /// overlays in.
+    private static func blend(_ color: NSColor, toward target: NSColor, amount: Double) -> NSColor {
+        let from = color.usingColorSpace(.sRGB) ?? color
+        let to = target.usingColorSpace(.sRGB) ?? target
+        let fraction = CGFloat(min(max(amount, 0), 1))
+        func mix(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + ((b - a) * fraction) }
+        return NSColor(
+            srgbRed: mix(from.redComponent, to.redComponent),
+            green: mix(from.greenComponent, to.greenComponent),
+            blue: mix(from.blueComponent, to.blueComponent),
+            alpha: 1
+        )
+    }
 }
 
 private struct PaddrTypographyModifier: ViewModifier {
