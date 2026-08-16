@@ -50,6 +50,76 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertLessThan(collapsedHeight, expandedHeight)
     }
 
+    func testPointerTrackingToggleReflectsDefaultsAndLegacyBindingAtRadiusZero() throws {
+        let defaultView = PadConfigurationView(
+            side: .right,
+            configuration: .constant(PadConfiguration(mode: .mouse)),
+            initiallyExpanded: true
+        )
+        .frame(width: PaddrStyle.minimumWindowSize.width - (2 * PaddrStyle.panelPadding))
+        let defaultHostingView = NSHostingView(rootView: defaultView)
+        defaultHostingView.frame = NSRect(
+            origin: .zero,
+            size: NSSize(
+                width: PaddrStyle.minimumWindowSize.width - (2 * PaddrStyle.panelPadding),
+                height: PaddrStyle.padConfigurationCardHeight
+            )
+        )
+        defaultHostingView.layoutSubtreeIfNeeded()
+
+        let defaultToggle = try XCTUnwrap(
+            firstDescendant(of: NSSwitch.self, in: defaultHostingView)
+        )
+        XCTAssertEqual(defaultToggle.state, .on)
+        XCTAssertEqual(defaultToggle.accessibilityRoleDescription(), "switch")
+        XCTAssertEqual(accessibilityIntegerValue(of: defaultToggle), 1)
+        XCTAssertTrue(defaultToggle.isEnabled)
+        let defaultControls = descendants(of: NSControl.self, in: defaultHostingView)
+        XCTAssertGreaterThanOrEqual(defaultControls.count, 2)
+        for control in defaultControls {
+            assertControlFits(control, in: defaultHostingView)
+        }
+
+        var legacy = try JSONDecoder().decode(
+            PadConfiguration.self,
+            from: Data("{\"mode\":\"mouse\",\"mouseDeadzone\":0}".utf8)
+        )
+        let legacyBinding = Binding(
+            get: { legacy },
+            set: { legacy = $0 }
+        )
+        let legacyView = PadConfigurationView(
+            side: .right,
+            configuration: legacyBinding,
+            initiallyExpanded: true
+        )
+        .frame(width: PaddrStyle.padColumnWidth)
+        let legacyHostingView = NSHostingView(rootView: legacyView)
+        legacyHostingView.frame = NSRect(
+            origin: .zero,
+            size: NSSize(
+                width: PaddrStyle.padColumnWidth,
+                height: PaddrStyle.padConfigurationCardHeight
+            )
+        )
+        legacyHostingView.layoutSubtreeIfNeeded()
+
+        let legacyToggle = try XCTUnwrap(
+            firstDescendant(of: NSSwitch.self, in: legacyHostingView)
+        )
+        XCTAssertEqual(legacy.centerTapTrackingMode, .coupled)
+        XCTAssertEqual(legacyToggle.state, .off)
+        XCTAssertEqual(legacyToggle.accessibilityRoleDescription(), "switch")
+        XCTAssertEqual(accessibilityIntegerValue(of: legacyToggle), 0)
+        XCTAssertTrue(legacyToggle.isEnabled)
+        legacyToggle.performClick(nil)
+        legacyHostingView.layoutSubtreeIfNeeded()
+        XCTAssertEqual(legacy.centerTapTrackingMode, .decoupled)
+        XCTAssertEqual(legacyToggle.state, .on)
+        XCTAssertEqual(accessibilityIntegerValue(of: legacyToggle), 1)
+        assertControlFits(legacyToggle, in: legacyHostingView)
+    }
+
     func testProfilePickerPresentsPendingCreatedProfile() async throws {
         try await assertPendingProfilePicker(
             expectedName: "Third",
@@ -157,12 +227,41 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.accessibilityValue, "Switching to \(expectedName)")
     }
 
+    private func accessibilityIntegerValue(of object: NSObject) -> Int? {
+        let selector = NSSelectorFromString("accessibilityValue")
+        guard object.responds(to: selector),
+              let value = object.perform(selector)?.takeUnretainedValue() as? NSNumber else {
+            return nil
+        }
+        return value.intValue
+    }
+
+    private func assertControlFits(
+        _ control: NSControl,
+        in hostingView: NSView,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let frame = control.convert(control.bounds, to: hostingView)
+        XCTAssertGreaterThanOrEqual(frame.minX, hostingView.bounds.minX - 0.5, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(frame.minY, hostingView.bounds.minY - 0.5, file: file, line: line)
+        XCTAssertLessThanOrEqual(frame.maxX, hostingView.bounds.maxX + 0.5, file: file, line: line)
+        XCTAssertLessThanOrEqual(frame.maxY, hostingView.bounds.maxY + 0.5, file: file, line: line)
+    }
+
+    private func descendants<ViewType: NSView>(
+        of type: ViewType.Type,
+        in view: NSView
+    ) -> [ViewType] {
+        let current = (view as? ViewType).map { [$0] } ?? []
+        return current + view.subviews.flatMap { descendants(of: type, in: $0) }
+    }
+
     private func firstDescendant<ViewType: NSView>(
         of type: ViewType.Type,
         in view: NSView
     ) -> ViewType? {
-        if let match = view as? ViewType { return match }
-        return view.subviews.lazy.compactMap { self.firstDescendant(of: type, in: $0) }.first
+        descendants(of: type, in: view).first
     }
 
     private func dependencies(

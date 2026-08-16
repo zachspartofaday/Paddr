@@ -18,6 +18,15 @@ struct PadConfigurationView: View {
     }
 
     private var title: LocalizedStringResource { side == .left ? "Left trackpad" : "Right trackpad" }
+    private var tracksPointerInsideTapRadius: Binding<Bool> {
+        Binding(
+            get: { configuration.centerTapTrackingMode == .decoupled },
+            set: {
+                configuration.centerTapTrackingMode = $0 ? .decoupled : .coupled
+            }
+        )
+    }
+
     private var summary: LocalizedStringResource {
         switch configuration.mode {
         case .disabled: "Off"
@@ -118,7 +127,19 @@ struct PadConfigurationView: View {
                         step: 0.01,
                         valueText: configuration.mouseDeadzone.formatted(.percent.precision(.fractionLength(0)))
                     )
-                    .help("The radius starts at the pad center. Movement pauses inside it, and leaving it cancels the tap.")
+                    .help("The radius starts at the pad center. Leaving it cancels the tap. At 0%, taps use the maximum-movement limit.")
+                    Toggle(
+                        "Track pointer inside tap radius",
+                        isOn: tracksPointerInsideTapRadius
+                    )
+                    .toggleStyle(.switch)
+                    .accessibilityLabel("Track pointer inside tap radius")
+                    .accessibilityValue(
+                        configuration.centerTapTrackingMode == .decoupled
+                            ? LocalizedStringResource("On")
+                            : LocalizedStringResource("Off")
+                    )
+                    .help("When on, pointer movement continues inside and across the center tap radius. When off, the radius also acts as a pointer dead zone.")
                     TapActionPicker(selection: $configuration.tapKey)
                 }
             }
