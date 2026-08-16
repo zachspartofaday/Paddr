@@ -38,10 +38,42 @@ printf '%s\n' '{"left":{"mode":"scroll"},"right":{"mode":"mouse"}}' >"$input_pat
 "$cli_path" --config "$input_path" \
     --left-mouse-acceleration 0.25 \
     --right-mouse-acceleration 0.75 \
+    --left-center-tap-tracking coupled \
+    --right-center-tap-tracking decoupled \
     --show-config >"$stdout_path" 2>"$stderr_path"
 if ! grep -Fq '"mouseAcceleration" : 0.25' "$stdout_path" \
     || ! grep -Fq '"mouseAcceleration" : 0.75' "$stdout_path"; then
     echo "Mouse acceleration flags did not persist independent values." >&2
+    exit 1
+fi
+if [ "$(plutil -extract left.centerTapTrackingMode raw -o - "$stdout_path")" != coupled ] \
+    || [ "$(plutil -extract right.centerTapTrackingMode raw -o - "$stdout_path")" != decoupled ]; then
+    echo "Center tap tracking flags did not set independent strict values." >&2
+    exit 1
+fi
+
+old_canonical_default="$test_dir/old-canonical-default.json"
+old_canonical_default_before="$test_dir/old-canonical-default-before.json"
+printf '%s\n' '{"schemaVersion":1,"activeProfileID":"00000000-0000-0000-0000-000000000001","userProfiles":[]}' \
+    >"$old_canonical_default"
+cp "$old_canonical_default" "$old_canonical_default_before"
+"$cli_path" --config "$old_canonical_default" --show-config >"$stdout_path" 2>"$stderr_path"
+if [ "$(plutil -extract left.centerTapTrackingMode raw -o - "$stdout_path")" != coupled ] \
+    || [ "$(plutil -extract right.centerTapTrackingMode raw -o - "$stdout_path")" != coupled ]; then
+    echo "Old canonical active Default did not preserve coupled tracking in read-only --config output." >&2
+    exit 1
+fi
+if ! cmp -s "$old_canonical_default" "$old_canonical_default_before"; then
+    echo "Read-only --config rewrote the old canonical active Default source." >&2
+    exit 1
+fi
+old_canonical_copy="$test_dir/old-canonical-default-copy.json"
+"$cli_path" --config "$old_canonical_default" --write-config "$old_canonical_copy" \
+    >"$stdout_path" 2>"$stderr_path"
+if [ "$(plutil -extract builtInDefaultCenterTapTrackingMode raw -o - "$old_canonical_copy")" != coupled ] \
+    || [ "$(plutil -extract activeProfileID raw -o - "$old_canonical_copy")" != 00000000-0000-0000-0000-000000000001 ] \
+    || [ "$(plutil -extract userProfiles json -o - "$old_canonical_copy")" != '[]' ]; then
+    echo "Saving an old canonical active Default did not preserve its coupled built-in Default shape." >&2
     exit 1
 fi
 
@@ -49,6 +81,12 @@ fi
 if ! grep -Fq -- '--left-mouse-acceleration' "$stdout_path" \
     || ! grep -Fq -- '--right-mouse-acceleration' "$stdout_path"; then
     echo "Mouse acceleration flags are missing from CLI help." >&2
+    exit 1
+fi
+if ! grep -Fq -- '--left-center-tap-tracking' "$stdout_path" \
+    || ! grep -Fq -- '--right-center-tap-tracking' "$stdout_path" \
+    || ! grep -Fq 'coupled uses the radius as a dead zone; decoupled tracks inside it' "$stdout_path"; then
+    echo "Center tap tracking flags or values are missing from CLI help." >&2
     exit 1
 fi
 
@@ -63,11 +101,24 @@ if [ "$status" -ne 2 ] \
     exit 1
 fi
 
+set +e
+"$cli_path" --config "$input_path" --left-center-tap-tracking inside --show-config \
+    >"$stdout_path" 2>"$stderr_path"
+status=$?
+set -e
+if [ "$status" -ne 2 ] \
+    || ! grep -Fq -- '--left-center-tap-tracking requires coupled or decoupled.' "$stderr_path" \
+    || ! grep -Fq 'pointer dead zone' "$stderr_path"; then
+    echo "Invalid center tap tracking mode did not return an actionable strict-value error." >&2
+    exit 1
+fi
+
 profile_store="$test_dir/profiles.json"
 input_before="$test_dir/input-before.json"
 cp "$input_path" "$input_before"
-"$cli_path" --config "$input_path" --left-sensitivity 3 --write-config "$profile_store" \
-    >"$stdout_path" 2>"$stderr_path"
+"$cli_path" --config "$input_path" --left-sensitivity 3 \
+    --left-center-tap-tracking decoupled --right-center-tap-tracking coupled \
+    --write-config "$profile_store" >"$stdout_path" 2>"$stderr_path"
 if ! cmp -s "$input_path" "$input_before"; then
     echo "Canonical conversion modified the legacy compatibility input." >&2
     exit 1
@@ -75,6 +126,12 @@ fi
 if ! grep -Fq '"schemaVersion" : 1' "$profile_store" \
     || ! grep -Fq '"userProfiles"' "$profile_store"; then
     echo "--write-config did not emit the canonical profile document." >&2
+    exit 1
+fi
+"$cli_path" --config "$profile_store" --show-config >"$stdout_path" 2>"$stderr_path"
+if [ "$(plutil -extract left.centerTapTrackingMode raw -o - "$stdout_path")" != decoupled ] \
+    || [ "$(plutil -extract right.centerTapTrackingMode raw -o - "$stdout_path")" != coupled ]; then
+    echo "Canonical write did not persist independent center tap tracking modes." >&2
     exit 1
 fi
 

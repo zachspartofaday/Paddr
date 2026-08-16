@@ -78,7 +78,9 @@ public enum ConfigurationProfileStore {
 
             let legacy = try decodeLegacyConfiguration(data)
             var migrated = ConfigurationProfileDocument.default
-            if legacy != .default {
+            if legacy == formerDefaultConfiguration {
+                migrated.builtInDefaultCenterTapTrackingMode = .coupled
+            } else if legacy != .default {
                 let previous = try migrated.createProfile(
                     named: "Previous configuration",
                     configuration: legacy
@@ -157,6 +159,11 @@ public enum ConfigurationProfileStore {
             || object["activeProfileID"] != nil
             || object["userProfiles"] != nil
     }
+
+    private static let formerDefaultConfiguration = TrackIsBackConfiguration(
+        left: PadConfiguration(mode: .scroll, centerTapTrackingMode: .coupled),
+        right: PadConfiguration(mode: .mouse, centerTapTrackingMode: .coupled)
+    )
 
     private static func decodeLegacyConfiguration(_ data: Data) throws -> TrackIsBackConfiguration {
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],

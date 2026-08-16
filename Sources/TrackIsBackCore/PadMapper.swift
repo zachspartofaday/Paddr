@@ -82,8 +82,7 @@ public struct PadMapper: Sendable {
             if sample.isTouched,
                let previous,
                previous.isTouched,
-               !Self.isInsideMouseDeadzone(sample, deadzone: configuration.mouseDeadzone),
-               !Self.isInsideMouseDeadzone(previous, deadzone: configuration.mouseDeadzone) {
+               shouldTrackMouse(from: previous, to: sample) {
                 if configuration.mouseAcceleration == 0 {
                     let dx = Double(Int(sample.x) - Int(previous.x)) / 700.0 * configuration.sensitivity
                     let dy = -Double(Int(sample.y) - Int(previous.y)) / 700.0 * configuration.sensitivity
@@ -306,6 +305,16 @@ public struct PadMapper: Sendable {
             try outputAction(for: binding, isPressed: true),
             try outputAction(for: binding, isPressed: false)
         ]
+    }
+
+    private func shouldTrackMouse(from previous: TrackpadSample, to sample: TrackpadSample) -> Bool {
+        switch configuration.centerTapTrackingMode {
+        case .coupled:
+            !Self.isInsideMouseDeadzone(sample, deadzone: configuration.mouseDeadzone)
+                && !Self.isInsideMouseDeadzone(previous, deadzone: configuration.mouseDeadzone)
+        case .decoupled:
+            true
+        }
     }
 
     private static func mouseAccelerationGain(

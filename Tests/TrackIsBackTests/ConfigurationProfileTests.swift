@@ -44,8 +44,23 @@ final class ConfigurationProfileTests: XCTestCase {
         XCTAssertEqual(ConfigurationProfile.default.id, .default)
         XCTAssertEqual(ConfigurationProfile.default.name, "Default")
         XCTAssertEqual(ConfigurationProfile.default.configuration, .default)
+        XCTAssertEqual(
+            ConfigurationProfileDocument.default.builtInDefaultCenterTapTrackingMode,
+            .decoupled
+        )
+        XCTAssertTrue(
+            json.contains("\"builtInDefaultCenterTapTrackingMode\" : \"decoupled\"")
+        )
         XCTAssertFalse(json.contains("\"name\" : \"Default\""))
         XCTAssertFalse(json.contains("\"left\""))
+
+        let oldBinaryShape = try JSONDecoder().decode(
+            LegacyProfileDocumentShape.self,
+            from: data
+        )
+        XCTAssertEqual(oldBinaryShape.schemaVersion, 1)
+        XCTAssertEqual(oldBinaryShape.activeProfileID, .default)
+        XCTAssertTrue(oldBinaryShape.userProfiles.isEmpty)
     }
 
     func testStableIDSurvivesRenameAndDrivesActivation() throws {
@@ -199,6 +214,44 @@ final class ConfigurationProfileTests: XCTestCase {
         XCTAssertEqual(second.name, "Gaming Copy 2")
     }
 
+    func testNewProfilesAndDefaultDuplicatesUseDecoupledTracking() throws {
+        XCTAssertEqual(ConfigurationProfileDocument.currentSchemaVersion, 1)
+        var document = ConfigurationProfileDocument.default
+
+        let created = try document.createProfile(
+            named: "New",
+            id: id("00000000-0000-0000-0000-000000000025")
+        )
+        let duplicatedDefault = try document.duplicateProfile(
+            id: .default,
+            newID: id("00000000-0000-0000-0000-000000000026")
+        )
+
+        for profile in [created, duplicatedDefault] {
+            XCTAssertEqual(profile.configuration.left.centerTapTrackingMode, .decoupled)
+            XCTAssertEqual(profile.configuration.right.centerTapTrackingMode, .decoupled)
+        }
+    }
+
+    func testDuplicatePreservesExplicitMixedTrackingModes() throws {
+        var sourceConfiguration = TrackIsBackConfiguration.default
+        sourceConfiguration.left.centerTapTrackingMode = .coupled
+        sourceConfiguration.right.centerTapTrackingMode = .decoupled
+        var document = ConfigurationProfileDocument.default
+        let source = try document.createProfile(
+            named: "Mixed",
+            configuration: sourceConfiguration,
+            id: id("00000000-0000-0000-0000-000000000027")
+        )
+
+        let duplicate = try document.duplicateProfile(
+            id: source.id,
+            newID: id("00000000-0000-0000-0000-000000000028")
+        )
+
+        XCTAssertEqual(duplicate.configuration, sourceConfiguration)
+    }
+
     func testDefaultCannotBeRenamedDeletedOrCustomized() throws {
         var document = ConfigurationProfileDocument.default
 
@@ -228,7 +281,7 @@ final class ConfigurationProfileTests: XCTestCase {
         XCTAssertEqual(document.activeProfileID, .default)
     }
 
-    func testLegacyDefaultMigratesToCanonicalDefault() throws {
+    func testNewExplicitDefaultMigratesToCanonicalDefault() throws {
         let fixture = try temporaryStore()
         defer { try? FileManager.default.removeItem(at: fixture.home) }
         try ConfigurationStore.encoded(.default).write(to: fixture.url)
@@ -247,15 +300,165 @@ final class ConfigurationProfileTests: XCTestCase {
         )
     }
 
-    func testCustomizedLegacyMigrationPreservesDecodedModelExactly() throws {
+    func testFormerRawDefaultMissingTrackingKeysMigratesToCoupledCanonicalDefault() throws {
         let fixture = try temporaryStore()
         defer { try? FileManager.default.removeItem(at: fixture.home) }
-        var legacy = TrackIsBackConfiguration.default
-        legacy.left.sensitivity = 7.25
-        legacy.left.scrollSensitivity = 0.35
-        legacy.right.mouseAcceleration = 0.8
-        legacy.right.tapKey = "space"
-        try ConfigurationStore.encoded(legacy).write(to: fixture.url)
+        let formerDefault = """
+        {
+          "left": { "mode": "scroll" },
+          "right": { "mode": "mouse" }
+        }
+        """
+        try Data(formerDefault.utf8).write(to: fixture.url)
+
+        let result = try ConfigurationProfileStore.load(
+            from: nil,
+            fileManager: .default,
+            homeDirectory: fixture.home,
+            writeAtomically: { try $0.write(to: $1, options: .atomic) }
+        )
+
+        XCTAssertEqual(result.document.activeProfile?.name, "Default")
+        XCTAssertEqual(result.document.activeProfileID, .default)
+        XCTAssertTrue(result.document.userProfiles.isEmpty)
+        XCTAssertEqual(result.document.builtInDefaultCenterTapTrackingMode, .coupled)
+        XCTAssertEqual(
+            result.document.activeProfile?.configuration.left.centerTapTrackingMode,
+            .coupled
+        )
+        XCTAssertEqual(
+            result.document.activeProfile?.configuration.right.centerTapTrackingMode,
+            .coupled
+        )
+        let persisted = try JSONDecoder().decode(
+            ConfigurationProfileDocument.self,
+            from: Data(contentsOf: fixture.url)
+        )
+        XCTAssertEqual(persisted, result.document)
+    }
+
+    func testOldCanonicalActiveDefaultSynthesizesCoupledWithoutRewritingSource() throws {
+        let fixture = try temporaryStore()
+        defer { try? FileManager.default.removeItem(at: fixture.home) }
+        let canonical = """
+        {
+          "schemaVersion": 1,
+          "activeProfileID": "00000000-0000-0000-0000-000000000001",
+          "userProfiles": []
+        }
+        """
+        let original = Data(canonical.utf8)
+        try original.write(to: fixture.url)
+
+        let result = try ConfigurationProfileStore.load(from: fixture.url)
+        let document = result.document
+        let expectedDefault = try XCTUnwrap(document.profile(id: .default))
+
+        XCTAssertEqual(document.builtInDefaultCenterTapTrackingMode, .coupled)
+        XCTAssertEqual(document.profiles, [expectedDefault])
+        XCTAssertEqual(document.activeProfile, expectedDefault)
+        XCTAssertEqual(expectedDefault.configuration.left.centerTapTrackingMode, .coupled)
+        XCTAssertEqual(expectedDefault.configuration.right.centerTapTrackingMode, .coupled)
+        XCTAssertEqual(try Data(contentsOf: fixture.url), original)
+
+        let validated = try document.validated()
+        XCTAssertEqual(validated.builtInDefaultCenterTapTrackingMode, .coupled)
+        XCTAssertEqual(validated.activeProfile, expectedDefault)
+
+        var copy = validated
+        let duplicate = try copy.duplicateProfile(
+            id: .default,
+            newID: id("00000000-0000-0000-0000-000000000036")
+        )
+        XCTAssertEqual(duplicate.configuration, expectedDefault.configuration)
+        XCTAssertNoThrow(
+            try copy.replaceConfiguration(for: .default, with: expectedDefault.configuration)
+        )
+        XCTAssertThrowsError(
+            try copy.replaceConfiguration(for: .default, with: .default)
+        )
+
+        let encoded = try ConfigurationProfileStore.encoded(validated)
+        let encodedObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        XCTAssertEqual(
+            encodedObject["builtInDefaultCenterTapTrackingMode"] as? String,
+            "coupled"
+        )
+        XCTAssertEqual(
+            try JSONDecoder().decode(ConfigurationProfileDocument.self, from: encoded),
+            validated
+        )
+    }
+
+    func testCanonicalProfileMissingTrackingKeysKeepsCoupledBehavior() throws {
+        let fixture = try temporaryStore()
+        defer { try? FileManager.default.removeItem(at: fixture.home) }
+        let canonical = """
+        {
+          "schemaVersion": 1,
+          "activeProfileID": "00000000-0000-0000-0000-000000000024",
+          "userProfiles": [
+            {
+              "id": "00000000-0000-0000-0000-000000000024",
+              "name": "Existing",
+              "configuration": {
+                "left": { "mode": "scroll" },
+                "right": { "mode": "mouse", "mouseDeadzone": 0.25 }
+              }
+            }
+          ]
+        }
+        """
+        try Data(canonical.utf8).write(to: fixture.url)
+
+        let result = try ConfigurationProfileStore.load(from: fixture.url)
+
+        XCTAssertEqual(result.document.activeProfile?.name, "Existing")
+        XCTAssertEqual(result.document.builtInDefaultCenterTapTrackingMode, .coupled)
+        XCTAssertEqual(
+            result.document.profile(id: .default)?.configuration.left.centerTapTrackingMode,
+            .coupled
+        )
+        XCTAssertEqual(
+            result.document.profile(id: .default)?.configuration.right.centerTapTrackingMode,
+            .coupled
+        )
+        XCTAssertEqual(
+            result.document.activeProfile?.configuration.left.centerTapTrackingMode,
+            .coupled
+        )
+        XCTAssertEqual(
+            result.document.activeProfile?.configuration.right.centerTapTrackingMode,
+            .coupled
+        )
+        XCTAssertEqual(try Data(contentsOf: fixture.url), Data(canonical.utf8))
+    }
+
+    func testCustomizedFormerRawConfigurationPreservesCoupledPreviousConfiguration() throws {
+        let fixture = try temporaryStore()
+        defer { try? FileManager.default.removeItem(at: fixture.home) }
+        let legacyJSON = """
+        {
+          "left": {
+            "mode": "scroll",
+            "sensitivity": 7.25,
+            "scrollSensitivity": 0.35
+          },
+          "right": {
+            "mode": "mouse",
+            "mouseAcceleration": 0.8,
+            "tapKey": "space"
+          }
+        }
+        """
+        let legacyData = Data(legacyJSON.utf8)
+        let legacy = try JSONDecoder().decode(
+            TrackIsBackConfiguration.self,
+            from: legacyData
+        ).validated()
+        try legacyData.write(to: fixture.url)
 
         let result = try ConfigurationProfileStore.load(
             from: nil,
@@ -267,6 +470,23 @@ final class ConfigurationProfileTests: XCTestCase {
         XCTAssertEqual(result.document.activeProfile?.name, "Previous configuration")
         XCTAssertEqual(result.document.activeProfile?.configuration, legacy)
         XCTAssertEqual(result.document.userProfiles.count, 1)
+        XCTAssertEqual(
+            result.document.activeProfile?.configuration.left.centerTapTrackingMode,
+            .coupled
+        )
+        XCTAssertEqual(
+            result.document.activeProfile?.configuration.right.centerTapTrackingMode,
+            .coupled
+        )
+        XCTAssertEqual(result.document.builtInDefaultCenterTapTrackingMode, .decoupled)
+        XCTAssertEqual(
+            result.document.profile(id: .default)?.configuration.left.centerTapTrackingMode,
+            .decoupled
+        )
+        XCTAssertEqual(
+            result.document.profile(id: .default)?.configuration.right.centerTapTrackingMode,
+            .decoupled
+        )
     }
 
     func testMigrationFailurePreservesOriginalBytes() throws {
@@ -428,6 +648,12 @@ final class ConfigurationProfileTests: XCTestCase {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return try encoder.encode(document)
     }
+}
+
+private struct LegacyProfileDocumentShape: Decodable {
+    let schemaVersion: Int
+    let activeProfileID: ConfigurationProfileID
+    let userProfiles: [ConfigurationProfile]
 }
 
 private enum TestFailure: Error {
