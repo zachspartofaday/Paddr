@@ -4,6 +4,9 @@ import ApplicationServices
 #if canImport(CoreGraphics)
 import CoreGraphics
 #endif
+#if canImport(IOKit)
+import IOKit.hid
+#endif
 import Synchronization
 
 public enum Permissions {
@@ -11,6 +14,19 @@ public enum Permissions {
         #if canImport(ApplicationServices)
         let options = ["AXTrustedCheckOptionPrompt": prompt] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)
+        #else
+        return false
+        #endif
+    }
+
+    /// Input Monitoring (TCC ListenEvent) covers receiving puck HID reports. Prompting posts
+    /// the one-time system dialog and returns the current grant; the user grants asynchronously.
+    public static func inputMonitoringGranted(prompt: Bool) -> Bool {
+        #if canImport(IOKit)
+        if prompt {
+            return IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+        }
+        return IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
         #else
         return false
         #endif

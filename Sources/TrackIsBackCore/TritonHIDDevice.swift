@@ -6,28 +6,38 @@ import IOKit.hid
 import IOKit.hidsystem
 #endif
 
-public struct TritonDeviceSummary: Sendable {
-    public let productID: UInt16
+public struct TritonInterfaceSummary: Sendable {
     public let interfaceNumber: Int?
     public let usagePage: Int?
     public let usage: Int?
     public let maximumInputReportSize: Int
 
+    public init(interfaceNumber: Int?, usagePage: Int?, usage: Int?, maximumInputReportSize: Int) {
+        self.interfaceNumber = interfaceNumber
+        self.usagePage = usagePage
+        self.usage = usage
+        self.maximumInputReportSize = maximumInputReportSize
+    }
+}
+
+public struct TritonDeviceSummary: Sendable {
+    public let productID: UInt16
+    public let interfaces: [TritonInterfaceSummary]
+
+    public init(productID: UInt16, interfaces: [TritonInterfaceSummary]) {
+        self.productID = productID
+        self.interfaces = interfaces
+    }
+
     public var description: String {
-        let interfaceText = interfaceNumber.map(String.init) ?? "unknown"
-        let usageText: String
-        if let usagePage, let usage {
-            usageText = String(format: "0x%04X/0x%04X", usagePage, usage)
-        } else {
-            usageText = "unknown"
-        }
-        return String(
-            format: "Valve 0x28DE:0x%04X interface=%@ usage=%@ inputReport=%d",
-            productID,
-            interfaceText,
-            usageText,
-            maximumInputReportSize
-        )
+        let interfaceText = interfaces
+            .map { $0.interfaceNumber.map(String.init) ?? "?" }
+            .joined(separator: ",")
+        let reportText = Set(interfaces.map(\.maximumInputReportSize))
+            .sorted()
+            .map(String.init)
+            .joined(separator: ",")
+        return String(format: "Valve 0x28DE:0x%04X interfaces=%@ inputReport=%@", productID, interfaceText, reportText)
     }
 }
 
@@ -85,13 +95,34 @@ public protocol TrackpadHIDStreaming {
 
 public final class TritonHIDDevice: TrackpadHIDStreaming {
     public static let vendorID: UInt16 = 0x28DE
+    // 0x1304 = Proteus dongle, 0x1305 = Nereid dongle (SDL usb_ids.h).
     public static let productIDs: [UInt16] = [0x1304, 0x1305]
-    public static let expectedReportLength = 54
+    // The dongle carries one controller slot per USB interface 2 through 5 (SDL's
+    // HIDAPI_DriverSteamTriton_IsSupportedDevice); interfaces below 2 are the
+    // lizard-mode boot keyboard/mouse.
+    public static let dongleInterfaceNumbers = 2...5
+    // Shortest meaningful report: a wireless-status packet (report ID + state byte).
+    public static let minimumReportLength = 2
+    // Shortest controller-state report: the 0x42/0x45 layout through both trackpads.
+    public static let minimumStateReportLength = 30
+
+    /// Whether a matched puck HID interface can carry controller reports. When macOS does not
+    /// expose an interface number, fall back to requiring a state-report-capable input size so
+    /// the lizard-mode boot keyboard/mouse interfaces stay excluded.
+    public static func isControllerInterface(interfaceNumber: Int?, maximumInputReportSize: Int) -> Bool {
+        if let interfaceNumber { return dongleInterfaceNumbers.contains(interfaceNumber) }
+        return maximumInputReportSize >= minimumStateReportLength
+    }
 
     #if canImport(IOKit)
+    private struct OpenedInterface {
+        let device: IOHIDDevice
+        let buffer: UnsafeMutablePointer<UInt8>
+        let capacity: Int
+    }
+
     private let manager: IOHIDManager
-    private let device: IOHIDDevice
-    private let buffer: UnsafeMutablePointer<UInt8>
+    private let openedInterfaces: [OpenedInterface]
     private let callbackState = HIDCallbackState()
     #endif
     public let summary: TritonDeviceSummary
@@ -99,18 +130,32 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
     public var summaryDescription: String { summary.description }
 
     #if canImport(IOKit)
-    private init(manager: IOHIDManager, device: IOHIDDevice, summary: TritonDeviceSummary) throws {
-        self.manager = manager
-        self.device = device
-        self.summary = summary
-        buffer = .allocate(capacity: summary.maximumInputReportSize)
-        buffer.initialize(repeating: 0, count: summary.maximumInputReportSize)
-        let status = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeNone))
-        guard status == kIOReturnSuccess else {
-            buffer.deinitialize(count: summary.maximumInputReportSize)
-            buffer.deallocate()
-            throw TrackIsBackError.device("Could not passively open the SC2 puck interface (IOKit status \(status)).")
+    private init(manager: IOHIDManager, candidates: [(IOHIDDevice, TritonInterfaceSummary)], productID: UInt16) throws {
+        var opened: [OpenedInterface] = []
+        var openedSummaries: [TritonInterfaceSummary] = []
+        var failures: [String] = []
+        for (device, interfaceSummary) in candidates {
+            let status = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeNone))
+            guard status == kIOReturnSuccess else {
+                let name = interfaceSummary.interfaceNumber.map(String.init) ?? "?"
+                failures.append("interface \(name): IOKit status \(status)")
+                continue
+            }
+            let capacity = max(interfaceSummary.maximumInputReportSize, TritonHIDDevice.minimumReportLength)
+            let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
+            buffer.initialize(repeating: 0, count: capacity)
+            opened.append(OpenedInterface(device: device, buffer: buffer, capacity: capacity))
+            openedSummaries.append(interfaceSummary)
         }
+        guard !opened.isEmpty else {
+            IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
+            throw TrackIsBackError.device(
+                "Could not passively open any SC2 puck interface (\(failures.joined(separator: "; ")))."
+            )
+        }
+        self.manager = manager
+        openedInterfaces = opened
+        summary = TritonDeviceSummary(productID: productID, interfaces: openedSummaries)
     }
     #else
     private init(summary: TritonDeviceSummary) { self.summary = summary }
@@ -118,19 +163,21 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
 
     deinit {
         #if canImport(IOKit)
-        IOHIDDeviceUnscheduleFromRunLoop(device, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
-        IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeNone))
+        for interface in openedInterfaces {
+            IOHIDDeviceUnscheduleFromRunLoop(interface.device, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
+            IOHIDDeviceClose(interface.device, IOOptionBits(kIOHIDOptionsTypeNone))
+            interface.buffer.deinitialize(count: interface.capacity)
+            interface.buffer.deallocate()
+        }
         IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
-        buffer.deinitialize(count: summary.maximumInputReportSize)
-        buffer.deallocate()
         #endif
     }
 
     public static func probe() -> TritonDeviceSummary? {
         #if canImport(IOKit)
-        guard let result = selectedDevice() else { return nil }
+        guard let result = selectedDevices() else { return nil }
         IOHIDManagerClose(result.manager, IOOptionBits(kIOHIDOptionsTypeNone))
-        return result.summary
+        return TritonDeviceSummary(productID: result.productID, interfaces: result.candidates.map(\.1))
         #else
         return nil
         #endif
@@ -138,10 +185,10 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
 
     public static func open() throws -> TritonHIDDevice {
         #if canImport(IOKit)
-        guard let result = selectedDevice() else {
+        guard let result = selectedDevices() else {
             throw TrackIsBackError.device("No Steam Controller 2 puck interface was found. Connect through the puck.")
         }
-        return try TritonHIDDevice(manager: result.manager, device: result.device, summary: result.summary)
+        return try TritonHIDDevice(manager: result.manager, candidates: result.candidates, productID: result.productID)
         #else
         throw TrackIsBackError.device("IOHID is unavailable on this platform.")
         #endif
@@ -154,7 +201,7 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
     ) throws -> TrackpadStreamTermination {
         #if canImport(IOKit)
         let callback: IOHIDReportCallback = { context, result, _, _, _, report, length in
-            guard result == kIOReturnSuccess, let context, length == TritonHIDDevice.expectedReportLength else { return }
+            guard result == kIOReturnSuccess, let context, length >= TritonHIDDevice.minimumReportLength else { return }
             let state = Unmanaged<HIDCallbackState>.fromOpaque(context).takeUnretainedValue()
             state.append(Array(UnsafeBufferPointer(start: report, count: length)))
         }
@@ -163,19 +210,23 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
             Unmanaged<HIDCallbackState>.fromOpaque(context).takeUnretainedValue().markRemoved()
         }
         let context = Unmanaged.passUnretained(callbackState).toOpaque()
-        IOHIDDeviceRegisterInputReportCallback(
-            device,
-            buffer,
-            summary.maximumInputReportSize,
-            callback,
-            context
-        )
-        IOHIDDeviceRegisterRemovalCallback(device, removalCallback, context)
-        IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
+        for interface in openedInterfaces {
+            IOHIDDeviceRegisterInputReportCallback(
+                interface.device,
+                interface.buffer,
+                interface.capacity,
+                callback,
+                context
+            )
+            IOHIDDeviceRegisterRemovalCallback(interface.device, removalCallback, context)
+            IOHIDDeviceScheduleWithRunLoop(interface.device, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
+        }
         defer {
-            IOHIDDeviceRegisterInputReportCallback(device, buffer, summary.maximumInputReportSize, nil, nil)
-            IOHIDDeviceRegisterRemovalCallback(device, nil, nil)
-            IOHIDDeviceUnscheduleFromRunLoop(device, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
+            for interface in openedInterfaces {
+                IOHIDDeviceRegisterInputReportCallback(interface.device, interface.buffer, interface.capacity, nil, nil)
+                IOHIDDeviceRegisterRemovalCallback(interface.device, nil, nil)
+                IOHIDDeviceUnscheduleFromRunLoop(interface.device, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
+            }
         }
 
         while shouldContinue(), !callbackState.isRemoved {
@@ -197,11 +248,11 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
     #if canImport(IOKit)
     private struct Selection {
         let manager: IOHIDManager
-        let device: IOHIDDevice
-        let summary: TritonDeviceSummary
+        let candidates: [(IOHIDDevice, TritonInterfaceSummary)]
+        let productID: UInt16
     }
 
-    private static func selectedDevice() -> Selection? {
+    private static func selectedDevices() -> Selection? {
         let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
         let matches = productIDs.map { productID in
             [
@@ -217,35 +268,32 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
             return nil
         }
 
-        let candidates = (deviceSet as NSSet).map { $0 as! IOHIDDevice }.compactMap { device -> (IOHIDDevice, TritonDeviceSummary, Int)? in
+        let candidates = (deviceSet as NSSet).map { $0 as! IOHIDDevice }.compactMap { device -> (IOHIDDevice, UInt16, TritonInterfaceSummary)? in
             guard let productID = integerProperty(device, key: kIOHIDProductIDKey).map(UInt16.init),
-                  let maximum = integerProperty(device, key: kIOHIDMaxInputReportSizeKey),
-                  maximum == expectedReportLength
+                  let maximum = integerProperty(device, key: kIOHIDMaxInputReportSizeKey)
             else { return nil }
             let interface = interfaceNumber(device)
-            let usagePage = integerProperty(device, key: kIOHIDPrimaryUsagePageKey)
-            let usage = integerProperty(device, key: kIOHIDPrimaryUsageKey)
-            let summary = TritonDeviceSummary(
-                productID: productID,
+            guard isControllerInterface(interfaceNumber: interface, maximumInputReportSize: maximum) else { return nil }
+            let summary = TritonInterfaceSummary(
                 interfaceNumber: interface,
-                usagePage: usagePage,
-                usage: usage,
+                usagePage: integerProperty(device, key: kIOHIDPrimaryUsagePageKey),
+                usage: integerProperty(device, key: kIOHIDPrimaryUsageKey),
                 maximumInputReportSize: maximum
             )
-            var score = 0
-            if usagePage == 0x0001, usage == 0x0002 { score += 1_000 }
-            if interface == 2 { score += 100 }
-            return (device, summary, score)
+            return (device, productID, summary)
         }.sorted { lhs, rhs in
-            if lhs.2 != rhs.2 { return lhs.2 > rhs.2 }
-            return (lhs.1.interfaceNumber ?? Int.max) < (rhs.1.interfaceNumber ?? Int.max)
+            (lhs.2.interfaceNumber ?? Int.max) < (rhs.2.interfaceNumber ?? Int.max)
         }
 
-        guard let selected = candidates.first else {
+        guard let first = candidates.first else {
             IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
             return nil
         }
-        return Selection(manager: manager, device: selected.0, summary: selected.1)
+        return Selection(
+            manager: manager,
+            candidates: candidates.map { ($0.0, $0.2) },
+            productID: first.1
+        )
     }
 
     private static func integerProperty(_ device: IOHIDDevice, key: String) -> Int? {

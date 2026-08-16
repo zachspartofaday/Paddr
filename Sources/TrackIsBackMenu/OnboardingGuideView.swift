@@ -73,12 +73,12 @@ struct OnboardingGuideView: View {
             case 2:
                 guidePage(
                     symbol: "accessibility",
-                    title: LocalizedStringResource("Allow Accessibility"),
+                    title: LocalizedStringResource("Allow Access"),
                     detail: LocalizedStringResource(
-                        "Accessibility permission lets Paddr send your mapped mouse and keyboard input. Paddr only requests permission or opens Settings when you choose an action below."
+                        "Input Monitoring lets Paddr receive controller reports from the puck, and Accessibility lets it send your mapped mouse and keyboard input. Paddr asks for Input Monitoring at first launch; otherwise it only requests permission or opens Settings when you choose an action below."
                     )
                 ) {
-                    accessibilityControls
+                    permissionControls
                 }
             default:
                 guidePage(
@@ -132,24 +132,46 @@ struct OnboardingGuideView: View {
         .accessibilityElement(children: .contain)
     }
 
-    private var accessibilityControls: some View {
+    private var permissionControls: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(
-                model.accessibilityTrusted ? "Access ready" : "Access needed",
-                systemImage: model.accessibilityTrusted ? "checkmark.circle.fill" : "exclamationmark.circle"
-            )
-            .foregroundStyle(model.accessibilityTrusted ? PaddrStyle.activeText : PaddrStyle.warningText)
-            .accessibilityLabel(
-                model.accessibilityTrusted
-                    ? Text("Accessibility access is ready")
-                    : Text("Accessibility access is needed")
-            )
+            HStack(spacing: 8) {
+                Label(
+                    model.inputMonitoringGranted ? "Input Monitoring ready" : "Input Monitoring needed",
+                    systemImage: model.inputMonitoringGranted ? "checkmark.circle.fill" : "exclamationmark.circle"
+                )
+                .foregroundStyle(model.inputMonitoringGranted ? PaddrStyle.activeText : PaddrStyle.warningText)
+                .accessibilityLabel(
+                    model.inputMonitoringGranted
+                        ? Text("Input Monitoring access is ready")
+                        : Text("Input Monitoring access is needed")
+                )
+
+                if !model.inputMonitoringGranted {
+                    Button("Request", action: model.requestInputMonitoring)
+                        .paddrActionButton(prominent: true)
+                    Button("Open Settings", action: model.openInputMonitoringSettings)
+                        .paddrActionButton()
+                }
+            }
 
             HStack(spacing: 8) {
-                Button("Request", action: model.requestAccessibility)
-                    .paddrActionButton(prominent: true)
-                Button("Open Settings", action: model.openAccessibilitySettings)
-                    .paddrActionButton()
+                Label(
+                    model.accessibilityTrusted ? "Accessibility ready" : "Accessibility needed",
+                    systemImage: model.accessibilityTrusted ? "checkmark.circle.fill" : "exclamationmark.circle"
+                )
+                .foregroundStyle(model.accessibilityTrusted ? PaddrStyle.activeText : PaddrStyle.warningText)
+                .accessibilityLabel(
+                    model.accessibilityTrusted
+                        ? Text("Accessibility access is ready")
+                        : Text("Accessibility access is needed")
+                )
+
+                if !model.accessibilityTrusted {
+                    Button("Request", action: model.requestAccessibility)
+                        .paddrActionButton(prominent: true)
+                    Button("Open Settings", action: model.openAccessibilitySettings)
+                        .paddrActionButton()
+                }
             }
         }
     }
@@ -171,7 +193,7 @@ struct OnboardingGuideView: View {
         switch pager.pageIndex {
         case 0: String(localized: "Welcome to Paddr")
         case 1: String(localized: "Profiles and Duplicate Default")
-        case 2: String(localized: "Allow Accessibility")
+        case 2: String(localized: "Allow Access")
         default: String(localized: "Start Output Safely")
         }
     }

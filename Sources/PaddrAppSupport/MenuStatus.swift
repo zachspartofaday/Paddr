@@ -54,6 +54,8 @@ public enum MenuStatus: Equatable, Sendable {
     case defaultsRestored
     case requestingAccessibility
     case accessibilitySettings
+    case requestingInputMonitoring
+    case inputMonitoringSettings
     case releasingOutputs
     case stopped
     case failure(MenuFailure)
@@ -69,6 +71,8 @@ public enum MenuStatus: Equatable, Sendable {
         case .defaultsRestored: "Defaults restored. Save to apply them."
         case .requestingAccessibility: "Complete the Accessibility prompt, then return to Paddr."
         case .accessibilitySettings: "Enable Paddr in Accessibility, then return to the app."
+        case .requestingInputMonitoring: "Complete the Input Monitoring prompt, then return to Paddr."
+        case .inputMonitoringSettings: "Enable Paddr in Input Monitoring, then return to the app."
         case .releasingOutputs: "Releasing mapped keys and mouse buttons…"
         case .stopped: "Trackpad output stopped."
         case let .failure(failure): failure.message
@@ -77,7 +81,8 @@ public enum MenuStatus: Equatable, Sendable {
 
     public var messageState: MenuStatusMessageState? {
         switch self {
-        case .waitingForNeutral, .defaultsRestored, .requestingAccessibility, .accessibilitySettings:
+        case .waitingForNeutral, .defaultsRestored, .requestingAccessibility, .accessibilitySettings,
+             .requestingInputMonitoring, .inputMonitoringSettings:
             .guidance
         case .failure:
             .failure

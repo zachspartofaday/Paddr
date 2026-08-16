@@ -193,15 +193,19 @@ public enum TrackpadRuntime {
             }
         }
 
+        func loseController() throws {
+            lastAcceptedReportUptime = nil
+            controllerLive = false
+            try releaseEpochOutputs()
+            onEvent?(.controllerLost(summary()))
+        }
+
         func loseControllerIfDeadlineReached(at uptime: UInt64) throws {
             guard let lastAccepted = lastAcceptedReportUptime,
                   uptime >= lastAccepted,
                   uptime - lastAccepted >= controllerLossDeadlineNanoseconds
             else { return }
-            lastAcceptedReportUptime = nil
-            controllerLive = false
-            try releaseEpochOutputs()
-            onEvent?(.controllerLost(summary()))
+            try loseController()
         }
 
         func reconcileOutputGate() throws {
@@ -229,6 +233,18 @@ public enum TrackpadRuntime {
                     try loseControllerIfDeadlineReached(at: dependencies.uptimeNanoseconds())
                 },
                 onReport: { bytes, timestamp in
+                    if let wirelessConnected = TritonParser.parseWirelessConnection(bytes) {
+                        if wirelessConnected {
+                            lastAcceptedReportUptime = timestamp
+                            if !controllerLive {
+                                controllerLive = true
+                                onEvent?(.controllerConnected)
+                            }
+                        } else if controllerLive {
+                            try loseController()
+                        }
+                        return
+                    }
                     guard let pads = TritonParser.parseTrackpads(bytes, timestampNanoseconds: timestamp) else {
                         return
                     }

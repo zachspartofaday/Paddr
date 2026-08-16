@@ -29,6 +29,23 @@ public enum TritonParser {
     private static let leftTouchMask: UInt32 = 0x0200_0000
     private static let leftClickMask: UInt32 = 0x0400_0000
 
+    // Wireless-status report IDs and state values follow SDL's ETritonReportIDTypes /
+    // ETritonWirelessState (0x46 = ID_TRITON_WIRELESS_STATUS_X, 0x79 = ID_TRITON_WIRELESS_STATUS).
+    private static let wirelessStatusReportIDs: Set<UInt8> = [0x46, 0x79]
+    private static let wirelessStateDisconnected: UInt8 = 1
+    private static let wirelessStateConnected: UInt8 = 2
+
+    /// Returns the link state carried by a dongle wireless-status report, or nil when the
+    /// bytes are not a wireless-status report with a recognized state.
+    public static func parseWirelessConnection(_ bytes: [UInt8]) -> Bool? {
+        guard bytes.count >= 2, let report = bytes.first, wirelessStatusReportIDs.contains(report) else { return nil }
+        switch bytes[1] {
+        case wirelessStateConnected: return true
+        case wirelessStateDisconnected: return false
+        default: return nil
+        }
+    }
+
     public static func parseTrackpads(_ bytes: [UInt8], timestampNanoseconds: UInt64) -> TrackpadPair? {
         guard let report = bytes.first else { return nil }
         let padOffset: Int

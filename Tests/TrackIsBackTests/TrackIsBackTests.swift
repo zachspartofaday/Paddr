@@ -19,6 +19,60 @@ final class TrackIsBackTests: XCTestCase {
         XCTAssertEqual(pads?.right, TrackpadSample(isTouched: true, isClicked: true, x: 3_000, y: -4_000, pressure: 500, timestampNanoseconds: 99))
     }
 
+    func testTritonParserAcceptsUnpadded46ByteStateReports() {
+        var noQuat = [UInt8](repeating: 0, count: 46)
+        noQuat[0] = 0x42
+        writeUInt32(0x0200_0000, to: &noQuat, at: 2)
+        writeInt16(1_000, to: &noQuat, at: 18)
+        let noQuatPads = TritonParser.parseTrackpads(noQuat, timestampNanoseconds: 7)
+        XCTAssertEqual(noQuatPads?.left.isTouched, true)
+        XCTAssertEqual(noQuatPads?.left.x, 1_000)
+
+        var timestamped = [UInt8](repeating: 0, count: 46)
+        timestamped[0] = 0x47
+        writeUInt32(0x0020_0000, to: &timestamped, at: 2)
+        writeInt16(2_000, to: &timestamped, at: 26)
+        let timestampedPads = TritonParser.parseTrackpads(timestamped, timestampNanoseconds: 7)
+        XCTAssertEqual(timestampedPads?.right.isTouched, true)
+        XCTAssertEqual(timestampedPads?.right.x, 2_000)
+    }
+
+    func testTritonParserReadsWirelessStatusReports() {
+        XCTAssertEqual(TritonParser.parseWirelessConnection([0x46, 2]), true)
+        XCTAssertEqual(TritonParser.parseWirelessConnection([0x79, 2]), true)
+        XCTAssertEqual(TritonParser.parseWirelessConnection([0x46, 1]), false)
+        XCTAssertEqual(TritonParser.parseWirelessConnection([0x79, 1]), false)
+        XCTAssertEqual(TritonParser.parseWirelessConnection([0x46, 2, 0, 0]), true)
+        XCTAssertNil(TritonParser.parseWirelessConnection([]))
+        XCTAssertNil(TritonParser.parseWirelessConnection([0x46]))
+        XCTAssertNil(TritonParser.parseWirelessConnection([0x46, 0]))
+        XCTAssertNil(TritonParser.parseWirelessConnection([0x46, 3]))
+        XCTAssertNil(TritonParser.parseWirelessConnection([0x42, 2]))
+    }
+
+    func testControllerInterfaceFilterMatchesDongleSlots() {
+        XCTAssertTrue(TritonHIDDevice.isControllerInterface(interfaceNumber: 2, maximumInputReportSize: 54))
+        XCTAssertTrue(TritonHIDDevice.isControllerInterface(interfaceNumber: 3, maximumInputReportSize: 64))
+        XCTAssertTrue(TritonHIDDevice.isControllerInterface(interfaceNumber: 5, maximumInputReportSize: 46))
+        XCTAssertFalse(TritonHIDDevice.isControllerInterface(interfaceNumber: 0, maximumInputReportSize: 54))
+        XCTAssertFalse(TritonHIDDevice.isControllerInterface(interfaceNumber: 1, maximumInputReportSize: 54))
+        XCTAssertFalse(TritonHIDDevice.isControllerInterface(interfaceNumber: 6, maximumInputReportSize: 54))
+        XCTAssertTrue(TritonHIDDevice.isControllerInterface(interfaceNumber: nil, maximumInputReportSize: 30))
+        XCTAssertFalse(TritonHIDDevice.isControllerInterface(interfaceNumber: nil, maximumInputReportSize: 8))
+    }
+
+    func testDeviceSummaryDescriptionListsAllInterfaces() {
+        let summary = TritonDeviceSummary(
+            productID: 0x1304,
+            interfaces: [
+                TritonInterfaceSummary(interfaceNumber: 2, usagePage: 1, usage: 2, maximumInputReportSize: 54),
+                TritonInterfaceSummary(interfaceNumber: 3, usagePage: nil, usage: nil, maximumInputReportSize: 54),
+                TritonInterfaceSummary(interfaceNumber: nil, usagePage: nil, usage: nil, maximumInputReportSize: 46)
+            ]
+        )
+        XCTAssertEqual(summary.description, "Valve 0x28DE:0x1304 interfaces=2,3,? inputReport=46,54")
+    }
+
     func testDPadZonesResolveCardinalDirections() {
         XCTAssertEqual(PadMapper.activeDirections(x: 0, y: 20_000, deadzone: 0.2), [.up])
         XCTAssertEqual(PadMapper.activeDirections(x: 20_000, y: 0, deadzone: 0.2), [.right])

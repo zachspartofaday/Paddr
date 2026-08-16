@@ -57,15 +57,27 @@ struct TopControlsView: View {
                 .frame(minHeight: PaddrStyle.cardHeaderHeight)
                 .fixedSize()
 
-            PermissionTile(
-                title: LocalizedStringResource("Accessibility"),
-                detail: LocalizedStringResource(
-                    "Reads trackpad reports and sends mapped mouse and keyboard input."
-                ),
-                isGranted: model.accessibilityTrusted,
-                requestAction: model.requestAccessibility,
-                settingsAction: model.openAccessibilitySettings
-            )
+            VStack(spacing: 8) {
+                PermissionTile(
+                    title: LocalizedStringResource("Accessibility"),
+                    detail: LocalizedStringResource(
+                        "Sends mapped mouse, scroll, and keyboard input."
+                    ),
+                    isGranted: model.accessibilityTrusted,
+                    requestAction: model.requestAccessibility,
+                    settingsAction: model.openAccessibilitySettings
+                )
+
+                PermissionTile(
+                    title: LocalizedStringResource("Input Monitoring"),
+                    detail: LocalizedStringResource(
+                        "Receives Steam Controller 2 reports from the puck."
+                    ),
+                    isGranted: model.inputMonitoringGranted,
+                    requestAction: model.requestInputMonitoring,
+                    settingsAction: model.openInputMonitoringSettings
+                )
+            }
         }
         .frame(width: 470, alignment: .leading)
         .frame(minHeight: 40)
