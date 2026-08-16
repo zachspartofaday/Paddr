@@ -6,7 +6,7 @@ User-visible changes to Paddr are recorded here. Release entries describe confir
 
 - Fixed the controller staying **Not found** on some pucks even though macOS saw the controller ([#52](https://github.com/zachspartofaday/Paddr/issues/52)). Paddr now listens on all four controller slots the puck exposes (USB interfaces 2–5) instead of a single heuristically chosen interface, accepts the shorter controller-state report variants some firmware emits instead of requiring exactly 54-byte reports, and reacts to the puck's explicit wireless connect/disconnect events so controller status updates immediately.
 - The bottom-bar puck description now lists every opened puck interface and the observed report sizes, which makes future connectivity reports easier to diagnose.
-- Paddr now requests **Input Monitoring** at first launch and surfaces its state alongside Accessibility in the permissions row, the onboarding guide, and PaddrCLI. Without that grant macOS can withhold puck reports, which also presents as **Controller · Not found**.
+- Paddr now requests **Input Monitoring** at first launch and surfaces its state ahead of Accessibility in the permissions row, the onboarding guide, and PaddrCLI — it is the grant that makes the controller visible at all, so it leads every permission surface. Without that grant macOS can withhold puck reports, which also presents as **Controller · Not found**.
 
 ## 0.9.11 — 2026-08-14
 
