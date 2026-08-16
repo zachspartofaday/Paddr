@@ -12,6 +12,17 @@ enum PaddrTextRole {
     case sectionLabel
     /// Settings-row labels, normally paired with an SF Symbol.
     case rowLabel
+    /// Action-button labels, for every `PaddrButtonRole`.
+    ///
+    /// Deliberately larger and heavier than ``rowLabel``, and the reason is a contrast
+    /// threshold rather than a taste: the button's label is drawn on the accent fill, whose
+    /// on-accent colour is derived at WCAG's 3.0:1 *large text* threshold. Large text is
+    /// 18pt regular or 14pt bold, so at `.callout` — regular weight, 12pt — that threshold
+    /// did not apply and 4.5:1 did. `.title3` is 15pt at the default size category, and this
+    /// role carries `.bold`, which clears the 14pt-bold form of the threshold. It stays a
+    /// system text style rather than a fixed point size so Dynamic Type still scales it, and
+    /// scaling only ever moves it further above 14pt.
+    case buttonLabel
     /// Status values and numeric readouts.
     case value
     /// Detail and secondary text.
@@ -23,6 +34,7 @@ enum PaddrTextRole {
         case .cardTitle: .headline
         case .sectionLabel: .subheadline.weight(.semibold)
         case .rowLabel: .callout
+        case .buttonLabel: .title3.weight(.bold)
         case .value: .callout.monospacedDigit()
         case .caption: .caption
         }
@@ -114,9 +126,16 @@ enum PaddrStyle {
     /// hard-coded partner colour with it, because no fixed colour survives that range.
     static let accent = Color(nsColor: .controlAccentColor)
 
-    /// The label drawn *on top of* an accent fill: black or white, whichever clears 4.5:1
-    /// against the fill. The fixed white this replaced clears it on none of the eight
-    /// accents macOS offers — 1.51:1 on yellow, 3.52:1 on the stock blue.
+    /// The label drawn *on top of* an accent fill: black or white, whichever clears the
+    /// 3.0:1 large-text threshold against the fill. The fixed white this replaced clears
+    /// even that on only some of the eight accents macOS offers — 1.51:1 on yellow — and
+    /// clears 4.5:1 on none of them, 3.52:1 on the stock blue included.
+    ///
+    /// The large-text threshold applies because ``PaddrTextRole/buttonLabel`` is 15pt bold,
+    /// which is what every `PaddrButtonStyle` label is drawn at. That is the *only* thing
+    /// licensing 3.0:1 here: while the button family used `.rowLabel` — `.callout`, regular
+    /// weight, 12pt — this token was 4.5:1 text wearing a large-text justification, and
+    /// white on the stock blue was a failure the derivation reported as a pass.
     static let onAccent = Color(nsColor: NSColor(name: nil) { appearance in
         PaddrAccentPalette.onAccentLabel(
             for: PaddrAccentPalette.srgb(.controlAccentColor, in: appearance)
@@ -154,6 +173,24 @@ enum PaddrStyle {
     /// current appearance.
     static let accentText = Color(nsColor: NSColor(name: nil) { appearance in
         PaddrAccentPalette.text(
+            from: PaddrAccentPalette.srgb(.controlAccentColor, in: appearance),
+            on: PaddrAccentPalette.srgb(.windowBackgroundColor, in: appearance)
+        )
+    })
+
+    /// Accent for a meaning-bearing *symbol* on the panel background — the permission tile's
+    /// granted checkmark, the status badge's ready glyph, and the increased-contrast badge
+    /// outline drawn from the same token.
+    ///
+    /// A translucent accent *fill* may stay raw: it is decoration, and nothing is read from
+    /// it. A symbol is not, and `accent` alone measures 1.51:1 against the light panel on the
+    /// yellow accent — the exact ratio this palette already rejects for the label — with
+    /// orange at 2.31:1 and green at 2.22:1 failing beside it. Non-text rather than text
+    /// contrast because these are glyphs and boundaries, not prose; `accentText` remains the
+    /// 4.5:1 token for the words next to them. The other five accents and all eight in dark
+    /// appearance already clear 3.0:1, and the derivation returns those unchanged.
+    static let accentSymbol = Color(nsColor: NSColor(name: nil) { appearance in
+        PaddrAccentPalette.nonText(
             from: PaddrAccentPalette.srgb(.controlAccentColor, in: appearance),
             on: PaddrAccentPalette.srgb(.windowBackgroundColor, in: appearance)
         )
@@ -213,19 +250,48 @@ enum PaddrAccentPalette {
     /// (black on light, white on dark) clear 4.5:1 by a wide margin, so the search always
     /// terminates on a colour that meets the target.
     static func text(from accent: NSColor, on background: NSColor) -> NSColor {
-        let towardBlack = relativeLuminance(of: background) > equalContrastLuminance
-        return smallestBlend(
+        derived(from: accent, on: background, clearing: textContrast)
+    }
+
+    /// A non-text accent on an arbitrary background — a focus ring, a component edge, or a
+    /// meaning-bearing symbol. The same derivation as ``text(from:on:)`` at the boundary
+    /// threshold rather than the body-text one, so there is one blend search, not two.
+    static func nonText(from accent: NSColor, on background: NSColor) -> NSColor {
+        derived(from: accent, on: background, clearing: nonTextContrast)
+    }
+
+    private static func derived(
+        from accent: NSColor,
+        on background: NSColor,
+        clearing ratio: Double
+    ) -> NSColor {
+        smallestBlend(
             of: accent,
-            toward: towardBlack ? .black : .white,
-            clearing: textContrast,
+            toward: endpoint(on: background),
+            clearing: ratio,
             against: background
         )
     }
 
+    /// The endpoint every derivation blends toward: black on a light background, white on a
+    /// dark one. Both clear either threshold by a wide margin, so a search toward this
+    /// endpoint always terminates on a colour that meets its target.
+    static func endpoint(on background: NSColor) -> NSColor {
+        relativeLuminance(of: background) > equalContrastLuminance ? .black : .white
+    }
+
+    /// Source-over compositing of a translucent colour on an opaque one, which is what a
+    /// tinted fill *is*: the same blend the derivations use, read in the other direction.
+    static func composite(_ source: NSColor, over destination: NSColor, opacity: Double) -> NSColor {
+        blend(destination, toward: source, amount: opacity)
+    }
+
     /// The label drawn on top of an accent fill.
     ///
-    /// White is used when it clears the 3.0:1 AA threshold for large text. It survives on
-    /// saturated accents so buttons look native, and flips to black only where white is
+    /// White is used when it clears the 3.0:1 AA threshold for large text — which applies
+    /// because ``PaddrTextRole/buttonLabel`` is 15pt bold, past the 14pt-bold form of
+    /// WCAG's large-text definition, and not merely by assertion. White survives on
+    /// saturated accents so buttons look native, and flips to black only where it is
     /// genuinely unreadable — 1.51:1 on the yellow accent `#FFCC00`.
     static func onAccentLabel(for accent: NSColor) -> NSColor {
         contrastRatio(.white, accent) >= nonTextContrast ? .white : .black

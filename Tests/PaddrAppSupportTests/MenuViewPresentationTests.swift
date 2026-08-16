@@ -294,10 +294,116 @@ final class MenuViewPresentationTests: XCTestCase {
             PaddrControlSurface(state: PaddrControlState(isProminent: true)).focusRingColor,
             PaddrStyle.onAccent
         )
+
+        // Not-equal is necessary and nowhere near sufficient, which is how the three
+        // non-prominent rows kept the raw accent through the repair that fixed the prominent
+        // one: a yellow ring differs from a near-white fill and is still invisible on it.
+        // Each row now names the derivation against its *own* fill;
+        // `testTheFocusRingClearsNonTextContrastOnEveryRowAndAccent` pins the ratios.
         XCTAssertEqual(
             PaddrControlSurface(state: PaddrControlState()).focusRingColor,
-            PaddrStyle.accent
+            PaddrControlSurface.focusRingOnRestFill
         )
+        XCTAssertEqual(
+            PaddrControlSurface(state: PaddrControlState(isSelected: true)).focusRingColor,
+            PaddrControlSurface.focusRingOnSelectedFill
+        )
+        XCTAssertEqual(
+            PaddrControlSurface(state: PaddrControlState(isEnabled: false)).focusRingColor,
+            PaddrControlSurface.focusRingOnDisabledFill
+        )
+        // The defect this replaced, stated so a revert to it fails here.
+        XCTAssertNotEqual(PaddrControlSurface.focusRingOnRestFill, PaddrStyle.accent)
+        XCTAssertNotEqual(PaddrControlSurface.focusRingOnSelectedFill, PaddrStyle.accent)
+    }
+
+    /// The ring is the only focus indication a Paddr control has — `focusEffectDisabled()`
+    /// removed the system one — so it is a non-text indicator that must clear 3.0:1 against
+    /// the fill it is inset into, on every row, for an accent this machine may never have
+    /// selected.
+    ///
+    /// The prominent row was repaired first and alone. Every other row kept
+    /// `PaddrStyle.accent` against a fill that is either near-background or an 18% wash of
+    /// that same accent, which is the pale end of the identical defect: measured on the
+    /// yellow accent in light appearance, the rest row's ring was 1.32:1, the selected row's
+    /// 1.39:1, and the disabled row's 1.43:1. Green and orange failed in light too, at
+    /// 1.92:1 to 2.11:1. Driven per row × accent × appearance rather than per row alone.
+    func testTheFocusRingClearsNonTextContrastOnEveryRowAndAccent() throws {
+        for isDark in [false, true] {
+            let background = try resolvedSRGB(.windowBackgroundColor, isDark: isDark)
+            for (name, systemColor) in Self.macOSAccents {
+                let accent = try resolvedSRGB(systemColor, isDark: isDark)
+                let appearance = isDark ? "dark" : "light"
+
+                for (row, fill) in [
+                    (PaddrControlRow.rest, PaddrControlSurface.restFill(on: background)),
+                    (.selected, PaddrControlSurface.selectedFill(accent: accent, on: background)),
+                    (.prominent, accent),
+                    (
+                        .disabled,
+                        PaddrControlSurface.restFill(
+                            on: background,
+                            opacity: PaddrControlSurface.restFillOpacity
+                                * PaddrControlSurface.disabledFillScale
+                        )
+                    )
+                ] {
+                    let ring = PaddrControlSurface.focusRing(
+                        for: row,
+                        accent: accent,
+                        on: background
+                    )
+                    XCTAssertGreaterThanOrEqual(
+                        contrastRatio(ring, fill),
+                        3.0,
+                        "\(name)/\(appearance) \(row) focus ring misses non-text contrast"
+                    )
+                }
+
+                // Fail-before: the raw accent, against the two fills that carried it.
+                let restFill = PaddrControlSurface.restFill(on: background)
+                if name == "yellow", !isDark {
+                    XCTAssertLessThan(contrastRatio(accent, restFill), 3.0)
+                    XCTAssertLessThan(
+                        contrastRatio(
+                            accent,
+                            PaddrControlSurface.selectedFill(accent: accent, on: background)
+                        ),
+                        3.0
+                    )
+                }
+            }
+        }
+    }
+
+    /// A meaning-bearing accent symbol is not a translucent accent fill. The permission
+    /// tile's granted checkmark and the status badge's ready glyph — the latter also drawn
+    /// as the increased-contrast badge outline — read the accent directly, so on the yellow
+    /// accent in light appearance they sat at roughly 1.5:1 against their own surfaces: the
+    /// ratio this palette rejects for the label, the rim, and the ring.
+    func testTheAccentSymbolClearsNonTextContrastOnEveryMacOSAccent() throws {
+        for isDark in [false, true] {
+            let background = try resolvedSRGB(.windowBackgroundColor, isDark: isDark)
+            for (name, systemColor) in Self.macOSAccents {
+                let accent = try resolvedSRGB(systemColor, isDark: isDark)
+                let derived = PaddrAccentPalette.nonText(from: accent, on: background)
+                XCTAssertGreaterThanOrEqual(
+                    contrastRatio(derived, background),
+                    3.0,
+                    "\(name)/\(isDark ? "dark" : "light") accent symbol misses non-text contrast"
+                )
+            }
+        }
+
+        // Fail-before: the raw accent these call sites used to draw.
+        let lightBackground = try resolvedSRGB(.windowBackgroundColor, isDark: false)
+        let yellow = try resolvedSRGB(.systemYellow, isDark: false)
+        XCTAssertLessThan(contrastRatio(yellow, lightBackground), 3.0)
+
+        // The symbol takes the boundary threshold, not the body one: it is a glyph beside
+        // the text, not the text. `accentText` stays the 4.5:1 token for the words.
+        XCTAssertEqual(PaddrAccentPalette.nonTextContrast, 3.0)
+        XCTAssertEqual(PaddrAccentPalette.textContrast, 4.5)
     }
 
     /// The ring and the border are two arcs, not one.
@@ -380,9 +486,15 @@ final class MenuViewPresentationTests: XCTestCase {
 
     /// White on an accent fill is the assumption that a fixed blue accent permitted. It does
     /// not survive the palette: white reads 1.51:1 on yellow and 3.52:1 on the stock blue,
-    /// and in fact clears 4.5:1 on none of the eight. Large-text labels use 3.0:1, so white
-    /// survives on saturated accents while yellow flips to black. The label and the focus ring
-    /// share the derivation, so both are asserted here.
+    /// and in fact clears 4.5:1 on none of the eight.
+    ///
+    /// The threshold asserted here is 3.0:1, WCAG's large-text one, and it applies for a
+    /// reason this file can point at rather than by assertion: `PaddrButtonStyle` draws its
+    /// label at `PaddrTextRole.buttonLabel`, which is `.title3.weight(.bold)` — 15pt bold,
+    /// past the 14pt-bold form of large text.
+    /// `testTheButtonLabelRoleIsLargeTextSoTheOnAccentThresholdApplies` pins that premise,
+    /// and until it held the honest threshold here was 4.5:1, which white on the stock blue
+    /// misses. The label and the focus ring share the derivation, so both are asserted here.
     func testTheProminentLabelAndRingClearBodyContrastOnEveryMacOSAccent() throws {
         // Fail-before: the colour this row used to draw, against the accent that breaks it
         // hardest and against the default one.
@@ -400,7 +512,7 @@ final class MenuViewPresentationTests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(
                     contrastRatio(label, accent),
                     3.0,
-                    "\(name)/\(isDark ? "dark" : "light") prominent label misses body contrast"
+                    "\(name)/\(isDark ? "dark" : "light") prominent label misses large-text contrast"
                 )
             }
         }
@@ -529,6 +641,38 @@ final class MenuViewPresentationTests: XCTestCase {
         )
     }
 
+    /// The premise the on-accent derivation rests on.
+    ///
+    /// `PaddrStyle.onAccent` derives at 3.0:1, WCAG's threshold for *large* text — 18pt
+    /// regular or 14pt bold. For most of this slice that licence was not real: the button
+    /// family drew its label at `.rowLabel`, which is `.callout` — regular weight, 12pt — so
+    /// 4.5:1 was the applicable threshold and white on the stock blue is 3.52:1. The repair
+    /// made the premise true rather than moving the threshold, and this is what holds it
+    /// true: a role change back to a regular-weight or sub-14pt style fails here rather than
+    /// silently reinstating a 4.5:1 surface wearing a 3.0:1 derivation.
+    func testTheButtonLabelRoleIsLargeTextSoTheOnAccentThresholdApplies() {
+        // 15pt at the default size category. It is a system text style rather than a fixed
+        // size, so Dynamic Type still scales it — and every larger category moves further
+        // past the bound, never below it.
+        XCTAssertGreaterThanOrEqual(NSFont.preferredFont(forTextStyle: .title3).pointSize, 14)
+        // The role it replaced, and the reason 14pt-bold could never be claimed for it.
+        XCTAssertLessThan(NSFont.preferredFont(forTextStyle: .callout).pointSize, 14)
+
+        // Weight is the other half of the 14pt-bold form, and `Font` does not report it.
+        // Bold sets wider than regular at one size, so the role is measured against the same
+        // text style without the weight, and against the role it replaced.
+        func width(_ font: Font) -> CGFloat {
+            let hostingView = NSHostingView(rootView: Text(verbatim: "Save & Apply").font(font))
+            hostingView.layoutSubtreeIfNeeded()
+            return hostingView.fittingSize.width
+        }
+        XCTAssertGreaterThan(width(PaddrTextRole.buttonLabel.font), width(.title3))
+        XCTAssertGreaterThan(
+            width(PaddrTextRole.buttonLabel.font),
+            width(PaddrTextRole.rowLabel.font)
+        )
+    }
+
     /// A custom `ButtonStyle` renders no `NSControl`, so the row-height assertions elsewhere
     /// in this file cannot see a button at all. The height is asserted on the hosted
     /// geometry directly, and exactly, rather than as containment.
@@ -575,8 +719,12 @@ final class MenuViewPresentationTests: XCTestCase {
     /// carry `accuracy: 0.5` so that an adaptive override cannot flip a row silently — which
     /// also means a 37.6pt button would satisfy them. This asserts the property those cannot:
     /// exact integrality, on both axes, for the label of every real call site. The widths are
-    /// text-derived and therefore the ones that could drift; they measure 67, 101, 116, 38,
-    /// 71, 48, and 45 today, all whole.
+    /// text-derived and therefore the ones that could drift; in the call-site order below they
+    /// measure 81, 125, 38, 142, 87, 57, and 53 today, all whole. Every text-derived one grew
+    /// between 8 and 26 points when the label moved from `.rowLabel` to `.buttonLabel` — 12pt
+    /// regular to 15pt bold — and the icon role is unmoved because its width is the frame, not
+    /// the text. Heights are untouched at `Metrics.button`: the frame fixes them, and a 15pt
+    /// bold line sets well inside 38pt.
     func testEveryButtonRoleHostsAtWholePointDimensions() {
         let callSites: [(String, PaddrButtonRole, String?)] = [
             ("Request", .primary, nil),

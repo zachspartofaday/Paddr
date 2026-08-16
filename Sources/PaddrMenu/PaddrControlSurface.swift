@@ -155,15 +155,23 @@ struct PaddrControlSurface: ViewModifier {
         }
     }
 
+    /// The base fill opacities. Named rather than written inline because the focus ring is
+    /// derived against the fill it is drawn on: a second copy of these numbers in the ring's
+    /// derivation is a copy that can drift, and a ring derived against a fill the control no
+    /// longer draws clears nothing.
+    static let restFillOpacity: Double = 0.06
+    static let selectedFillOpacity: Double = 0.18
+    static let disabledFillScale: Double = 0.4
+
     /// The base fill, before the interaction overlay. Stated over `Color.primary` and
     /// `PaddrStyle.accent` so one set of values adapts to light and dark without a second
-    /// palette. Disabled is the rest fill at 0.4.
+    /// palette. Disabled is the rest fill at ``disabledFillScale``.
     var fillColor: Color {
         switch state.row {
-        case .rest: Color.primary.opacity(0.06)
-        case .selected: PaddrStyle.accent.opacity(0.18)
+        case .rest: Color.primary.opacity(Self.restFillOpacity)
+        case .selected: PaddrStyle.accent.opacity(Self.selectedFillOpacity)
         case .prominent: PaddrStyle.accent
-        case .disabled: Color.primary.opacity(0.06 * 0.4)
+        case .disabled: Color.primary.opacity(Self.restFillOpacity * Self.disabledFillScale)
         }
     }
 
@@ -242,9 +250,82 @@ struct PaddrControlSurface: ViewModifier {
     ///
     /// A fixed white ring was the first repair and is no longer sufficient: once the accent
     /// became the viewer's, a white ring on a yellow accent is the same defect again, at
-    /// 1.51:1. The ring takes the same derived on-accent colour as the label.
+    /// 1.51:1. The prominent ring takes the same derived on-accent colour as the label.
+    ///
+    /// That repair reached one row and left three at the raw accent, which is the same
+    /// defect with a paler fill underneath it: a yellow ring measures 1.32:1 on the rest
+    /// row's near-white fill and 1.39:1 on the selected row's wash of that same yellow — and
+    /// the ring is the *only* focus indication a Paddr control has. Every row now derives
+    /// against its own fill at the 3.0:1 boundary threshold.
     var focusRingColor: Color {
-        state.row == .prominent ? PaddrStyle.onAccent : PaddrStyle.accent
+        switch state.row {
+        case .prominent: PaddrStyle.onAccent
+        case .selected: Self.focusRingOnSelectedFill
+        case .rest: Self.focusRingOnRestFill
+        case .disabled: Self.focusRingOnDisabledFill
+        }
+    }
+
+    /// The rest row's fill, resolved for one appearance.
+    ///
+    /// `Color.primary` is modelled as the appearance's plain black or white rather than
+    /// `labelColor`'s 85% black: that makes the modelled fill darker than the drawn one in
+    /// light appearance and lighter in dark, and in both directions that is the *harder*
+    /// target for a ring derived against it. The backdrop is the window background, the
+    /// same solid stand-in `PaddrStyle.accentText` resolves against — the card's real
+    /// backing is `.regularMaterial`, which no solid colour is exactly.
+    static func restFill(on background: NSColor, opacity: Double = restFillOpacity) -> NSColor {
+        PaddrAccentPalette.composite(
+            PaddrAccentPalette.endpoint(on: background),
+            over: background,
+            opacity: opacity
+        )
+    }
+
+    /// The selected row's fill, resolved for one appearance. Exact rather than modelled:
+    /// the tint is the accent itself.
+    static func selectedFill(accent: NSColor, on background: NSColor) -> NSColor {
+        PaddrAccentPalette.composite(accent, over: background, opacity: selectedFillOpacity)
+    }
+
+    /// The focus ring for one row, as a pure function of the accent and the background, so
+    /// the tests can drive the whole macOS accent set through it rather than the single
+    /// accent the test host happens to run with.
+    static func focusRing(
+        for row: PaddrControlRow,
+        accent: NSColor,
+        on background: NSColor
+    ) -> NSColor {
+        switch row {
+        case .prominent:
+            PaddrAccentPalette.onAccentLabel(for: accent)
+        case .selected:
+            PaddrAccentPalette.nonText(
+                from: accent,
+                on: selectedFill(accent: accent, on: background)
+            )
+        case .rest:
+            PaddrAccentPalette.nonText(from: accent, on: restFill(on: background))
+        case .disabled:
+            PaddrAccentPalette.nonText(
+                from: accent,
+                on: restFill(on: background, opacity: restFillOpacity * disabledFillScale)
+            )
+        }
+    }
+
+    static let focusRingOnRestFill = focusRingToken(for: .rest)
+    static let focusRingOnSelectedFill = focusRingToken(for: .selected)
+    static let focusRingOnDisabledFill = focusRingToken(for: .disabled)
+
+    private static func focusRingToken(for row: PaddrControlRow) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            focusRing(
+                for: row,
+                accent: PaddrAccentPalette.srgb(.controlAccentColor, in: appearance),
+                on: PaddrAccentPalette.srgb(.windowBackgroundColor, in: appearance)
+            )
+        })
     }
 
     @ViewBuilder
@@ -279,7 +360,10 @@ struct PaddrButtonStyle: ButtonStyle {
 
         var body: some View {
             label
-                .paddrTypography(.rowLabel)
+                // Every role, not only the prominent one: the button family shares one
+                // label treatment, and the `onAccent` derivation's 3.0:1 large-text
+                // threshold is licensed by this role being 15pt bold.
+                .paddrTypography(.buttonLabel)
                 .padding(
                     .horizontal,
                     role == .icon ? 0 : PaddrStyle.Metrics.controlHorizontalPadding

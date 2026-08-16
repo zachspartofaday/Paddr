@@ -10,7 +10,7 @@ enum StatusBadgeState {
     var color: Color {
         switch self {
         case .active: PaddrStyle.active
-        case .ready: PaddrStyle.accent
+        case .ready: PaddrStyle.accentSymbol
         case .problem: .orange
         case .neutral: .secondary
         }

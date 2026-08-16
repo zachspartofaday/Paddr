@@ -10,7 +10,7 @@ struct PermissionTile: View {
     var body: some View {
         HStack(spacing: PaddrStyle.Spacing.s2) {
             Image(systemName: isGranted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                .foregroundStyle(isGranted ? PaddrStyle.accent : .orange)
+                .foregroundStyle(isGranted ? PaddrStyle.accentSymbol : .orange)
                 .accessibilityHidden(true)
 
             Text(title)
