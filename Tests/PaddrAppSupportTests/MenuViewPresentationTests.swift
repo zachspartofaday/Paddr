@@ -156,11 +156,137 @@ final class MenuViewPresentationTests: XCTestCase {
         }
     }
 
+    /// The class invariant behind this slice's two suppression defects — a prominent button
+    /// that showed no press, then a prominent button that showed no hover. Both are one bug:
+    /// an interaction flag swallowed by a row that outranks it. Stated over all 64
+    /// combinations as "removing the flag must change what is drawn", rather than per row,
+    /// because fixing it one row at a time is what let the second instance through.
+    func testNoInteractionFlagIsSwallowedByTheRowThatOutranksIt() {
+        /// What the surface paints, minus the ring: the row supplies fill, stroke, and label,
+        /// and the tint is composited over that fill.
+        struct Drawn: Equatable {
+            let row: PaddrControlRow
+            let tint: PaddrInteractionTint
+
+            init(_ state: PaddrControlState) {
+                row = state.row
+                tint = state.interactionTint
+            }
+        }
+
+        for isEnabled in [true, false] {
+            for isProminent in [false, true] {
+                for isSelected in [false, true] {
+                    for isPressed in [false, true] {
+                        for isHovering in [false, true] {
+                            for isFocused in [false, true] {
+                                let state = PaddrControlState(
+                                    isEnabled: isEnabled,
+                                    isProminent: isProminent,
+                                    isSelected: isSelected,
+                                    isPressed: isPressed,
+                                    isHovering: isHovering,
+                                    isFocused: isFocused
+                                )
+                                let label = "\(state)"
+                                var withoutHover = state
+                                withoutHover.isHovering = false
+                                var withoutPress = state
+                                withoutPress.isPressed = false
+                                var withoutFocus = state
+                                withoutFocus.isFocused = false
+
+                                guard isEnabled else {
+                                    // A disabled control does not react: hover, press, and
+                                    // focus are all suppressed, and dropping any of them
+                                    // changes nothing that is drawn.
+                                    XCTAssertEqual(state.interactionTint, .none, label)
+                                    XCTAssertFalse(state.showsFocusRing, label)
+                                    XCTAssertEqual(Drawn(state), Drawn(withoutHover), label)
+                                    XCTAssertEqual(Drawn(state), Drawn(withoutPress), label)
+                                    XCTAssertEqual(
+                                        state.showsFocusRing,
+                                        withoutFocus.showsFocusRing,
+                                        label
+                                    )
+                                    continue
+                                }
+
+                                if isPressed {
+                                    XCTAssertNotEqual(
+                                        Drawn(state),
+                                        Drawn(withoutPress),
+                                        "A press is invisible in \(label)"
+                                    )
+                                }
+                                // Hover is visible on every row too. Its one exemption is a
+                                // press, which is strictly stronger and always implies it.
+                                if isHovering && !isPressed {
+                                    XCTAssertNotEqual(
+                                        Drawn(state),
+                                        Drawn(withoutHover),
+                                        "A hover is invisible in \(label)"
+                                    )
+                                }
+                                XCTAssertEqual(state.showsFocusRing, isFocused, label)
+                                // The additive layer never doubles a row that already
+                                // carries the same value.
+                                if state.row == .pressed || state.row == .hover {
+                                    XCTAssertEqual(state.interactionTint, .none, label)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// `focusEffectDisabled()` removes the system ring, so this ring is the only focus
+    /// indication a Paddr button has. Drawing it in accent on the prominent row — whose fill
+    /// is solid accent — left every primary button in the app (`Save & Apply`, the guide's
+    /// `Next` and `Get Started`, both permission `Request` buttons) with no focus indication
+    /// at all. The ring is inset rather than outset, so it must contrast with its own fill.
+    func testTheFocusRingContrastsWithEveryRowsOwnFill() {
+        // One state per case of `PaddrControlRow`; the row assertion fails if a case is
+        // added without a partner here.
+        let rows: [(PaddrControlRow, PaddrControlState)] = [
+            (.rest, PaddrControlState()),
+            (.hover, PaddrControlState(isHovering: true)),
+            (.pressed, PaddrControlState(isPressed: true)),
+            (.selected, PaddrControlState(isSelected: true)),
+            (.prominent, PaddrControlState(isProminent: true)),
+            (.disabled, PaddrControlState(isEnabled: false))
+        ]
+
+        for (expected, state) in rows {
+            XCTAssertEqual(state.row, expected)
+            let surface = PaddrControlSurface(state: state)
+            XCTAssertNotEqual(
+                surface.focusRingColor,
+                surface.fillColor,
+                "The focus ring is invisible on the \(expected) row"
+            )
+        }
+
+        XCTAssertEqual(
+            PaddrControlSurface(state: PaddrControlState(isProminent: true)).focusRingColor,
+            Color.white
+        )
+        XCTAssertEqual(
+            PaddrControlSurface(state: PaddrControlState()).focusRingColor,
+            PaddrStyle.accent
+        )
+    }
+
     /// A custom `ButtonStyle` renders no `NSControl`, so the row-height assertions elsewhere
     /// in this file cannot see a button at all. The height is asserted on the hosted
     /// geometry directly, and exactly, rather than as containment.
-    func testEveryButtonRoleRendersAtTheControlHeight() {
+    func testEveryButtonRoleRendersAtTheButtonHeight() {
+        // `control` is the in-row height and stays 24 so a settings-row control keeps fitting
+        // `row`; `button` is the larger height, used only by the button family.
         XCTAssertEqual(PaddrStyle.Metrics.control, 24)
+        XCTAssertEqual(PaddrStyle.Metrics.button, 28)
         XCTAssertEqual(PaddrStyle.Radius.control, 6)
 
         for role in [PaddrButtonRole.primary, .secondary, .icon] {
@@ -171,9 +297,9 @@ final class MenuViewPresentationTests: XCTestCase {
             hostingView.layoutSubtreeIfNeeded()
             XCTAssertEqual(
                 hostingView.fittingSize.height,
-                PaddrStyle.Metrics.control,
+                PaddrStyle.Metrics.button,
                 accuracy: 0.5,
-                "\(role) does not render at the control height"
+                "\(role) does not render at the button height"
             )
             XCTAssertLessThanOrEqual(
                 hostingView.fittingSize.height,
@@ -183,9 +309,9 @@ final class MenuViewPresentationTests: XCTestCase {
             if role == .icon {
                 XCTAssertEqual(
                     hostingView.fittingSize.width,
-                    PaddrStyle.Metrics.control,
+                    PaddrStyle.Metrics.button,
                     accuracy: 0.5,
-                    "The icon role must be square at the control height"
+                    "The icon role must be square at the button height"
                 )
             }
         }
@@ -194,7 +320,7 @@ final class MenuViewPresentationTests: XCTestCase {
     /// The slice-1 adaptive matrix, extended to the button family. Height is the property
     /// that an adaptive override can silently break — a heavier stroke or an opaque fill
     /// that changes layout — so it is asserted per cell rather than left to containment.
-    func testAdaptiveMatrixKeepsEveryButtonRoleAtTheControlHeight() {
+    func testAdaptiveMatrixKeepsEveryButtonRoleAtTheButtonHeight() {
         for role in [PaddrButtonRole.primary, .secondary, .icon] {
             for colorScheme in [ColorScheme.light, .dark] {
                 for contrast in [ColorSchemeContrast.standard, .increased] {
@@ -224,7 +350,7 @@ final class MenuViewPresentationTests: XCTestCase {
                             XCTAssertGreaterThan(fitted.width, 0, label)
                             XCTAssertEqual(
                                 fitted.height,
-                                PaddrStyle.Metrics.control,
+                                PaddrStyle.Metrics.button,
                                 accuracy: 0.5,
                                 label
                             )

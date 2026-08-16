@@ -12,11 +12,36 @@ enum PaddrControlRow: Equatable {
     case disabled
 }
 
+/// Interaction feedback layered on top of whichever row won.
+///
+/// Hover and press are the two inputs the precedence order can hide — a prominent or
+/// selected control outranks both — so neither is left to the row alone. Whenever the
+/// winning row does not already express them, the tint is applied additively, reusing that
+/// row's own fill value so the two paths read the same. Pressed is the stronger of the pair
+/// and wins when both apply, which is every real press: the pointer is over the control.
+enum PaddrInteractionTint: Equatable {
+    case none
+    case hover
+    case pressed
+
+    /// Applied over `Color.primary`, matching the fill values of the rows it stands in for.
+    var fillOpacity: Double {
+        switch self {
+        case .none: 0
+        case .hover: 0.10
+        case .pressed: 0.16
+        }
+    }
+}
+
 /// The inputs a custom control offers the state table, and the single place that resolves
 /// them to one row.
 ///
-/// Focus is deliberately not a row: the ring is drawn on top of whichever row won, so a
-/// focused control never loses the state it was already showing.
+/// Three of the six inputs are deliberately not settled by the row alone. Focus is never a
+/// row at all — the ring is drawn on top of whichever row won — and hover and press fall
+/// back to ``interactionTint`` when a higher row outranks them. That is the whole rule: a
+/// row expresses *what the control is*, and the additive layers express *what the pointer
+/// and the keyboard are doing to it*, so the second can never be swallowed by the first.
 struct PaddrControlState: Equatable {
     var isEnabled: Bool
     var isProminent: Bool
@@ -55,11 +80,21 @@ struct PaddrControlState: Equatable {
     /// never shows a ring.
     var showsFocusRing: Bool { isFocused && isEnabled }
 
-    /// Prominent and Selected both outrank Pressed, so a prominent or selected control
-    /// would otherwise report a press with no visible change at all. The pressed row's own
-    /// fill value is applied additively there instead, which is what keeps the primary
-    /// button's press feedback after `.borderedProminent` is replaced.
-    var showsAdditivePressTint: Bool { isPressed && isEnabled && row != .pressed }
+    /// The additive half of the state table. A disabled control resolves to `.none` because
+    /// it must not react to the pointer at all; otherwise the stronger of press and hover
+    /// applies, unless the winning row is already that same row and would double the tint.
+    var interactionTint: PaddrInteractionTint {
+        guard isEnabled else { return .none }
+        if isPressed { return row == .pressed ? .none : .pressed }
+        if isHovering { return row == .hover ? .none : .hover }
+        return .none
+    }
+
+    /// The press half of the additive rule, named: Prominent and Selected both outrank
+    /// Pressed, so a prominent or selected control would otherwise report a press with no
+    /// visible change at all. Keeping the primary button's press feedback after
+    /// `.borderedProminent` is replaced is what this guarantees.
+    var showsAdditivePressTint: Bool { interactionTint == .pressed }
 
     /// Selection is never colour-only: under Differentiate Without Colour a selected
     /// control also carries a leading checkmark. Tracks selection rather than the winning
@@ -107,7 +142,7 @@ struct PaddrControlSurface: ViewModifier {
 
     /// Fills are stated over `Color.primary` and `PaddrStyle.accent` so one set of values
     /// adapts to light and dark without a second palette. Disabled is the rest fill at 0.4.
-    private var fillColor: Color {
+    var fillColor: Color {
         switch state.row {
         case .rest: Color.primary.opacity(0.06)
         case .hover: Color.primary.opacity(0.10)
@@ -127,8 +162,8 @@ struct PaddrControlSurface: ViewModifier {
                 shape.fill(Color(nsColor: .controlBackgroundColor))
             }
             shape.fill(fillColor)
-            if state.showsAdditivePressTint {
-                shape.fill(Color.primary.opacity(0.16))
+            if state.interactionTint != .none {
+                shape.fill(Color.primary.opacity(state.interactionTint.fillOpacity))
             }
         }
     }
@@ -167,16 +202,24 @@ struct PaddrControlSurface: ViewModifier {
         }
     }
 
+    /// The ring is inset, not outset — the control sits in a `Metrics.row` band with about
+    /// 2pt of clearance, so a halo drawn outside the shape would clip. An inset ring has to
+    /// contrast with the fill it is drawn on top of, and the prominent row is solid accent:
+    /// an accent ring there is the same colour as the button, which is no ring at all.
+    var focusRingColor: Color {
+        state.row == .prominent ? Color.white : PaddrStyle.accent
+    }
+
     @ViewBuilder
     private var focusRing: some View {
         if state.showsFocusRing {
-            shape.strokeBorder(PaddrStyle.accent, lineWidth: 2)
+            shape.strokeBorder(focusRingColor, lineWidth: 2)
         }
     }
 }
 
 /// The button family. `primary` is the prominent row, `secondary` and `icon` start at rest,
-/// and `icon` is square at `Metrics.control`.
+/// and `icon` is square at `Metrics.button`.
 struct PaddrButtonStyle: ButtonStyle {
     let role: PaddrButtonRole
 
@@ -200,8 +243,8 @@ struct PaddrButtonStyle: ButtonStyle {
                 .paddrTypography(.rowLabel)
                 .padding(.horizontal, role == .icon ? 0 : PaddrStyle.Spacing.s2)
                 .frame(
-                    width: role == .icon ? PaddrStyle.Metrics.control : nil,
-                    height: PaddrStyle.Metrics.control
+                    width: role == .icon ? PaddrStyle.Metrics.button : nil,
+                    height: PaddrStyle.Metrics.button
                 )
                 .paddrControlSurface(state)
                 .contentShape(.rect(cornerRadius: PaddrStyle.Radius.control))

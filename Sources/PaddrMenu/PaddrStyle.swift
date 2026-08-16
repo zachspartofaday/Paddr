@@ -57,6 +57,10 @@ enum PaddrStyle {
         static let commandBar: CGFloat = 44
         /// Custom controls. Sits inside `row` with room to centre.
         static let control: CGFloat = 24
+        /// Action buttons, which are larger than the in-row control height because no
+        /// `paddrActionButton` call site sits inside a `PaddrSettingsRow` — every one is in
+        /// a band or a footer, where the extra 4pt costs the row rhythm nothing.
+        static let button: CGFloat = 28
 
         static let defaultWindowSize = NSSize(width: 1_120, height: 600)
         static let minimumWindowSize = NSSize(width: 640, height: 360)
