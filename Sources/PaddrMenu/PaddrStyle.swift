@@ -12,6 +12,17 @@ enum PaddrTextRole {
     case sectionLabel
     /// Settings-row labels, normally paired with an SF Symbol.
     case rowLabel
+    /// Action-button labels, for every `PaddrButtonRole`.
+    ///
+    /// Deliberately larger and heavier than ``rowLabel``, and the reason is a contrast
+    /// threshold rather than a taste: the button's label is drawn on the accent fill, whose
+    /// on-accent colour is derived at WCAG's 3.0:1 *large text* threshold. Large text is
+    /// 18pt regular or 14pt bold, so at `.callout` — regular weight, 12pt — that threshold
+    /// did not apply and 4.5:1 did. `.title3` is 15pt at the default size category, and this
+    /// role carries `.bold`, which clears the 14pt-bold form of the threshold. It stays a
+    /// system text style rather than a fixed point size so Dynamic Type still scales it, and
+    /// scaling only ever moves it further above 14pt.
+    case buttonLabel
     /// Status values and numeric readouts.
     case value
     /// Detail and secondary text.
@@ -23,6 +34,7 @@ enum PaddrTextRole {
         case .cardTitle: .headline
         case .sectionLabel: .subheadline.weight(.semibold)
         case .rowLabel: .callout
+        case .buttonLabel: .title3.weight(.bold)
         case .value: .callout.monospacedDigit()
         case .caption: .caption
         }
@@ -49,12 +61,30 @@ enum PaddrStyle {
     }
 
     /// Heights and fixed surface sizes. `row` is the single control-row family
-    /// (card header, settings row, status cell, permission row, inspector header);
-    /// control heights themselves stay native and are never hand-set.
+    /// (card header, settings row, status cell, permission row, inspector header), and
+    /// `control` is the height every Paddr-drawn control is laid out at.
     enum Metrics {
         static let row: CGFloat = 28
         /// `row` plus a `Spacing.s2` inset above and below.
         static let commandBar: CGFloat = 44
+        /// In-row custom controls, from LimitlessQuilter's dense
+        /// `canvasToolbarControlHeight`. Sits inside `row` with room to centre.
+        static let control: CGFloat = 24
+        /// Action buttons, from LimitlessQuilter's standard `controlHeight`. Larger than the
+        /// in-row height because no `paddrActionButton` call site sits inside a
+        /// `PaddrSettingsRow` — every one is in a band or a footer, where a button taller
+        /// than `row` costs the row rhythm nothing.
+        ///
+        /// A *minimum*, unlike ``control``: the button's label is a system text style, so a
+        /// larger interface text size or a label that has to wrap makes it taller than this,
+        /// and a fixed frame answers that by truncating. `control` stays fixed because an
+        /// in-row control has the opposite obligation — it must keep fitting ``row``.
+        static let button: CGFloat = 38
+        /// Horizontal padding inside a Paddr-drawn control, from LimitlessQuilter's
+        /// `controlHorizontalPadding`. Off the `Spacing` scale deliberately: it is a
+        /// control's own geometry, paired with `button` and `control`, not a gap between two
+        /// things.
+        static let controlHorizontalPadding: CGFloat = 10
 
         static let defaultWindowSize = NSSize(width: 1_120, height: 600)
         static let minimumWindowSize = NSSize(width: 640, height: 360)
@@ -66,10 +96,11 @@ enum PaddrStyle {
     }
 
     enum Radius {
-        /// Glass card or banner.
-        static let card: CGFloat = 16
-        /// Inset chips, status containers, zone label plates.
-        static let control: CGFloat = 8
+        /// Card or banner, from LimitlessQuilter's `cardCornerRadius`.
+        static let card: CGFloat = 14
+        /// Paddr-drawn controls, and the inset containers that hold them, from
+        /// LimitlessQuilter's `controlCornerRadius`.
+        static let control: CGFloat = 7
         /// The physical trackpad. Geometry-bearing and unchanged.
         static let pad: CGFloat = 30
     }
@@ -94,7 +125,56 @@ enum PaddrStyle {
         static let labelColumnWide: CGFloat = 152
     }
 
-    static let accent = Color(red: 26.0 / 255.0, green: 159.0 / 255.0, blue: 1)
+    /// The product accent is the viewer's macOS accent colour, not a fixed blue. Every
+    /// accent-bearing surface in `PaddrMenu` reads it through this token, so a yellow,
+    /// green, or graphite accent reaches all of them at once — and none of them may pair a
+    /// hard-coded partner colour with it, because no fixed colour survives that range.
+    static let accent = Color(nsColor: .controlAccentColor)
+
+    /// The label drawn *on top of* an accent fill: black or white, whichever clears the
+    /// 3.0:1 large-text threshold against the fill. The fixed white this replaced clears
+    /// even that on only some of the eight accents macOS offers — 1.51:1 on yellow — and
+    /// clears 4.5:1 on none of them, 3.52:1 on the stock blue included.
+    ///
+    /// The large-text threshold applies because ``PaddrTextRole/buttonLabel`` is 15pt bold,
+    /// which is what every `PaddrButtonStyle` label is drawn at. That is the *only* thing
+    /// licensing 3.0:1 here: while the button family used `.rowLabel` — `.callout`, regular
+    /// weight, 12pt — this token was 4.5:1 text wearing a large-text justification, and
+    /// white on the stock blue was a failure the derivation reported as a pass.
+    ///
+    /// Derived against the fill *as drawn*. The prominent fill is solid accent only while
+    /// nothing is being done to the control: the interaction overlay composites up to 7.5%
+    /// of `Color.primary` over it, and on the dark appearance's blue accent that is enough
+    /// to take white from 3.234:1 to 2.981:1 — under the threshold this token exists to
+    /// clear. So there is one token per overlay level rather than one for the row.
+    static let onAccentTokens = PaddrOverlayTokens { overlay, accent, background in
+        PaddrAccentPalette.onAccentLabel(
+            for: PaddrControlSurface.drawnFill(
+                for: .prominent,
+                overlay: overlay,
+                accent: accent,
+                on: background
+            )
+        )
+    }
+
+    /// The prominent label and ring while nothing is being done to the control.
+    static let onAccent = onAccentTokens[.none]
+
+    /// The stroke drawn on top of an accent fill, derived so the rim as *drawn* — that is,
+    /// composited at ``prominentStrokeOpacity`` — clears the 3:1 non-text ratio.
+    static let onAccentStroke = Color(nsColor: NSColor(name: nil) { appearance in
+        PaddrAccentPalette.onAccentStroke(
+            for: PaddrAccentPalette.srgb(.controlAccentColor, in: appearance),
+            drawnAt: prominentStrokeOpacity
+        )
+    })
+
+    /// The prominent row's base stroke opacity. Below 1 on purpose: the interaction
+    /// overlay's stroke term is additive, so a base at full opacity would clamp it away and
+    /// leave hover on a primary button reading through fill alone.
+    static let prominentStrokeOpacity: Double = 0.6
+
     static let active = Color(nsColor: .systemGreen)
 
     /// Green status text clears 4.5:1 in light appearance while retaining the
@@ -105,13 +185,26 @@ enum PaddrStyle {
             : NSColor(srgbRed: 0, green: 0.42, blue: 0.18, alpha: 1)
     })
 
-    /// Accent for text: the bright product accent reads at only ~2.8:1 against light
-    /// backgrounds, so light appearance gets a darker variant that clears 4.5:1.
-    static let accentText = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor(srgbRed: 26.0 / 255.0, green: 159.0 / 255.0, blue: 1, alpha: 1)
-            : NSColor(srgbRed: 0, green: 0.42, blue: 0.75, alpha: 1)
-    })
+    /// Accent for text on the *bare* panel background. A raw accent does not generally clear
+    /// 4.5:1 against either background — the stock macOS blue reads 3.5:1 on the light one —
+    /// and the accent is now the viewer's, so this cannot be a hand-tuned pair of blues. It
+    /// is derived from whatever accent is selected, against the window background of the
+    /// current appearance.
+    ///
+    /// A call site that draws this on an accent wash takes that surface's own token instead:
+    /// see ``PaddrAccentSurface``.
+    static let accentText = PaddrAccentSurface.plain.text
+
+    /// Accent for a meaning-bearing *symbol* on the bare panel background.
+    ///
+    /// A translucent accent *fill* may stay raw: it is decoration, and nothing is read from
+    /// it. A symbol is not, and `accent` alone measures 1.51:1 against the light panel on the
+    /// yellow accent — the exact ratio this palette already rejects for the label — with
+    /// orange at 2.31:1 and green at 2.22:1 failing beside it. Non-text rather than text
+    /// contrast because these are glyphs and boundaries, not prose; `accentText` remains the
+    /// 4.5:1 token for the words next to them. The other five accents and all eight in dark
+    /// appearance already clear 3.0:1, and the derivation returns those unchanged.
+    static let accentSymbol = PaddrAccentSurface.plain.symbol
 
     /// Warning text partner to `accentText`: system orange also fails contrast on
     /// light backgrounds, so light appearance darkens it.
@@ -135,6 +228,255 @@ enum PaddrStyle {
     static let zoneInspectorWidth: CGFloat = 266
     static let behaviorPickerWidth: CGFloat = 272
     static let sliderMinimumWidth: CGFloat = 160
+}
+
+/// An accent wash, and the foregrounds that are drawn *on* it.
+///
+/// The wash may stay raw — it is decoration, and nothing is read from it — but the symbol and
+/// the value drawn on top of it are read, and the wash sits between them and the panel
+/// background. Compositing a tint of the accent over the background pulls the background
+/// *toward* the foreground, which is the direction that reduces contrast, so a colour derived
+/// against the bare background overstates the ratio it actually achieves. Measured on the
+/// light appearance: the granted checkmark claims 3.078:1 on the yellow accent and draws
+/// 2.760:1 in the status capsule; the ready status value claims 4.583:1 and draws 4.109:1,
+/// and every one of the eight accents misses 4.5:1 there.
+///
+/// The wash and its foregrounds are declared together so a call site cannot draw one opacity
+/// and derive against another — the same reason ``PaddrControlSurface/restFillOpacity`` is a
+/// named constant rather than a literal at the two places that need it.
+struct PaddrAccentSurface {
+    /// The wash's opacity over the panel background. Zero is the bare background.
+    let tintOpacity: Double
+    /// A meaning-bearing accent symbol on this surface, at the 3.0:1 boundary threshold.
+    let symbol: Color
+    /// Accent-derived text on this surface, at the 4.5:1 body threshold.
+    let text: Color
+
+    private init(tintOpacity: Double) {
+        self.tintOpacity = tintOpacity
+        symbol = Self.token(tintOpacity: tintOpacity, PaddrAccentPalette.nonText)
+        text = Self.token(tintOpacity: tintOpacity, PaddrAccentPalette.text)
+    }
+
+    /// The wash for `color`, at this surface's opacity. The colour stays raw; only the
+    /// opacity belongs to the surface.
+    func tint(_ color: Color) -> Color { color.opacity(tintOpacity) }
+
+    /// The opaque colour this surface presents to whatever is drawn on it, for one
+    /// appearance: the panel background with the raw accent composited over it.
+    static func resolved(
+        tintOpacity: Double,
+        accent: NSColor,
+        on background: NSColor
+    ) -> NSColor {
+        PaddrAccentPalette.composite(accent, over: background, opacity: tintOpacity)
+    }
+
+    private static func token(
+        tintOpacity: Double,
+        _ derive: @escaping @Sendable (NSColor, NSColor) -> NSColor
+    ) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let accent = PaddrAccentPalette.srgb(.controlAccentColor, in: appearance)
+            let background = PaddrAccentPalette.srgb(.windowBackgroundColor, in: appearance)
+            return derive(
+                accent,
+                resolved(tintOpacity: tintOpacity, accent: accent, on: background)
+            )
+        })
+    }
+
+    /// No wash: an accent foreground straight on the panel background.
+    static let plain = PaddrAccentSurface(tintOpacity: 0)
+    /// ``StatusCell``'s capsule.
+    static let statusBadge = PaddrAccentSurface(tintOpacity: 0.11)
+    /// ``PermissionTile``'s plate.
+    static let permissionTile = PaddrAccentSurface(tintOpacity: 0.07)
+}
+
+/// Turns an arbitrary accent colour into colours that meet WCAG contrast against the surface
+/// they are drawn on.
+///
+/// This exists because the accent stopped being ours. `NSColor.controlAccentColor` is
+/// whatever the viewer picked in System Settings — blue, purple, pink, red, orange, yellow,
+/// green, or graphite — so no derived colour can be hand-tuned to a hue. Every entry point is
+/// a *pure function of its input colours*, which is what lets the tests drive the real macOS
+/// accent set through them instead of only the accent this machine happens to have set.
+///
+/// Derivation is always the *smallest* blend toward black or white that clears the target, so
+/// a colour that already clears it is returned unchanged and the result stays as close to the
+/// accent as the ratio allows.
+enum PaddrAccentPalette {
+    /// WCAG 2.1 AA for body text.
+    static let textContrast: Double = 4.5
+    /// WCAG 2.1 AA for a non-text boundary — a stroke or a component edge. Matches the
+    /// ratios LimitlessQuilter documents.
+    static let nonTextContrast: Double = 3.0
+
+    /// The step of the blend search. 1% of the way to the endpoint is finer than any
+    /// perceptible step and keeps the search exact enough to assert on.
+    private static let step = 0.01
+
+    /// Status and label text on the window background.
+    ///
+    /// The blend direction is chosen from the *background*, not the accent: on a light
+    /// background every accent darkens, on a dark one every accent lightens. Both endpoints
+    /// (black on light, white on dark) clear 4.5:1 by a wide margin, so the search always
+    /// terminates on a colour that meets the target.
+    static func text(from accent: NSColor, on background: NSColor) -> NSColor {
+        derived(from: accent, on: background, clearing: textContrast)
+    }
+
+    /// A non-text accent on an arbitrary background — a focus ring, a component edge, or a
+    /// meaning-bearing symbol. The same derivation as ``text(from:on:)`` at the boundary
+    /// threshold rather than the body-text one, so there is one blend search, not two.
+    static func nonText(from accent: NSColor, on background: NSColor) -> NSColor {
+        derived(from: accent, on: background, clearing: nonTextContrast)
+    }
+
+    private static func derived(
+        from accent: NSColor,
+        on background: NSColor,
+        clearing ratio: Double
+    ) -> NSColor {
+        smallestBlend(
+            of: accent,
+            toward: endpoint(on: background),
+            clearing: ratio,
+            against: background
+        )
+    }
+
+    /// The endpoint every derivation blends toward: black on a light background, white on a
+    /// dark one. Both clear either threshold by a wide margin, so a search toward this
+    /// endpoint always terminates on a colour that meets its target.
+    static func endpoint(on background: NSColor) -> NSColor {
+        relativeLuminance(of: background) > equalContrastLuminance ? .black : .white
+    }
+
+    /// Source-over compositing of a translucent colour on an opaque one, which is what a
+    /// tinted fill *is*: the same blend the derivations use, read in the other direction.
+    static func composite(_ source: NSColor, over destination: NSColor, opacity: Double) -> NSColor {
+        blend(destination, toward: source, amount: opacity)
+    }
+
+    /// The label drawn on top of an accent fill.
+    ///
+    /// White is used when it clears the 3.0:1 AA threshold for large text — which applies
+    /// because ``PaddrTextRole/buttonLabel`` is 15pt bold, past the 14pt-bold form of
+    /// WCAG's large-text definition, and not merely by assertion. White survives on
+    /// saturated accents so buttons look native, and flips to black only where it is
+    /// genuinely unreadable — 1.51:1 on the yellow accent `#FFCC00`.
+    static func onAccentLabel(for accent: NSColor) -> NSColor {
+        contrastRatio(.white, accent) >= nonTextContrast ? .white : .black
+    }
+
+    /// The stroke drawn on top of an accent fill, for a border drawn at `opacity`.
+    ///
+    /// The rim that has to clear 3:1 is the one on screen, and a partly transparent stroke
+    /// over a solid fill *is* a blend of the two: drawing a colour blended `u` of the way to
+    /// black at opacity `a` paints exactly the colour blended `u * a` of the way. So the
+    /// search finds the blend the composite needs and divides it back out, rather than
+    /// deriving a colour that only meets the ratio at an opacity the control never uses.
+    static func onAccentStroke(for accent: NSColor, drawnAt opacity: Double) -> NSColor {
+        // Darken by preference — a rim darker than its fill is the conventional bezel — and
+        // lighten only for an accent too dark for black to separate from.
+        let target: NSColor =
+            contrastRatio(.black, accent) >= nonTextContrast ? .black : .white
+        let composited = smallestBlendAmount(
+            of: accent,
+            toward: target,
+            clearing: nonTextContrast,
+            against: accent
+        )
+        let amount = min(1, composited / max(opacity, step))
+        return blend(accent, toward: target, amount: amount)
+    }
+
+    /// Resolves a dynamic system colour — the accent and the window background both are —
+    /// into concrete sRGB components under one appearance.
+    static func srgb(_ color: NSColor, in appearance: NSAppearance) -> NSColor {
+        var resolved: NSColor?
+        appearance.performAsCurrentDrawingAppearance {
+            resolved = color.usingColorSpace(.sRGB)
+        }
+        return resolved ?? color.usingColorSpace(.sRGB) ?? color
+    }
+
+    /// WCAG 2.1 relative luminance.
+    static func relativeLuminance(of color: NSColor) -> Double {
+        let srgb = color.usingColorSpace(.sRGB) ?? color
+        func linear(_ component: CGFloat) -> Double {
+            let value = Double(component)
+            return value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linear(srgb.redComponent)
+            + 0.7152 * linear(srgb.greenComponent)
+            + 0.0722 * linear(srgb.blueComponent)
+    }
+
+    /// WCAG 2.1 contrast ratio, which is symmetric in its arguments.
+    static func contrastRatio(_ one: NSColor, _ other: NSColor) -> Double {
+        let a = relativeLuminance(of: one)
+        let b = relativeLuminance(of: other)
+        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+    }
+
+    /// The luminance at which black and white contrast equally — the crossover the
+    /// black-or-white choice turns on.
+    private static let equalContrastLuminance = sqrt(1.05 * 0.05) - 0.05
+
+    private static func smallestBlend(
+        of color: NSColor,
+        toward target: NSColor,
+        clearing ratio: Double,
+        against background: NSColor
+    ) -> NSColor {
+        blend(
+            color,
+            toward: target,
+            amount: smallestBlendAmount(
+                of: color,
+                toward: target,
+                clearing: ratio,
+                against: background
+            )
+        )
+    }
+
+    /// Contrast is monotone along a blend toward black or white, so the first amount that
+    /// clears the target is the smallest one that does. A full blend that still falls short
+    /// returns 1: the best the endpoint offers, never a colour below it.
+    private static func smallestBlendAmount(
+        of color: NSColor,
+        toward target: NSColor,
+        clearing ratio: Double,
+        against background: NSColor
+    ) -> Double {
+        var amount = 0.0
+        while amount < 1 {
+            if contrastRatio(blend(color, toward: target, amount: amount), background) >= ratio {
+                return amount
+            }
+            amount += step
+        }
+        return 1
+    }
+
+    /// A straight component blend in sRGB, which is the space the compositor draws these
+    /// overlays in.
+    private static func blend(_ color: NSColor, toward target: NSColor, amount: Double) -> NSColor {
+        let from = color.usingColorSpace(.sRGB) ?? color
+        let to = target.usingColorSpace(.sRGB) ?? target
+        let fraction = CGFloat(min(max(amount, 0), 1))
+        func mix(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + ((b - a) * fraction) }
+        return NSColor(
+            srgbRed: mix(from.redComponent, to.redComponent),
+            green: mix(from.greenComponent, to.greenComponent),
+            blue: mix(from.blueComponent, to.blueComponent),
+            alpha: 1
+        )
+    }
 }
 
 private struct PaddrTypographyModifier: ViewModifier {
@@ -183,26 +525,21 @@ private struct PaddrCardModifier: ViewModifier {
 private struct PaddrActionButtonModifier: ViewModifier {
     let role: PaddrButtonRole
 
+    /// `focusEffectDisabled()` sits outside the `Button`, where the system effect is drawn;
+    /// it suppresses the effect only, leaving the button in the keyboard focus order for
+    /// `PaddrControlSurface` to draw the ring itself.
     @ViewBuilder
     func body(content: Content) -> some View {
         switch role {
-        case .primary:
+        case .primary, .secondary:
             content
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
-                .paddrTypography(.rowLabel)
-                .tint(PaddrStyle.accent)
-        case .secondary:
-            content
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-                .paddrTypography(.rowLabel)
+                .buttonStyle(PaddrButtonStyle(role: role))
+                .focusEffectDisabled()
         case .icon:
             content
                 .labelStyle(.iconOnly)
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-                .paddrTypography(.rowLabel)
+                .buttonStyle(PaddrButtonStyle(role: .icon))
+                .focusEffectDisabled()
         }
     }
 }

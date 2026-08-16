@@ -50,6 +50,1226 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertLessThan(collapsedHeight, expandedHeight)
     }
 
+    /// Each case sets every lower-precedence flag as well, so it fails if the resolver
+    /// reorders any adjacent pair.
+    func testPaddrControlStateResolvesTheDocumentedPrecedenceOrder() {
+        XCTAssertEqual(
+            PaddrControlState(
+                isEnabled: false,
+                isProminent: true,
+                isSelected: true,
+                isPressed: true,
+                isHovering: true
+            ).row,
+            .disabled
+        )
+        XCTAssertEqual(
+            PaddrControlState(
+                isProminent: true,
+                isSelected: true,
+                isPressed: true,
+                isHovering: true
+            ).row,
+            .prominent
+        )
+        XCTAssertEqual(
+            PaddrControlState(isSelected: true, isPressed: true, isHovering: true).row,
+            .selected
+        )
+        // Press and hover are not rows at all, so a control that is only being pressed or
+        // hovered is still at rest and its feedback comes from the additive overlay.
+        XCTAssertEqual(PaddrControlState(isPressed: true, isHovering: true).row, .rest)
+        XCTAssertEqual(PaddrControlState(isHovering: true).row, .rest)
+        XCTAssertEqual(PaddrControlState().row, .rest)
+    }
+
+    func testPaddrControlStateResolvesEveryInputCombinationToOneRow() {
+        // The documented order, expressed as data rather than as a second copy of the
+        // resolver's control flow.
+        let precedence: [(row: PaddrControlRow, applies: (PaddrControlState) -> Bool)] = [
+            (.disabled, { !$0.isEnabled }),
+            (.prominent, \.isProminent),
+            (.selected, \.isSelected)
+        ]
+        let differentiating = PaddrAppearance(differentiateWithoutColor: true)
+
+        for isEnabled in [true, false] {
+            for isProminent in [false, true] {
+                for isSelected in [false, true] {
+                    for isPressed in [false, true] {
+                        for isHovering in [false, true] {
+                            for isFocused in [false, true] {
+                                let state = PaddrControlState(
+                                    isEnabled: isEnabled,
+                                    isProminent: isProminent,
+                                    isSelected: isSelected,
+                                    isPressed: isPressed,
+                                    isHovering: isHovering,
+                                    isFocused: isFocused
+                                )
+                                let label = "\(state)"
+                                XCTAssertEqual(
+                                    state.row,
+                                    precedence.first { $0.applies(state) }?.row ?? .rest,
+                                    label
+                                )
+
+                                // Focus is additive: it never changes which row won, and a
+                                // disabled control never shows a ring.
+                                var unfocused = state
+                                unfocused.isFocused = false
+                                XCTAssertEqual(state.row, unfocused.row, label)
+                                XCTAssertEqual(state.showsFocusRing, isFocused && isEnabled, label)
+
+                                // The row is role and selection only, so neither interaction
+                                // flag can move it — which is why neither can be swallowed.
+                                var withoutInteraction = state
+                                withoutInteraction.isPressed = false
+                                withoutInteraction.isHovering = false
+                                XCTAssertEqual(state.row, withoutInteraction.row, label)
+
+                                // A press is always visible, and always more than a hover:
+                                // the overlay applies over every row, and only a disabled
+                                // control suppresses it.
+                                XCTAssertEqual(
+                                    state.interactionOverlay.isActive,
+                                    isEnabled && (isPressed || isHovering),
+                                    label
+                                )
+                                if isPressed && isEnabled {
+                                    var hoverOnly = state
+                                    hoverOnly.isPressed = false
+                                    hoverOnly.isHovering = true
+                                    XCTAssertGreaterThan(
+                                        state.interactionOverlay.fillOpacity,
+                                        hoverOnly.interactionOverlay.fillOpacity,
+                                        "A press must be visible in \(label)"
+                                    )
+                                }
+
+                                // Selection is never colour-only, and the mark tracks
+                                // selection rather than the winning row.
+                                XCTAssertEqual(
+                                    state.showsSelectionMark(in: differentiating),
+                                    isSelected && isEnabled,
+                                    label
+                                )
+                                XCTAssertFalse(
+                                    state.showsSelectionMark(in: PaddrAppearance()),
+                                    label
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The class invariant behind this slice's two suppression defects — a prominent button
+    /// that showed no press, then a prominent button that showed no hover. Both are one bug:
+    /// an interaction flag swallowed by a row that outranks it. Stated over all 64
+    /// combinations as "removing the flag must change what is drawn", rather than per row,
+    /// because fixing it one row at a time is what let the second instance through.
+    func testNoInteractionFlagIsSwallowedByTheRowThatOutranksIt() {
+        /// What the surface paints, minus the ring: the row supplies the base fill, stroke,
+        /// and label, and the overlay is composited over them.
+        struct Drawn: Equatable {
+            let row: PaddrControlRow
+            let overlay: PaddrInteractionOverlay
+
+            init(_ state: PaddrControlState) {
+                row = state.row
+                overlay = state.interactionOverlay
+            }
+        }
+
+        for isEnabled in [true, false] {
+            for isProminent in [false, true] {
+                for isSelected in [false, true] {
+                    for isPressed in [false, true] {
+                        for isHovering in [false, true] {
+                            for isFocused in [false, true] {
+                                let state = PaddrControlState(
+                                    isEnabled: isEnabled,
+                                    isProminent: isProminent,
+                                    isSelected: isSelected,
+                                    isPressed: isPressed,
+                                    isHovering: isHovering,
+                                    isFocused: isFocused
+                                )
+                                let label = "\(state)"
+                                var withoutHover = state
+                                withoutHover.isHovering = false
+                                var withoutPress = state
+                                withoutPress.isPressed = false
+                                var withoutFocus = state
+                                withoutFocus.isFocused = false
+
+                                guard isEnabled else {
+                                    // A disabled control does not react: hover, press, and
+                                    // focus are all suppressed, and dropping any of them
+                                    // changes nothing that is drawn.
+                                    XCTAssertEqual(state.interactionOverlay, .none, label)
+                                    XCTAssertFalse(state.showsFocusRing, label)
+                                    XCTAssertEqual(Drawn(state), Drawn(withoutHover), label)
+                                    XCTAssertEqual(Drawn(state), Drawn(withoutPress), label)
+                                    XCTAssertEqual(
+                                        state.showsFocusRing,
+                                        withoutFocus.showsFocusRing,
+                                        label
+                                    )
+                                    continue
+                                }
+
+                                if isPressed {
+                                    XCTAssertNotEqual(
+                                        Drawn(state),
+                                        Drawn(withoutPress),
+                                        "A press is invisible in \(label)"
+                                    )
+                                }
+                                // Hover is visible on every row too. Its one exemption is a
+                                // press, which is strictly stronger and always implies it.
+                                if isHovering && !isPressed {
+                                    XCTAssertNotEqual(
+                                        Drawn(state),
+                                        Drawn(withoutHover),
+                                        "A hover is invisible in \(label)"
+                                    )
+                                }
+                                XCTAssertEqual(state.showsFocusRing, isFocused, label)
+
+                                // The overlay's own terms, stated exactly and over every
+                                // row: hover and press share the activation, a press deepens
+                                // the fill on top of it, and selection deepens the stroke
+                                // while it is active.
+                                let overlay = state.interactionOverlay
+                                if isPressed || isHovering {
+                                    XCTAssertEqual(
+                                        overlay.fillOpacity,
+                                        isPressed ? 0.075 : 0.050,
+                                        accuracy: 0.0001,
+                                        label
+                                    )
+                                    XCTAssertEqual(
+                                        overlay.strokeOpacity,
+                                        isSelected ? 0.44 : 0.36,
+                                        accuracy: 0.0001,
+                                        label
+                                    )
+                                } else {
+                                    XCTAssertEqual(overlay, .none, label)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// `focusEffectDisabled()` removes the system ring, so this ring is the only focus
+    /// indication a Paddr button has. Drawing it in accent on the prominent row — whose fill
+    /// is solid accent — left every primary button in the app (`Save & Apply`, the guide's
+    /// `Next` and `Get Started`, both permission `Request` buttons) with no focus indication
+    /// at all. The ring is inset rather than outset, so it must contrast with its own fill.
+    func testTheFocusRingContrastsWithEveryRowsOwnFill() {
+        for (expected, state) in Self.rowStates {
+            XCTAssertEqual(state.row, expected)
+            let surface = PaddrControlSurface(state: state)
+            XCTAssertNotEqual(
+                surface.focusRingColor,
+                surface.fillColor,
+                "The focus ring is invisible on the \(expected) row"
+            )
+        }
+
+        // The prominent ring was a fixed white, which held only while the accent was a fixed
+        // blue. It is now the derived on-accent colour — the same one the prominent label
+        // takes — because a white ring on a yellow accent is this defect a third time.
+        // `testTheProminentLabelAndRingClearBodyContrastOnEveryMacOSAccent` is what pins the
+        // ratio; this pins that the ring and the label are the same derivation.
+        XCTAssertEqual(
+            PaddrControlSurface(state: PaddrControlState(isProminent: true)).focusRingColor,
+            PaddrStyle.onAccent
+        )
+
+        // Not-equal is necessary and nowhere near sufficient, which is how the three
+        // non-prominent rows kept the raw accent through the repair that fixed the prominent
+        // one: a yellow ring differs from a near-white fill and is still invisible on it.
+        // Each row now names the derivation against its *own* fill;
+        // `testTheFocusRingClearsNonTextContrastOnEveryRowAndAccent` pins the ratios.
+        XCTAssertEqual(
+            PaddrControlSurface(state: PaddrControlState()).focusRingColor,
+            PaddrControlSurface.focusRingOnRestFill
+        )
+        XCTAssertEqual(
+            PaddrControlSurface(state: PaddrControlState(isSelected: true)).focusRingColor,
+            PaddrControlSurface.focusRingOnSelectedFill
+        )
+        XCTAssertEqual(
+            PaddrControlSurface(state: PaddrControlState(isEnabled: false)).focusRingColor,
+            PaddrControlSurface.focusRingOnDisabledFill
+        )
+        // The defect this replaced, stated so a revert to it fails here.
+        XCTAssertNotEqual(PaddrControlSurface.focusRingOnRestFill, PaddrStyle.accent)
+        XCTAssertNotEqual(PaddrControlSurface.focusRingOnSelectedFill, PaddrStyle.accent)
+    }
+
+    /// The ring is the only focus indication a Paddr control has — `focusEffectDisabled()`
+    /// removed the system one — so it is a non-text indicator that must clear 3.0:1 against
+    /// the fill it is inset into, on every row, for an accent this machine may never have
+    /// selected.
+    ///
+    /// The prominent row was repaired first and alone. Every other row kept
+    /// `PaddrStyle.accent` against a fill that is either near-background or an 18% wash of
+    /// that same accent, which is the pale end of the identical defect: measured on the
+    /// yellow accent in light appearance, the rest row's ring was 1.32:1, the selected row's
+    /// 1.39:1, and the disabled row's 1.43:1. Green and orange failed in light too, at
+    /// 1.92:1 to 2.11:1. Driven per row × accent × appearance rather than per row alone.
+    func testTheFocusRingClearsNonTextContrastOnEveryRowAndAccent() throws {
+        for isDark in [false, true] {
+            let background = try resolvedSRGB(.windowBackgroundColor, isDark: isDark)
+            for (name, systemColor) in Self.macOSAccents {
+                let accent = try resolvedSRGB(systemColor, isDark: isDark)
+                let appearance = isDark ? "dark" : "light"
+
+                for (row, fill) in [
+                    (PaddrControlRow.rest, PaddrControlSurface.restFill(on: background)),
+                    (.selected, PaddrControlSurface.selectedFill(accent: accent, on: background)),
+                    (.prominent, accent),
+                    (
+                        .disabled,
+                        PaddrControlSurface.restFill(
+                            on: background,
+                            opacity: PaddrControlSurface.restFillOpacity
+                                * PaddrControlSurface.disabledFillScale
+                        )
+                    )
+                ] {
+                    let ring = PaddrControlSurface.focusRing(
+                        for: row,
+                        accent: accent,
+                        on: background
+                    )
+                    XCTAssertGreaterThanOrEqual(
+                        contrastRatio(ring, fill),
+                        3.0,
+                        "\(name)/\(appearance) \(row) focus ring misses non-text contrast"
+                    )
+                }
+
+                // Fail-before: the raw accent, against the two fills that carried it.
+                let restFill = PaddrControlSurface.restFill(on: background)
+                if name == "yellow", !isDark {
+                    XCTAssertLessThan(contrastRatio(accent, restFill), 3.0)
+                    XCTAssertLessThan(
+                        contrastRatio(
+                            accent,
+                            PaddrControlSurface.selectedFill(accent: accent, on: background)
+                        ),
+                        3.0
+                    )
+                }
+            }
+        }
+    }
+
+    /// A meaning-bearing accent symbol is not a translucent accent fill. The permission
+    /// tile's granted checkmark and the status badge's ready glyph — the latter also drawn
+    /// as the increased-contrast badge outline — read the accent directly, so on the yellow
+    /// accent in light appearance they sat at roughly 1.5:1 against their own surfaces: the
+    /// ratio this palette rejects for the label, the rim, and the ring.
+    func testTheAccentSymbolClearsNonTextContrastOnEveryMacOSAccent() throws {
+        for isDark in [false, true] {
+            let background = try resolvedSRGB(.windowBackgroundColor, isDark: isDark)
+            for (name, systemColor) in Self.macOSAccents {
+                let accent = try resolvedSRGB(systemColor, isDark: isDark)
+                let derived = PaddrAccentPalette.nonText(from: accent, on: background)
+                XCTAssertGreaterThanOrEqual(
+                    contrastRatio(derived, background),
+                    3.0,
+                    "\(name)/\(isDark ? "dark" : "light") accent symbol misses non-text contrast"
+                )
+            }
+        }
+
+        // Fail-before: the raw accent these call sites used to draw.
+        let lightBackground = try resolvedSRGB(.windowBackgroundColor, isDark: false)
+        let yellow = try resolvedSRGB(.systemYellow, isDark: false)
+        XCTAssertLessThan(contrastRatio(yellow, lightBackground), 3.0)
+
+        // The symbol takes the boundary threshold, not the body one: it is a glyph beside
+        // the text, not the text. `accentText` stays the 4.5:1 token for the words.
+        XCTAssertEqual(PaddrAccentPalette.nonTextContrast, 3.0)
+        XCTAssertEqual(PaddrAccentPalette.textContrast, 4.5)
+    }
+
+    /// The ring and the border are two arcs, not one.
+    ///
+    /// Both used to be drawn on `shape`, so the 2pt ring landed exactly on top of the 1pt
+    /// border: two antialiased strokes compounding on a single curve, and the ring simply
+    /// covering the border rather than joining it. The ring now takes its own arc, inset by
+    /// `focusRingInset` with its radius reduced by the same amount so the inset stays
+    /// constant around the curve instead of pinching at the corner.
+    ///
+    /// Both arcs are `.continuous`. `RoundedRectangle(cornerRadius:)` defaults to `.circular`,
+    /// which is a different corner family from the one the rest of the panel chrome draws.
+    func testTheFocusRingTakesItsOwnInsetArcInTheContinuousCornerFamily() {
+        let surface = PaddrControlSurface(state: PaddrControlState(isFocused: true))
+
+        XCTAssertEqual(surface.shape.style, .continuous)
+        XCTAssertEqual(surface.focusRingShape.style, .continuous)
+
+        XCTAssertGreaterThan(PaddrControlSurface.focusRingInset, 0)
+        XCTAssertEqual(
+            surface.focusRingShape.cornerSize.width,
+            PaddrStyle.Radius.control - PaddrControlSurface.focusRingInset
+        )
+        XCTAssertEqual(
+            surface.focusRingShape.cornerSize.height,
+            PaddrStyle.Radius.control - PaddrControlSurface.focusRingInset
+        )
+        XCTAssertEqual(surface.shape.cornerSize.width, PaddrStyle.Radius.control)
+    }
+
+    /// Every row strokes, so the interaction overlay's stroke term reaches every row. The
+    /// prominent row's stroke was `nil`, which made hover and press on a primary button read
+    /// through the fill delta alone — the suppression family this slice already closed twice,
+    /// arriving through the stroke instead of through the row resolver.
+    func testTheProminentRowStrokesSoTheOverlayReachesIt() {
+        for (row, state) in Self.rowStates {
+            XCTAssertEqual(state.row, row)
+            XCTAssertNotNil(
+                PaddrControlSurface(state: state).strokeColor,
+                "The \(row) row draws no stroke, so the overlay's stroke term is inert on it"
+            )
+        }
+
+        let prominent = PaddrControlSurface(state: PaddrControlState(isProminent: true))
+        XCTAssertEqual(prominent.strokeColor, PaddrStyle.onAccentStroke)
+        XCTAssertEqual(prominent.resolvedStrokeOpacity, 0.6, accuracy: 0.0001)
+        // The base leaves headroom for the overlay on purpose: at full opacity the clamp
+        // would swallow the term and reinstate the defect above.
+        XCTAssertEqual(
+            PaddrControlSurface(state: PaddrControlState(isProminent: true, isHovering: true))
+                .resolvedStrokeOpacity,
+            0.96,
+            accuracy: 0.0001
+        )
+        XCTAssertGreaterThan(
+            PaddrControlSurface(state: PaddrControlState(isProminent: true, isPressed: true))
+                .resolvedStrokeOpacity,
+            prominent.resolvedStrokeOpacity
+        )
+    }
+
+    /// Status and label text is derived from the viewer's accent, so it has to clear 4.5:1
+    /// for an accent this machine may never have selected. Driven over the whole macOS
+    /// accent set in both appearances rather than over the one accent the test host runs
+    /// with.
+    func testAccentTextClearsBodyContrastOnEveryMacOSAccent() throws {
+        for isDark in [false, true] {
+            let background = try resolvedSRGB(.windowBackgroundColor, isDark: isDark)
+            for (name, systemColor) in Self.macOSAccents {
+                let accent = try resolvedSRGB(systemColor, isDark: isDark)
+                let derived = PaddrAccentPalette.text(from: accent, on: background)
+                XCTAssertGreaterThanOrEqual(
+                    contrastRatio(derived, background),
+                    4.5,
+                    "\(name)/\(isDark ? "dark" : "light") status text misses body contrast"
+                )
+            }
+        }
+    }
+
+    /// White on an accent fill is the assumption that a fixed blue accent permitted. It does
+    /// not survive the palette: white reads 1.51:1 on yellow and 3.52:1 on the stock blue,
+    /// and in fact clears 4.5:1 on none of the eight.
+    ///
+    /// The threshold asserted here is 3.0:1, WCAG's large-text one, and it applies for a
+    /// reason this file can point at rather than by assertion: `PaddrButtonStyle` draws its
+    /// label at `PaddrTextRole.buttonLabel`, which is `.title3.weight(.bold)` — 15pt bold,
+    /// past the 14pt-bold form of large text.
+    /// `testTheButtonLabelRoleIsLargeTextSoTheOnAccentThresholdApplies` pins that premise,
+    /// and until it held the honest threshold here was 4.5:1, which white on the stock blue
+    /// misses. The label and the focus ring share the derivation, so both are asserted here.
+    func testTheProminentLabelAndRingClearBodyContrastOnEveryMacOSAccent() throws {
+        // Fail-before: the colour this row used to draw, against the accent that breaks it
+        // hardest and against the default one.
+        let yellow = try resolvedSRGB(.systemYellow, isDark: false)
+        let blue = try resolvedSRGB(.systemBlue, isDark: false)
+        XCTAssertLessThan(contrastRatio(.white, yellow), 4.5)
+        XCTAssertLessThan(contrastRatio(.white, blue), 4.5)
+        XCTAssertEqual(PaddrAccentPalette.onAccentLabel(for: blue), .white)
+        XCTAssertEqual(PaddrAccentPalette.onAccentLabel(for: yellow), .black)
+
+        for isDark in [false, true] {
+            for (name, systemColor) in Self.macOSAccents {
+                let accent = try resolvedSRGB(systemColor, isDark: isDark)
+                let label = PaddrAccentPalette.onAccentLabel(for: accent)
+                XCTAssertGreaterThanOrEqual(
+                    contrastRatio(label, accent),
+                    3.0,
+                    "\(name)/\(isDark ? "dark" : "light") prominent label misses large-text contrast"
+                )
+            }
+        }
+    }
+
+    /// The prominent stroke is a non-text boundary, so it targets 3:1 — and the rim that has
+    /// to clear it is the composited one, drawn at the base opacity over the accent fill,
+    /// not the colour in isolation.
+    func testTheProminentStrokeClearsNonTextContrastOnEveryMacOSAccent() throws {
+        let opacity = PaddrStyle.prominentStrokeOpacity
+        for isDark in [false, true] {
+            for (name, systemColor) in Self.macOSAccents {
+                let accent = try resolvedSRGB(systemColor, isDark: isDark)
+                let stroke = PaddrAccentPalette.onAccentStroke(for: accent, drawnAt: opacity)
+                let label = "\(name)/\(isDark ? "dark" : "light")"
+                XCTAssertGreaterThanOrEqual(
+                    contrastRatio(stroke, accent),
+                    3.0,
+                    "\(label) prominent stroke misses non-text contrast"
+                )
+                XCTAssertGreaterThanOrEqual(
+                    contrastRatio(composite(stroke, over: accent, opacity: opacity), accent),
+                    3.0,
+                    "\(label) prominent rim misses non-text contrast as drawn"
+                )
+            }
+        }
+    }
+
+    /// The class invariant behind this slice's accent-contrast family, stated once for every
+    /// colour the control derives.
+    ///
+    /// The family's first axis was *which* sites used the raw accent, and that enumeration is
+    /// closed. This is its second: a colour derived against the wrong background. Every
+    /// foreground a `PaddrControlSurface` draws sits on the row's base fill *plus* the
+    /// interaction overlay — up to 7.5% of `Color.primary`, composited toward exactly the
+    /// endpoint the derivation blends toward — and every one of them was derived against the
+    /// base alone. Because the derivation is the *smallest* blend that clears its target, it
+    /// lands with nothing to spare, so the overlay took all of it: measured in light
+    /// appearance, rings that derived at 3.004:1 to 3.231:1 drew 2.545:1 to 2.900:1 on all
+    /// eight accents, and the selected row's label drew 2.999:1 against 4.5:1 intended.
+    ///
+    /// Stated as "the derivation's own target holds against the fill as drawn", over the
+    /// whole matrix — 8 accents × 2 appearances × 4 rows × 3 overlay levels — rather than per
+    /// site, because fixing this one site at a time is what let the family reach three rounds.
+    func testEveryDerivedControlColourClearsItsTargetOnTheFillAsDrawn() throws {
+        for isDark in [false, true] {
+            let background = try resolvedSRGB(.windowBackgroundColor, isDark: isDark)
+            for (name, systemColor) in Self.macOSAccents {
+                let accent = try resolvedSRGB(systemColor, isDark: isDark)
+                for row in Self.everyRow {
+                    for overlay in PaddrFillOverlay.allCases {
+                        // A disabled control reacts to nothing, so it has one surface.
+                        if row == .disabled, overlay != .none { continue }
+                        let label = "\(name)/\(isDark ? "dark" : "light") \(row) \(overlay)"
+                        let fill = PaddrControlSurface.drawnFill(
+                            for: row,
+                            overlay: overlay,
+                            accent: accent,
+                            on: background
+                        )
+                        XCTAssertGreaterThanOrEqual(
+                            contrastRatio(
+                                PaddrControlSurface.focusRing(
+                                    for: row,
+                                    overlay: overlay,
+                                    accent: accent,
+                                    on: background
+                                ),
+                                fill
+                            ),
+                            3.0,
+                            "\(label) focus ring misses non-text contrast as drawn"
+                        )
+                        if row == .selected {
+                            XCTAssertGreaterThanOrEqual(
+                                contrastRatio(
+                                    PaddrControlSurface.selectedLabel(
+                                        overlay: overlay,
+                                        accent: accent,
+                                        on: background
+                                    ),
+                                    fill
+                                ),
+                                4.5,
+                                "\(label) selected label misses body contrast as drawn"
+                            )
+                        }
+                        if row == .prominent {
+                            XCTAssertGreaterThanOrEqual(
+                                contrastRatio(PaddrAccentPalette.onAccentLabel(for: fill), fill),
+                                3.0,
+                                "\(label) prominent label misses large-text contrast as drawn"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fail-before, on the accents that carried the defect hardest. Each is the colour the
+        // previous derivation produced — against the *base* fill — measured on the surface
+        // that colour is actually drawn on.
+        let light = try resolvedSRGB(.windowBackgroundColor, isDark: false)
+        let dark = try resolvedSRGB(.windowBackgroundColor, isDark: true)
+        let lightBlue = try resolvedSRGB(.systemBlue, isDark: false)
+        let darkBlue = try resolvedSRGB(.systemBlue, isDark: true)
+
+        for row in [PaddrControlRow.rest, .selected] {
+            let base = PaddrControlSurface.baseFill(for: row, accent: lightBlue, on: light)
+            let pressed = PaddrControlSurface.drawnFill(
+                for: row,
+                overlay: .pressed,
+                accent: lightBlue,
+                on: light
+            )
+            let againstBase = PaddrAccentPalette.nonText(from: lightBlue, on: base)
+            XCTAssertGreaterThanOrEqual(contrastRatio(againstBase, base), 3.0)
+            XCTAssertLessThan(contrastRatio(againstBase, pressed), 3.0)
+        }
+
+        // The prominent row held at rest and failed only where the overlay pushed the fill
+        // toward the label: white on the dark appearance's blue, 3.234:1 down to 2.981:1.
+        let prominentPress = PaddrControlSurface.drawnFill(
+            for: .prominent,
+            overlay: .pressed,
+            accent: darkBlue,
+            on: dark
+        )
+        XCTAssertEqual(PaddrAccentPalette.onAccentLabel(for: darkBlue), .white)
+        XCTAssertGreaterThanOrEqual(contrastRatio(.white, darkBlue), 3.0)
+        XCTAssertLessThan(contrastRatio(.white, prominentPress), 3.0)
+
+        // And the selected label, which was the window-background text token on an 18% wash
+        // of the accent — short of its target even before the pointer arrived.
+        let selectedRest = PaddrControlSurface.drawnFill(
+            for: .selected,
+            overlay: .none,
+            accent: lightBlue,
+            on: light
+        )
+        let onBackground = PaddrAccentPalette.text(from: lightBlue, on: light)
+        XCTAssertGreaterThanOrEqual(contrastRatio(onBackground, light), 4.5)
+        XCTAssertLessThan(contrastRatio(onBackground, selectedRest), 4.5)
+    }
+
+    /// The overlay level is the *only* home of the overlay's fill opacity.
+    ///
+    /// Two copies is what the base-fill constants were named to prevent, and this axis is
+    /// the same trap one layer up: if the level the derivation resolves against and the
+    /// opacity the control paints ever disagree, every ratio above is derived for a fill
+    /// nothing draws. Stated over all 64 input combinations, like the suppression invariant.
+    func testTheOverlayFillOpacityHasOneSource() {
+        for isEnabled in [true, false] {
+            for isProminent in [false, true] {
+                for isSelected in [false, true] {
+                    for isPressed in [false, true] {
+                        for isHovering in [false, true] {
+                            for isFocused in [false, true] {
+                                let state = PaddrControlState(
+                                    isEnabled: isEnabled,
+                                    isProminent: isProminent,
+                                    isSelected: isSelected,
+                                    isPressed: isPressed,
+                                    isHovering: isHovering,
+                                    isFocused: isFocused
+                                )
+                                XCTAssertEqual(
+                                    state.interactionOverlay.fillOpacity,
+                                    state.fillOverlay.fillOpacity,
+                                    accuracy: 0.0001,
+                                    "\(state)"
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        XCTAssertEqual(PaddrFillOverlay.none.fillOpacity, 0, accuracy: 0.0001)
+        XCTAssertEqual(PaddrFillOverlay.hovered.fillOpacity, 0.050, accuracy: 0.0001)
+        XCTAssertEqual(PaddrFillOverlay.pressed.fillOpacity, 0.075, accuracy: 0.0001)
+    }
+
+    /// The surface reads the token for the level it is *in*, not the level it starts at.
+    ///
+    /// The derivations above are pure functions; this is what wires them to the view, and it
+    /// is the half that would silently revert — a `state.row` switch still compiles after the
+    /// overlay is added to the derivation, and still draws the resting colour on a hovered
+    /// control.
+    func testEveryRowTakesItsOwnTokenAtTheLevelTheControlIsIn() {
+        for (row, base) in Self.rowStates {
+            for overlay in PaddrFillOverlay.allCases {
+                var state = base
+                switch overlay {
+                case .none: break
+                case .hovered: state.isHovering = true
+                case .pressed: state.isPressed = true
+                }
+                // A disabled control reacts to nothing: it stays at `.none` whatever the
+                // pointer does, which is what makes one disabled token sufficient.
+                let expectedLevel: PaddrFillOverlay = row == .disabled ? .none : overlay
+                XCTAssertEqual(state.fillOverlay, expectedLevel, "\(row)/\(overlay)")
+
+                let expected: Color = switch row {
+                case .prominent: PaddrStyle.onAccentTokens[expectedLevel]
+                case .selected: PaddrControlSurface.focusRingOnSelectedFillTokens[expectedLevel]
+                case .rest: PaddrControlSurface.focusRingOnRestFillTokens[expectedLevel]
+                case .disabled: PaddrControlSurface.focusRingOnDisabledFill
+                }
+                XCTAssertEqual(
+                    PaddrControlSurface(state: state).focusRingColor,
+                    expected,
+                    "The \(row) row draws the wrong ring token when \(overlay)"
+                )
+            }
+        }
+    }
+
+    /// A tint is a layer between a foreground and the background it was derived against.
+    ///
+    /// The same defect as the overlay, reached from the other side of the panel: the status
+    /// capsule and the permission plate both wash the accent over the background and then
+    /// draw an accent symbol and an accent value on top, and both derivations resolved
+    /// against the *bare* window background. A wash pulls the background toward the
+    /// foreground, so the derivation overstates what it achieves — measured in light
+    /// appearance, the granted checkmark claimed 3.078:1 on the yellow accent and drew
+    /// 2.760:1, and the ready status value missed 4.5:1 on every one of the eight accents.
+    func testEveryAccentSurfaceDerivesAgainstItsOwnTint() throws {
+        for isDark in [false, true] {
+            let background = try resolvedSRGB(.windowBackgroundColor, isDark: isDark)
+            for (name, systemColor) in Self.macOSAccents {
+                let accent = try resolvedSRGB(systemColor, isDark: isDark)
+                for (surfaceName, surface) in Self.accentSurfaces {
+                    let drawn = PaddrAccentSurface.resolved(
+                        tintOpacity: surface.tintOpacity,
+                        accent: accent,
+                        on: background
+                    )
+                    let label = "\(name)/\(isDark ? "dark" : "light") \(surfaceName)"
+                    XCTAssertGreaterThanOrEqual(
+                        contrastRatio(PaddrAccentPalette.nonText(from: accent, on: drawn), drawn),
+                        3.0,
+                        "\(label) symbol misses non-text contrast on its own tint"
+                    )
+                    XCTAssertGreaterThanOrEqual(
+                        contrastRatio(PaddrAccentPalette.text(from: accent, on: drawn), drawn),
+                        4.5,
+                        "\(label) value misses body contrast on its own tint"
+                    )
+                }
+            }
+        }
+
+        // Fail-before: the window-background derivations, measured on the tints they are
+        // drawn on. Yellow for the symbol — the accent this palette already rejects — and
+        // the stock blue for the value, which failed on all eight.
+        let light = try resolvedSRGB(.windowBackgroundColor, isDark: false)
+        let yellow = try resolvedSRGB(.systemYellow, isDark: false)
+        let blue = try resolvedSRGB(.systemBlue, isDark: false)
+        let statusTint = PaddrAccentSurface.resolved(
+            tintOpacity: PaddrAccentSurface.statusBadge.tintOpacity,
+            accent: yellow,
+            on: light
+        )
+        let symbolOnBackground = PaddrAccentPalette.nonText(from: yellow, on: light)
+        XCTAssertGreaterThanOrEqual(contrastRatio(symbolOnBackground, light), 3.0)
+        XCTAssertLessThan(contrastRatio(symbolOnBackground, statusTint), 3.0)
+
+        let valueTint = PaddrAccentSurface.resolved(
+            tintOpacity: PaddrAccentSurface.statusBadge.tintOpacity,
+            accent: blue,
+            on: light
+        )
+        let valueOnBackground = PaddrAccentPalette.text(from: blue, on: light)
+        XCTAssertGreaterThanOrEqual(contrastRatio(valueOnBackground, light), 4.5)
+        XCTAssertLessThan(contrastRatio(valueOnBackground, valueTint), 4.5)
+
+        // The bare-background surface is the untinted case of the same type, so the panel's
+        // other accent foregrounds keep exactly the derivation they had.
+        XCTAssertEqual(PaddrAccentSurface.plain.tintOpacity, 0)
+        XCTAssertEqual(PaddrStyle.accentSymbol, PaddrAccentSurface.plain.symbol)
+        XCTAssertEqual(PaddrStyle.accentText, PaddrAccentSurface.plain.text)
+    }
+
+    /// The wash stays raw and the foreground is derived against it — the separation that
+    /// makes the derivation above well-founded.
+    ///
+    /// A wash taken from the derived colour has no fixed point: the symbol would be derived
+    /// against a tint of itself. So the two call sites draw the *raw* colour at the surface's
+    /// own opacity and read their foregrounds from the surface, and a revert to the shared
+    /// window-background token fails here rather than only in the ratios.
+    func testTintedCallSitesDrawTheRawWashAndDeriveTheirForeground() {
+        XCTAssertEqual(PaddrAccentSurface.statusBadge.tintOpacity, 0.11, accuracy: 0.0001)
+        XCTAssertEqual(PaddrAccentSurface.permissionTile.tintOpacity, 0.07, accuracy: 0.0001)
+
+        XCTAssertEqual(
+            StatusBadgeState.ready.tint,
+            PaddrStyle.accent.opacity(PaddrAccentSurface.statusBadge.tintOpacity)
+        )
+        XCTAssertEqual(StatusBadgeState.ready.color, PaddrAccentSurface.statusBadge.symbol)
+        XCTAssertEqual(StatusBadgeState.ready.textColor, PaddrAccentSurface.statusBadge.text)
+        XCTAssertNotEqual(StatusBadgeState.ready.color, PaddrStyle.accentSymbol)
+        XCTAssertNotEqual(StatusBadgeState.ready.textColor, PaddrStyle.accentText)
+
+        // The semantic states keep their own colours, tinted at the same opacity.
+        XCTAssertEqual(
+            StatusBadgeState.active.tint,
+            PaddrStyle.active.opacity(PaddrAccentSurface.statusBadge.tintOpacity)
+        )
+        XCTAssertEqual(StatusBadgeState.active.color, PaddrStyle.active)
+        XCTAssertEqual(StatusBadgeState.active.textColor, PaddrStyle.activeText)
+        XCTAssertEqual(StatusBadgeState.problem.textColor, PaddrStyle.warningText)
+    }
+
+    /// Every case of `PaddrControlRow`; a case added without a partner here is unaudited.
+    private static let everyRow: [PaddrControlRow] = [.rest, .selected, .prominent, .disabled]
+
+    /// Every accent-tinted surface the panel draws, with the bare background as the
+    /// untinted member of the same family.
+    private static let accentSurfaces: [(String, PaddrAccentSurface)] = [
+        ("plain", .plain),
+        ("statusBadge", .statusBadge),
+        ("permissionTile", .permissionTile)
+    ]
+
+    /// One state per case of `PaddrControlRow`; a case added without a partner here fails the
+    /// row assertion at every use site.
+    private static let rowStates: [(PaddrControlRow, PaddrControlState)] = [
+        (.rest, PaddrControlState()),
+        (.selected, PaddrControlState(isSelected: true)),
+        (.prominent, PaddrControlState(isProminent: true)),
+        (.disabled, PaddrControlState(isEnabled: false))
+    ]
+
+    /// The eight accents System Settings offers, as the system colours they are drawn from.
+    /// Taken as system colours rather than as literals so the set tracks Apple's palette,
+    /// and resolved per appearance because the palette differs between the two.
+    private static let macOSAccents: [(String, NSColor)] = [
+        ("blue", .systemBlue),
+        ("purple", .systemPurple),
+        ("pink", .systemPink),
+        ("red", .systemRed),
+        ("orange", .systemOrange),
+        ("yellow", .systemYellow),
+        ("green", .systemGreen),
+        ("graphite", .systemGray)
+    ]
+
+    private func resolvedSRGB(_ color: NSColor, isDark: Bool) throws -> NSColor {
+        let appearance = try XCTUnwrap(NSAppearance(named: isDark ? .darkAqua : .aqua))
+        var resolved: NSColor?
+        appearance.performAsCurrentDrawingAppearance {
+            resolved = color.usingColorSpace(.sRGB)
+        }
+        return try XCTUnwrap(resolved)
+    }
+
+    /// WCAG 2.1 contrast, implemented here rather than borrowed from `PaddrAccentPalette`:
+    /// a derivation checked with its own arithmetic proves nothing about the ratio.
+    private func contrastRatio(_ one: NSColor, _ other: NSColor) -> Double {
+        func luminance(_ color: NSColor) -> Double {
+            guard let srgb = color.usingColorSpace(.sRGB) else { return 0 }
+            func channel(_ component: CGFloat) -> Double {
+                let value = Double(component)
+                return value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * channel(srgb.redComponent)
+                + 0.7152 * channel(srgb.greenComponent)
+                + 0.0722 * channel(srgb.blueComponent)
+        }
+        let first = luminance(one)
+        let second = luminance(other)
+        return (max(first, second) + 0.05) / (min(first, second) + 0.05)
+    }
+
+    /// Source-over compositing of a partly transparent stroke on an opaque fill.
+    private func composite(_ source: NSColor, over destination: NSColor, opacity: Double) -> NSColor {
+        guard
+            let source = source.usingColorSpace(.sRGB),
+            let destination = destination.usingColorSpace(.sRGB)
+        else { return destination }
+        let alpha = CGFloat(opacity)
+        func mix(_ over: CGFloat, _ under: CGFloat) -> CGFloat {
+            (over * alpha) + (under * (1 - alpha))
+        }
+        return NSColor(
+            srgbRed: mix(source.redComponent, destination.redComponent),
+            green: mix(source.greenComponent, destination.greenComponent),
+            blue: mix(source.blueComponent, destination.blueComponent),
+            alpha: 1
+        )
+    }
+
+    /// The overlay's stroke term is added to the base rather than replacing it, so a
+    /// selected control under the pointer sums past 1 — an opacity that means nothing and
+    /// would make the standard path differ from the increased-contrast one by accident. The
+    /// sum is clamped, and only clamped: every other combination is the plain addition.
+    func testTheInteractionOverlayAddsToTheBaseStrokeAndClampsAtFullOpacity() {
+        func resolved(_ state: PaddrControlState) -> Double {
+            PaddrControlSurface(state: state).resolvedStrokeOpacity
+        }
+
+        XCTAssertEqual(resolved(PaddrControlState()), 0.50, accuracy: 0.0001)
+        XCTAssertEqual(resolved(PaddrControlState(isHovering: true)), 0.86, accuracy: 0.0001)
+        XCTAssertEqual(resolved(PaddrControlState(isPressed: true)), 0.86, accuracy: 0.0001)
+        XCTAssertEqual(resolved(PaddrControlState(isSelected: true)), 0.70, accuracy: 0.0001)
+        XCTAssertEqual(
+            resolved(PaddrControlState(isSelected: true, isHovering: true)),
+            1,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            resolved(PaddrControlState(isSelected: true, isPressed: true, isHovering: true)),
+            1,
+            accuracy: 0.0001
+        )
+        // A disabled control reacts to nothing, so its stroke is the base alone.
+        XCTAssertEqual(
+            resolved(PaddrControlState(isEnabled: false, isPressed: true, isHovering: true)),
+            0.50 * 0.4,
+            accuracy: 0.0001
+        )
+    }
+
+    /// The premise the on-accent derivation rests on.
+    ///
+    /// `PaddrStyle.onAccent` derives at 3.0:1, WCAG's threshold for *large* text — 18pt
+    /// regular or 14pt bold. For most of this slice that licence was not real: the button
+    /// family drew its label at `.rowLabel`, which is `.callout` — regular weight, 12pt — so
+    /// 4.5:1 was the applicable threshold and white on the stock blue is 3.52:1. The repair
+    /// made the premise true rather than moving the threshold, and this is what holds it
+    /// true: a role change back to a regular-weight or sub-14pt style fails here rather than
+    /// silently reinstating a 4.5:1 surface wearing a 3.0:1 derivation.
+    func testTheButtonLabelRoleIsLargeTextSoTheOnAccentThresholdApplies() {
+        // 15pt at the default size category. It is a system text style rather than a fixed
+        // size, so Dynamic Type still scales it — and every larger category moves further
+        // past the bound, never below it.
+        XCTAssertGreaterThanOrEqual(NSFont.preferredFont(forTextStyle: .title3).pointSize, 14)
+        // The role it replaced, and the reason 14pt-bold could never be claimed for it.
+        XCTAssertLessThan(NSFont.preferredFont(forTextStyle: .callout).pointSize, 14)
+
+        // Weight is the other half of the 14pt-bold form, and `Font` does not report it.
+        // Bold sets wider than regular at one size, so the role is measured against the same
+        // text style without the weight, and against the role it replaced.
+        func width(_ font: Font) -> CGFloat {
+            let hostingView = NSHostingView(rootView: Text(verbatim: "Save & Apply").font(font))
+            hostingView.layoutSubtreeIfNeeded()
+            return hostingView.fittingSize.width
+        }
+        XCTAssertGreaterThan(width(PaddrTextRole.buttonLabel.font), width(.title3))
+        XCTAssertGreaterThan(
+            width(PaddrTextRole.buttonLabel.font),
+            width(PaddrTextRole.rowLabel.font)
+        )
+    }
+
+    /// A custom `ButtonStyle` renders no `NSControl`, so the row-height assertions elsewhere
+    /// in this file cannot see a button at all. The height is asserted on the hosted
+    /// geometry directly, and exactly, rather than as containment.
+    func testEveryButtonRoleRendersAtTheButtonHeight() {
+        // `control` is the in-row height and stays 24 so a settings-row control keeps fitting
+        // `row`; `button` is LimitlessQuilter's standard control height, used only by the
+        // button family, none of which sits inside a settings row.
+        XCTAssertEqual(PaddrStyle.Metrics.control, 24)
+        XCTAssertEqual(PaddrStyle.Metrics.button, 38)
+        XCTAssertEqual(PaddrStyle.Radius.control, 7)
+        XCTAssertEqual(PaddrStyle.Radius.card, 14)
+        XCTAssertEqual(PaddrStyle.Metrics.controlHorizontalPadding, 10)
+        // The row-fitting obligation belongs to the in-row height, which is the one every
+        // `PaddrSettingsRow` control is laid out at.
+        XCTAssertLessThanOrEqual(PaddrStyle.Metrics.control, PaddrStyle.Metrics.row)
+
+        for role in [PaddrButtonRole.primary, .secondary, .icon] {
+            let hostingView = NSHostingView(
+                rootView: Button("Request", systemImage: "gearshape", action: {})
+                    .paddrActionButton(role)
+            )
+            hostingView.layoutSubtreeIfNeeded()
+            XCTAssertEqual(
+                hostingView.fittingSize.height,
+                PaddrStyle.Metrics.button,
+                accuracy: 0.5,
+                "\(role) does not render at the button height"
+            )
+            if role == .icon {
+                XCTAssertEqual(
+                    hostingView.fittingSize.width,
+                    PaddrStyle.Metrics.button,
+                    accuracy: 0.5,
+                    "The icon role must be square at the button height"
+                )
+            }
+        }
+    }
+
+    /// Every button role must host at whole-point dimensions.
+    ///
+    /// A rounded rectangle whose frame is fractional puts its corner arc on half-pixels, and
+    /// a soft corner is what that looks like on a Retina display. The height assertions above
+    /// carry `accuracy: 0.5` so that an adaptive override cannot flip a row silently — which
+    /// also means a 37.6pt button would satisfy them. This asserts the property those cannot:
+    /// exact integrality, on both axes, for the label of every real call site. The widths are
+    /// text-derived and therefore the ones that could drift; in the call-site order below they
+    /// measure 81, 125, 38, 142, 87, 57, and 53 today, all whole. Every text-derived one grew
+    /// between 8 and 26 points when the label moved from `.rowLabel` to `.buttonLabel` — 12pt
+    /// regular to 15pt bold — and the icon role is unmoved because its width is the frame, not
+    /// the text. Heights are untouched at `Metrics.button`: the frame fixes them, and a 15pt
+    /// bold line sets well inside 38pt.
+    func testEveryButtonRoleHostsAtWholePointDimensions() {
+        let callSites: [(String, PaddrButtonRole, String?)] = [
+            ("Request", .primary, nil),
+            ("Open Settings", .secondary, nil),
+            ("Open Settings", .icon, "gearshape"),
+            ("Save & Apply", .primary, "checkmark"),
+            ("Continue", .primary, nil),
+            ("Back", .secondary, nil),
+            ("Skip", .secondary, nil)
+        ]
+
+        for (title, role, symbol) in callSites {
+            let button: AnyView = if let symbol {
+                AnyView(Button(title, systemImage: symbol, action: {}).paddrActionButton(role))
+            } else {
+                AnyView(Button(title, action: {}).paddrActionButton(role))
+            }
+            let hostingView = NSHostingView(rootView: button)
+            hostingView.layoutSubtreeIfNeeded()
+            let size = hostingView.fittingSize
+            let label = "\(title)/\(role) hosts at \(size)"
+            XCTAssertEqual(size.width, size.width.rounded(), label)
+            XCTAssertEqual(size.height, size.height.rounded(), label)
+        }
+    }
+
+    /// The slice-1 adaptive matrix, extended to the button family. Height is the property
+    /// that an adaptive override can silently break — a heavier stroke or an opaque fill
+    /// that changes layout — so it is asserted per cell rather than left to containment.
+    func testAdaptiveMatrixKeepsEveryButtonRoleAtTheButtonHeight() {
+        for role in [PaddrButtonRole.primary, .secondary, .icon] {
+            for colorScheme in [ColorScheme.light, .dark] {
+                for contrast in [ColorSchemeContrast.standard, .increased] {
+                    for reduceTransparency in [false, true] {
+                        for differentiateWithoutColor in [false, true] {
+                            let view = Button("Request", systemImage: "gearshape", action: {})
+                                .paddrActionButton(role)
+                                .environment(\.colorScheme, colorScheme)
+                                .environment(\._colorSchemeContrast, contrast)
+                                .environment(
+                                    \._accessibilityReduceTransparency,
+                                    reduceTransparency
+                                )
+                                .environment(
+                                    \._accessibilityDifferentiateWithoutColor,
+                                    differentiateWithoutColor
+                                )
+                            let label = """
+                                \(role)/\(colorScheme)/\(contrast)/\
+                                reduceTransparency:\(reduceTransparency)/\
+                                differentiateWithoutColor:\(differentiateWithoutColor)
+                                """
+                            let hostingView = NSHostingView(rootView: view)
+                            hostingView.layoutSubtreeIfNeeded()
+                            let fitted = hostingView.fittingSize
+                            XCTAssertTrue(fitted.width.isFinite, label)
+                            XCTAssertGreaterThan(fitted.width, 0, label)
+                            XCTAssertEqual(
+                                fitted.height,
+                                PaddrStyle.Metrics.button,
+                                accuracy: 0.5,
+                                label
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// `Metrics.button` is a floor, not a fixed size.
+    ///
+    /// `PaddrTextRole.buttonLabel` is `.title3.weight(.bold)` — a *system text style*, so its
+    /// height is the system's to change, while the frame that held it was a fixed 38pt. A
+    /// label taller than its frame does not enlarge it: it truncates, or paints outside the
+    /// bezel and the hit region, both of which are applied after the frame. The frame is now
+    /// a minimum, so the button, its bezel, and its `contentShape` grow together.
+    ///
+    /// Measured on this toolchain (macOS 27 SDK, Xcode-beta): `\.dynamicTypeSize` reaches the
+    /// view — the environment reads back `.accessibility5` — but neither `Font.title3` nor
+    /// `@ScaledMetric` responds to it, so a hosted `Save & Apply` measures 96×19 at every
+    /// category from `.large` to `.accessibility5`. So this asserts a floor rather than
+    /// growth: the invariant is that the button never clips its label, and it holds whether
+    /// or not the platform scales one. ``testAButtonGrowsWithALabelTallerThanTheFrame`` is
+    /// the pass-after showing the floor is genuinely elastic.
+    func testEveryButtonRoleKeepsTheButtonHeightAsAFloorAcrossDynamicTypeSizes() {
+        for role in [PaddrButtonRole.primary, .secondary, .icon] {
+            for (name, size) in [
+                ("default", DynamicTypeSize.large),
+                ("large", .xxxLarge),
+                ("accessibility", .accessibility3)
+            ] {
+                let hostingView = NSHostingView(
+                    rootView: Button("Request", systemImage: "gearshape", action: {})
+                        .paddrActionButton(role)
+                        .dynamicTypeSize(size)
+                )
+                hostingView.layoutSubtreeIfNeeded()
+                let fitted = hostingView.fittingSize
+                let label = "\(role)/\(name)"
+                XCTAssertGreaterThanOrEqual(
+                    fitted.height,
+                    PaddrStyle.Metrics.button,
+                    "\(label) hosts below the button height"
+                )
+                if name == "default" {
+                    XCTAssertEqual(
+                        fitted.height,
+                        PaddrStyle.Metrics.button,
+                        accuracy: 0.5,
+                        "\(label) moved off the button height at the default size category"
+                    )
+                }
+                if role == .icon {
+                    XCTAssertGreaterThanOrEqual(
+                        fitted.width,
+                        PaddrStyle.Metrics.button,
+                        "\(label) hosts narrower than the button height"
+                    )
+                }
+            }
+        }
+
+        // The in-row height keeps the opposite obligation and stays fixed: an in-row control
+        // that grew would stop fitting `row`, which slices 2b–2d depend on.
+        XCTAssertEqual(PaddrStyle.Metrics.control, 24)
+        XCTAssertLessThanOrEqual(PaddrStyle.Metrics.control, PaddrStyle.Metrics.row)
+    }
+
+    /// The pass-after for the floor above, driven by the one thing that does make a
+    /// `buttonLabel` taller than 38pt on this platform: a label with nowhere to set.
+    ///
+    /// A narrow button column is not hypothetical — the permission tile lays a title, a
+    /// `Request`, and an icon button across the panel width, and a longer localization of
+    /// either label wraps. Under the fixed frame the button measured `Metrics.button` with
+    /// the label overflowing it; under the minimum it measures the label.
+    func testAButtonGrowsWithALabelTallerThanTheFrame() {
+        func hostedHeight(width: CGFloat?) -> CGFloat {
+            let button = Button("Open Accessibility Settings Now", action: {})
+                .paddrActionButton(.secondary)
+            let hostingView = NSHostingView(
+                rootView: Group {
+                    if let width { button.frame(width: width) } else { button }
+                }
+            )
+            hostingView.layoutSubtreeIfNeeded()
+            return hostingView.fittingSize.height
+        }
+
+        // Unconstrained, the label sets on one line and the floor is what shows.
+        XCTAssertEqual(hostedHeight(width: nil), PaddrStyle.Metrics.button, accuracy: 0.5)
+
+        // Constrained to a fraction of its intrinsic width the label wraps, and the button
+        // follows it instead of clipping it.
+        XCTAssertGreaterThan(
+            hostedHeight(width: 90),
+            PaddrStyle.Metrics.button,
+            "The button clipped a label taller than the button height"
+        )
+    }
+
+    /// Selection must not be carried by colour alone. The mark is a real layout change, so
+    /// the surface is wider under Differentiate Without Colour than without it.
+    func testSelectedSurfaceCarriesItsMarkUnderDifferentiateWithoutColor() {
+        func selectedWidth(differentiateWithoutColor: Bool) -> CGFloat {
+            let hostingView = NSHostingView(
+                rootView: Text(verbatim: "Scroll")
+                    .paddrControlSurface(PaddrControlState(isSelected: true))
+                    .environment(
+                        \._accessibilityDifferentiateWithoutColor,
+                        differentiateWithoutColor
+                    )
+            )
+            hostingView.layoutSubtreeIfNeeded()
+            return hostingView.fittingSize.width
+        }
+
+        let plain = selectedWidth(differentiateWithoutColor: false)
+        let marked = selectedWidth(differentiateWithoutColor: true)
+        XCTAssertGreaterThan(
+            marked,
+            plain + PaddrStyle.Spacing.s1,
+            "The selected surface carries no additional mark under Differentiate Without Colour"
+        )
+
+        // An unselected surface gains nothing, so the mark is selection and not decoration.
+        let unselected = NSHostingView(
+            rootView: Text(verbatim: "Scroll")
+                .paddrControlSurface(PaddrControlState())
+                .environment(\._accessibilityDifferentiateWithoutColor, true)
+        )
+        unselected.layoutSubtreeIfNeeded()
+        XCTAssertEqual(unselected.fittingSize.width, plain, accuracy: 0.5)
+    }
+
+    /// `focusEffectDisabled()` must suppress the system focus effect without removing the
+    /// button from the keyboard focus order. SwiftUI's key-view-loop participant is the
+    /// probe for the second half; `focusable(false)` is the negative control, so a renamed
+    /// or vanished participant fails this test rather than passing it vacuously.
+    func testSuppressingTheSystemFocusEffectKeepsButtonsInTheKeyViewLoop() {
+        func viewTypeNames(_ view: some View) -> [String] {
+            let hostingView = NSHostingView(rootView: view)
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 300, height: 100),
+                styleMask: [.titled],
+                backing: .buffered,
+                defer: false
+            )
+            window.contentView = hostingView
+            hostingView.frame = NSRect(x: 0, y: 0, width: 300, height: 100)
+            hostingView.layoutSubtreeIfNeeded()
+            window.recalculateKeyViewLoop()
+            return descendants(of: NSView.self, in: hostingView)
+                .map { String(describing: type(of: $0)) }
+        }
+        func keyViewProxies(_ names: [String]) -> Int {
+            names.filter { $0.contains("KeyViewProxy") }.count
+        }
+        func focusRings(_ names: [String]) -> Int {
+            names.filter { $0.contains("FocusRingView") }.count
+        }
+
+        let stock = viewTypeNames(Button("Stock", action: {}).buttonStyle(.bordered))
+        let paddr = viewTypeNames(Button("Paddr", action: {}).paddrActionButton(.secondary))
+        let unfocusable = viewTypeNames(
+            Button("Unfocusable", action: {}).paddrActionButton(.secondary).focusable(false)
+        )
+
+        XCTAssertEqual(keyViewProxies(stock), 1, "Baseline: a stock button joins the key-view loop")
+        XCTAssertEqual(
+            keyViewProxies(paddr),
+            keyViewProxies(stock),
+            "A Paddr button left the keyboard focus order: \(paddr)"
+        )
+        XCTAssertEqual(
+            keyViewProxies(unfocusable),
+            0,
+            "Negative control: an unfocusable button must not join the loop"
+        )
+
+        XCTAssertEqual(focusRings(stock), 1, "Baseline: a stock button draws the system effect")
+        XCTAssertEqual(
+            focusRings(paddr),
+            0,
+            "The system focus effect is not suppressed, so it doubles the Paddr ring: \(paddr)"
+        )
+    }
+
     func testPaddrAppearanceResolvesEveryAdaptiveCombination() {
         for reduceTransparency in [false, true] {
             for contrast in [ColorSchemeContrast.standard, .increased] {
