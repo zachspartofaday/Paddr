@@ -540,6 +540,41 @@ final class MenuViewPresentationTests: XCTestCase {
         }
     }
 
+    /// Every button role must host at whole-point dimensions.
+    ///
+    /// A rounded rectangle whose frame is fractional puts its corner arc on half-pixels, and
+    /// a soft corner is what that looks like on a Retina display. The height assertions above
+    /// carry `accuracy: 0.5` so that an adaptive override cannot flip a row silently — which
+    /// also means a 37.6pt button would satisfy them. This asserts the property those cannot:
+    /// exact integrality, on both axes, for the label of every real call site. The widths are
+    /// text-derived and therefore the ones that could drift; they measure 67, 101, 116, 38,
+    /// 71, 48, and 45 today, all whole.
+    func testEveryButtonRoleHostsAtWholePointDimensions() {
+        let callSites: [(String, PaddrButtonRole, String?)] = [
+            ("Request", .primary, nil),
+            ("Open Settings", .secondary, nil),
+            ("Open Settings", .icon, "gearshape"),
+            ("Save & Apply", .primary, "checkmark"),
+            ("Continue", .primary, nil),
+            ("Back", .secondary, nil),
+            ("Skip", .secondary, nil)
+        ]
+
+        for (title, role, symbol) in callSites {
+            let button: AnyView = if let symbol {
+                AnyView(Button(title, systemImage: symbol, action: {}).paddrActionButton(role))
+            } else {
+                AnyView(Button(title, action: {}).paddrActionButton(role))
+            }
+            let hostingView = NSHostingView(rootView: button)
+            hostingView.layoutSubtreeIfNeeded()
+            let size = hostingView.fittingSize
+            let label = "\(title)/\(role) hosts at \(size)"
+            XCTAssertEqual(size.width, size.width.rounded(), label)
+            XCTAssertEqual(size.height, size.height.rounded(), label)
+        }
+    }
+
     /// The slice-1 adaptive matrix, extended to the button family. Height is the property
     /// that an adaptive override can silently break — a heavier stroke or an opaque fill
     /// that changes layout — so it is asserted per cell rather than left to containment.
