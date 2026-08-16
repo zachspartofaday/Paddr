@@ -161,47 +161,75 @@ final class MenuViewPresentationTests: XCTestCase {
         )
     }
 
-    /// `colorSchemeContrast`, `accessibilityReduceTransparency`, and
-    /// `accessibilityDifferentiateWithoutColor` are read-only `EnvironmentValues` in this
-    /// SDK, so a hosted view cannot be driven through them. The adaptive dimensions are
-    /// therefore proved on `PaddrAppearance` — the single place that resolves them — by
-    /// `testPaddrAppearanceResolvesEveryAdaptiveCombination`, and the hosted matrix covers
-    /// the one injectable dimension.
+    /// The public `colorSchemeContrast`, `accessibilityReduceTransparency`, and
+    /// `accessibilityDifferentiateWithoutColor` values are read-only, so the hosted matrix
+    /// drives them through their underscore-prefixed writable key paths. `PaddrAppearance`'s
+    /// own resolution of the same inputs is proved separately by
+    /// `testPaddrAppearanceResolvesEveryAdaptiveCombination`.
     func testAdaptiveMatrixKeepsSurfacesFiniteAndControlsInsideTheHost() {
         for colorScheme in [ColorScheme.light, .dark] {
-            let view = VStack(spacing: PaddrStyle.Spacing.s3) {
-                StatusCell(
-                    title: LocalizedStringResource("Output"),
-                    value: LocalizedStringResource("Active"),
-                    systemImage: "wave.3.right.circle.fill",
-                    state: .active
-                )
-                PadConfigurationView(
-                    side: .left,
-                    configuration: .constant(PaddrConfiguration.default.left),
-                    initiallyExpanded: true
-                )
-            }
-            .frame(width: PaddrStyle.padColumnWidth)
-            .background { PanelBackgroundView() }
-            .environment(\.colorScheme, colorScheme)
+            for contrast in [ColorSchemeContrast.standard, .increased] {
+                for reduceTransparency in [false, true] {
+                    for differentiateWithoutColor in [false, true] {
+                        let view = adaptiveMatrixSubject
+                            .environment(\.colorScheme, colorScheme)
+                            .environment(\._colorSchemeContrast, contrast)
+                            .environment(\._accessibilityReduceTransparency, reduceTransparency)
+                            .environment(
+                                \._accessibilityDifferentiateWithoutColor,
+                                differentiateWithoutColor
+                            )
 
-            let label = "\(colorScheme)"
-            let hostingView = NSHostingView(rootView: view)
-            let fitted = hostingView.fittingSize
-            XCTAssertTrue(fitted.width.isFinite, label)
-            XCTAssertTrue(fitted.height.isFinite, label)
-            XCTAssertGreaterThan(fitted.height, 0, label)
+                        let label = """
+                            \(colorScheme)/\(contrast)/\
+                            reduceTransparency:\(reduceTransparency)/\
+                            differentiateWithoutColor:\(differentiateWithoutColor)
+                            """
+                        let hostingView = NSHostingView(rootView: view)
+                        let fitted = hostingView.fittingSize
+                        XCTAssertTrue(fitted.width.isFinite, label)
+                        XCTAssertTrue(fitted.height.isFinite, label)
+                        XCTAssertGreaterThan(fitted.height, 0, label)
 
-            hostingView.frame = NSRect(
-                origin: .zero,
-                size: NSSize(width: PaddrStyle.padColumnWidth, height: fitted.height)
-            )
-            hostingView.layoutSubtreeIfNeeded()
-            for control in descendants(of: NSControl.self, in: hostingView) {
-                assertControlFits(control, in: hostingView)
+                        hostingView.frame = NSRect(
+                            origin: .zero,
+                            size: NSSize(width: PaddrStyle.padColumnWidth, height: fitted.height)
+                        )
+                        hostingView.layoutSubtreeIfNeeded()
+                        for control in descendants(of: NSControl.self, in: hostingView) {
+                            assertControlFits(control, in: hostingView)
+                        }
+                    }
+                }
             }
         }
+    }
+
+    /// The three surfaces this slice moved onto `PaddrAppearance`: the card chrome, the
+    /// status chip, and the permission row.
+    private var adaptiveMatrixSubject: some View {
+        VStack(spacing: PaddrStyle.Spacing.s3) {
+            StatusCell(
+                title: LocalizedStringResource("Output"),
+                value: LocalizedStringResource("Active"),
+                systemImage: "wave.3.right.circle.fill",
+                state: .active
+            )
+            PermissionTile(
+                title: LocalizedStringResource("Accessibility"),
+                detail: LocalizedStringResource("Sends mapped mouse, scroll, and keyboard input."),
+                isGranted: false,
+                requestAction: {},
+                settingsAction: {}
+            )
+            PadConfigurationView(
+                side: .left,
+                configuration: .constant(PaddrConfiguration.default.left),
+                initiallyExpanded: true
+            )
+        }
+        .frame(width: PaddrStyle.padColumnWidth)
+        .background { PanelBackgroundView() }
     }
 
     func testPointerTrackingToggleReflectsDefaultsAndLegacyBindingAtRadiusZero() throws {
