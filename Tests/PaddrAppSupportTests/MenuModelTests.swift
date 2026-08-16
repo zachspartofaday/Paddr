@@ -382,6 +382,82 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(startCount, 1)
     }
 
+    func testBatteryStatusSetsUpdatesWithoutOtherStateChangesAndClearsAcrossLoss() async {
+        let state = readyState(receiver: "Fake receiver")
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.send(.waitingForController("Fake receiver"))
+        await session.send(.controllerConnected)
+        await waitUntil(model: model) { model.controllerConnected }
+
+        let statusBeforeBattery = model.status
+        let receiverBeforeBattery = model.receiverDescription
+        let reportCountBeforeBattery = model.reportCount
+        let actionCountBeforeBattery = model.actionCount
+        await session.send(.batteryUpdated(.init(chargeState: .discharging, percentage: 40)))
+        await waitUntil(model: model) { model.batteryStatus?.percentage == 40 }
+
+        XCTAssertEqual(
+            model.batteryStatus,
+            .init(chargeState: .discharging, percentage: 40)
+        )
+        XCTAssertEqual(model.status, statusBeforeBattery)
+        XCTAssertEqual(model.receiverDescription, receiverBeforeBattery)
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertEqual(model.reportCount, reportCountBeforeBattery)
+        XCTAssertEqual(model.actionCount, actionCountBeforeBattery)
+
+        await session.send(.batteryUpdated(.init(chargeState: .charging, percentage: 82)))
+        await waitUntil(model: model) { model.batteryStatus?.percentage == 82 }
+        XCTAssertEqual(model.batteryStatus, .init(chargeState: .charging, percentage: 82))
+        XCTAssertEqual(model.status, statusBeforeBattery)
+        XCTAssertTrue(model.controllerConnected)
+
+        await session.send(.controllerLost(.init(reportCount: 4, actionCount: 2)))
+        await waitUntil(model: model) { model.batteryStatus == nil }
+        XCTAssertNil(model.batteryStatus)
+        XCTAssertFalse(model.controllerConnected)
+
+        await session.send(.controllerConnected)
+        await session.send(.batteryUpdated(.init(chargeState: .chargingDone, percentage: 100)))
+        await waitUntil(model: model) { model.batteryStatus?.percentage == 100 }
+        XCTAssertTrue(model.controllerConnected)
+        XCTAssertEqual(
+            model.batteryStatus,
+            .init(chargeState: .chargingDone, percentage: 100)
+        )
+    }
+
+    func testTerminalSessionEventsClearBatteryStatus() async {
+        let terminalEvents: [TrackpadSessionEvent] = [
+            .stopped(.init(reportCount: 1, actionCount: 0)),
+            .receiverRemoved(.init(reportCount: 1, actionCount: 0)),
+            .receiverUnavailable("open failed"),
+            .failed("output failed")
+        ]
+
+        for terminalEvent in terminalEvents {
+            let state = readyState(receiver: "Fake receiver")
+            let session = ManualEventSession()
+            let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+            await waitUntil(model: model) { model.isInitialized }
+            await waitUntil(model: model) { await session.startCount == 1 }
+            await session.send(.controllerConnected)
+            await session.send(.batteryUpdated(.init(chargeState: .charging, percentage: 82)))
+            await waitUntil(model: model) { model.batteryStatus != nil }
+
+            await session.send(terminalEvent)
+            await waitUntil(model: model) { model.batteryStatus == nil }
+            XCTAssertNil(model.batteryStatus, "Terminal event did not clear battery: \(terminalEvent)")
+            XCTAssertFalse(model.controllerConnected)
+            await session.stop()
+        }
+    }
+
     func testDraftEditKeepsCurrentSessionControllerTransitionsAuthoritative() async {
         let state = readyState(receiver: "Fake receiver")
         let session = ManualEventSession()
@@ -2477,8 +2553,16 @@ final class MenuModelTests: XCTestCase {
         await session.send(.waitingForController("Fake puck"), to: 0)
         await session.send(.controllerConnected, to: 0)
         await session.send(.outputArmed, to: 0)
-        await waitUntil(model: model) { model.status == .active }
+        await session.send(
+            .batteryUpdated(.init(chargeState: .discharging, percentage: 40)),
+            to: 0
+        )
+        await waitUntil(model: model) { model.status == .active && model.batteryStatus != nil }
 
+        XCTAssertEqual(
+            model.batteryStatus,
+            .init(chargeState: .discharging, percentage: 40)
+        )
         XCTAssertEqual(
             model.requestProfileSelection(id: second.id, source: .menu),
             .accepted
@@ -2488,11 +2572,17 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.status, .releasingOutputs)
         XCTAssertEqual(model.receiverDescription, "Fake puck")
         XCTAssertFalse(model.controllerConnected)
+        XCTAssertNil(model.batteryStatus)
         XCTAssertFalse(model.isRunning)
 
         await session.waitForTermination(of: 0)
         await session.send(.failed("stale session"), to: 0)
+        await session.send(
+            .batteryUpdated(.init(chargeState: .charging, percentage: 82)),
+            to: 0
+        )
         XCTAssertTrue(model.isEnabled)
+        XCTAssertNil(model.batteryStatus)
         XCTAssertEqual(model.status, .releasingOutputs)
 
         saveGate.signal()
@@ -2509,8 +2599,18 @@ final class MenuModelTests: XCTestCase {
 
         model.configuration.left.sensitivity = 3
         await session.send(.controllerConnected, to: 1)
-        await waitUntil(model: model) { model.status == .waitingForNeutral }
+        await session.send(
+            .batteryUpdated(.init(chargeState: .chargingDone, percentage: 100)),
+            to: 1
+        )
+        await waitUntil(model: model) {
+            model.status == .waitingForNeutral && model.batteryStatus?.percentage == 100
+        }
         XCTAssertTrue(model.controllerConnected)
+        XCTAssertEqual(
+            model.batteryStatus,
+            .init(chargeState: .chargingDone, percentage: 100)
+        )
         XCTAssertFalse(model.isRunning)
 
         await session.send(.outputArmed, to: 1)

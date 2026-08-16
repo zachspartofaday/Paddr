@@ -79,6 +79,7 @@ public enum TrackpadSessionEvent: Equatable, Sendable {
     case connecting
     case waitingForController(String)
     case controllerConnected
+    case batteryUpdated(ControllerBatteryStatus)
     case outputArmed
     case outputReleased(revision: UInt64)
     case progress(TrackpadRunSummary)
@@ -252,6 +253,13 @@ public enum TrackpadRuntime {
                         } else if controllerLive, activeSlot == report.slot {
                             try loseController()
                         }
+                        return
+                    }
+                    if let battery = TritonParser.parseBatteryStatus(bytes) {
+                        guard activeSlot == report.slot else { return }
+                        try loseControllerIfDeadlineReached(at: timestamp)
+                        guard controllerLive, activeSlot == report.slot else { return }
+                        onEvent?(.batteryUpdated(battery))
                         return
                     }
                     guard let pads = TritonParser.parseTrackpads(bytes, timestampNanoseconds: timestamp) else {
@@ -524,11 +532,14 @@ private final class SessionEventBuffer: Sendable {
                 )
             case .controllerConnected:
                 snapshot = preservingReleaseAcknowledgement(
-                    base: [.controllerConnected],
+                    base: [.controllerConnected] + latestBatterySnapshot(in: snapshot),
                     from: snapshot
                 )
+            case let .batteryUpdated(battery):
+                snapshot.removeAll { $0.isBatteryUpdate }
+                snapshot.append(.batteryUpdated(battery))
             case .outputArmed:
-                snapshot = [.controllerConnected, .outputArmed]
+                snapshot = [.controllerConnected, .outputArmed] + latestBatterySnapshot(in: snapshot)
             case let .outputReleased(revision):
                 snapshot = snapshot.filter { event in
                     switch event {
@@ -571,11 +582,20 @@ private func preservingReleaseAcknowledgement(
     return base + [acknowledgement]
 }
 
+private func latestBatterySnapshot(in snapshot: [TrackpadSessionEvent]) -> [TrackpadSessionEvent] {
+    snapshot.last(where: \.isBatteryUpdate).map { [$0] } ?? []
+}
+
 private extension TrackpadSessionEvent {
+    var isBatteryUpdate: Bool {
+        if case .batteryUpdated = self { return true }
+        return false
+    }
+
     var isControllerState: Bool {
         switch self {
-        case .connecting, .waitingForController, .controllerConnected, .outputArmed,
-             .outputReleased, .controllerLost:
+        case .connecting, .waitingForController, .controllerConnected, .batteryUpdated,
+             .outputArmed, .outputReleased, .controllerLost:
             true
         case .progress, .stopped, .receiverRemoved, .receiverUnavailable, .failed:
             false

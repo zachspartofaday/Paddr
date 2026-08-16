@@ -200,6 +200,81 @@ final class SessionTests: XCTestCase {
         _ = await session.stop()
     }
 
+    func testLatestBatterySnapshotIsCoalescedAndRecoveredUnderProgressPressure() async {
+        let runtime = BatteryPressureRuntime(losesController: false)
+        let session = TrackpadSession(runtime: runtime.run)
+        let stream = await session.start(configuration: configuration(sensitivity: 1))
+        await runtime.waitUntilProduced()
+
+        var iterator = stream.makeAsyncIterator()
+        var bufferedEvents: [TrackpadSessionEvent] = []
+        for _ in 0..<32 {
+            guard let event = await iterator.next() else {
+                return XCTFail("Expected the bounded session buffer to remain open")
+            }
+            bufferedEvents.append(event)
+        }
+
+        let recoveredBatteryValues = bufferedEvents.compactMap { event -> ControllerBatteryStatus? in
+            guard case let .batteryUpdated(battery) = event else { return nil }
+            return battery
+        }
+        XCTAssertFalse(recoveredBatteryValues.isEmpty)
+        XCTAssertTrue(
+            recoveredBatteryValues.allSatisfy {
+                $0 == .init(chargeState: .charging, percentage: 82)
+            }
+        )
+        XCTAssertEqual(
+            bufferedEvents.compactMap { event -> TrackpadRunSummary? in
+                guard case let .progress(summary) = event else { return nil }
+                return summary
+            }.last,
+            .init(reportCount: 80, actionCount: 0)
+        )
+        XCTAssertLessThanOrEqual(bufferedEvents.count, 32)
+
+        runtime.release()
+        var suffix: [TrackpadSessionEvent] = []
+        while let event = await iterator.next() { suffix.append(event) }
+        XCTAssertEqual(suffix, [.stopped(.init(reportCount: 80, actionCount: 0))])
+        _ = await session.stop()
+    }
+
+    func testControllerLossClearsRecoverableBatterySnapshotUnderProgressPressure() async {
+        let runtime = BatteryPressureRuntime(losesController: true)
+        let session = TrackpadSession(runtime: runtime.run)
+        let stream = await session.start(configuration: configuration(sensitivity: 1))
+        await runtime.waitUntilProduced()
+
+        var iterator = stream.makeAsyncIterator()
+        var bufferedEvents: [TrackpadSessionEvent] = []
+        for _ in 0..<32 {
+            guard let event = await iterator.next() else {
+                return XCTFail("Expected the bounded session buffer to remain open")
+            }
+            bufferedEvents.append(event)
+        }
+
+        XCTAssertFalse(bufferedEvents.contains { event in
+            if case .batteryUpdated = event { return true }
+            return false
+        })
+        XCTAssertTrue(bufferedEvents.contains(.controllerLost(.init(reportCount: 2, actionCount: 0))))
+        XCTAssertEqual(
+            bufferedEvents.compactMap { event -> TrackpadRunSummary? in
+                guard case let .progress(summary) = event else { return nil }
+                return summary
+            }.last,
+            .init(reportCount: 80, actionCount: 0)
+        )
+        XCTAssertLessThanOrEqual(bufferedEvents.count, 32)
+
+        runtime.release()
+        while await iterator.next() != nil {}
+        _ = await session.stop()
+    }
+
     func testEventGateRejectsEnqueueFromSupersededGeneration() {
         let gate = SessionEventGate()
         var delivered: [String] = []
@@ -322,6 +397,54 @@ private final class ReleasePressureRuntime: Sendable {
         event(.waitingForController("release-pressure-test"))
         event(.outputReleased(revision: 7))
         event(.controllerConnected)
+        for reportCount in 1...80 {
+            event(.progress(.init(reportCount: reportCount, actionCount: 0)))
+        }
+        producedContinuation.yield(())
+        releaseGate.wait()
+        return TrackpadRunResult(
+            summary: .init(reportCount: 80, actionCount: 0),
+            termination: .stopped
+        )
+    }
+
+    func waitUntilProduced() async {
+        var iterator = produced.makeAsyncIterator()
+        _ = await iterator.next()
+    }
+
+    func release() {
+        releaseGate.signal()
+    }
+}
+
+private final class BatteryPressureRuntime: Sendable {
+    private let losesController: Bool
+    private let produced: AsyncStream<Void>
+    private let producedContinuation: AsyncStream<Void>.Continuation
+    private let releaseGate = DispatchSemaphore(value: 0)
+
+    init(losesController: Bool) {
+        self.losesController = losesController
+        (produced, producedContinuation) = AsyncStream<Void>.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
+    }
+
+    func run(
+        configuration: TrackIsBackConfiguration,
+        observeOnly: Bool,
+        outputGate: OutputGate?,
+        stopToken: TrackpadStopToken,
+        event: @escaping @Sendable (TrackpadSessionEvent) -> Void
+    ) throws -> TrackpadRunResult {
+        event(.waitingForController("battery-pressure-test"))
+        event(.controllerConnected)
+        event(.batteryUpdated(.init(chargeState: .discharging, percentage: 10)))
+        event(.batteryUpdated(.init(chargeState: .charging, percentage: 82)))
+        if losesController {
+            event(.controllerLost(.init(reportCount: 2, actionCount: 0)))
+        }
         for reportCount in 1...80 {
             event(.progress(.init(reportCount: reportCount, actionCount: 0)))
         }

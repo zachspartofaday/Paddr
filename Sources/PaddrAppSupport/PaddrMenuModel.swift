@@ -72,6 +72,7 @@ public final class PaddrMenuModel {
     public private(set) var isReleasingOutput = false
     public private(set) var receiverDescription: String?
     public private(set) var controllerConnected = false
+    public private(set) var batteryStatus: ControllerBatteryStatus?
     public private(set) var accessibilityTrusted = false
     public private(set) var inputMonitoringGranted = false
     public private(set) var status: MenuStatus = .off
@@ -620,7 +621,7 @@ public final class PaddrMenuModel {
             activationCommitPending = false
             sessionID = nil
             sessionStatusGeneration = nil
-            controllerConnected = false
+            clearControllerPresence()
             isRunning = false
             resolvePendingRelease()
         } else {
@@ -759,7 +760,7 @@ public final class PaddrMenuModel {
         reconnectStatusGeneration = nil
         permissionRefreshTask = nil
         sessionID = nil
-        controllerConnected = false
+        clearControllerPresence()
         isRunning = false
         resolvePendingRelease()
 
@@ -859,6 +860,7 @@ public final class PaddrMenuModel {
                 if let model = self, model.isCurrent(operation),
                    model.sessionID == context.sessionID {
                     model.sessionID = nil
+                    model.clearControllerPresence()
                     model.statusDidChange?()
                 }
             }
@@ -881,7 +883,7 @@ public final class PaddrMenuModel {
         reconnectTask = nil
         reconnectStatusGeneration = nil
         sessionID = nil
-        controllerConnected = false
+        clearControllerPresence()
         isRunning = false
         var stopOutcome = TrackpadSessionStopOutcome.clean
         if !sessionAlreadyStopped {
@@ -1150,8 +1152,8 @@ public final class PaddrMenuModel {
         switch event {
         case .stopped, .receiverRemoved, .receiverUnavailable, .failed:
             isSessionEnding = true
-        case .connecting, .waitingForController, .controllerConnected, .outputArmed,
-             .outputReleased, .progress, .controllerLost:
+        case .connecting, .waitingForController, .controllerConnected, .batteryUpdated,
+             .outputArmed, .outputReleased, .progress, .controllerLost:
             isSessionEnding = false
         }
         var shouldScheduleReconnect = false
@@ -1161,17 +1163,20 @@ public final class PaddrMenuModel {
         ) {
             switch event {
             case .connecting:
+                clearControllerPresence()
                 if isEnabled { publishStatus(.connecting) }
             case let .waitingForController(description):
                 receiverStateGeneration &+= 1
                 receiverDescription = description
-                controllerConnected = false
+                clearControllerPresence()
                 isRunning = false
                 if isEnabled { publishStatus(.waitingForController) }
             case .controllerConnected:
                 controllerConnected = true
                 isRunning = false
                 if isEnabled { publishStatus(.waitingForNeutral) }
+            case let .batteryUpdated(battery):
+                batteryStatus = battery
             case .outputArmed:
                 guard controllerConnected, isEnabled else { break }
                 isRunning = true
@@ -1188,7 +1193,7 @@ public final class PaddrMenuModel {
                 update(summary)
             case let .controllerLost(summary):
                 update(summary)
-                controllerConnected = false
+                clearControllerPresence()
                 isRunning = false
                 resolvePendingRelease()
                 if isEnabled {
@@ -1198,7 +1203,7 @@ public final class PaddrMenuModel {
                 }
             case let .stopped(summary):
                 update(summary)
-                controllerConnected = false
+                clearControllerPresence()
                 isRunning = false
                 resolvePendingRelease()
                 sessionID = nil
@@ -1216,7 +1221,7 @@ public final class PaddrMenuModel {
                 update(summary)
                 receiverStateGeneration &+= 1
                 receiverDescription = nil
-                controllerConnected = false
+                clearControllerPresence()
                 isRunning = false
                 resolvePendingRelease()
                 sessionID = nil
@@ -1227,7 +1232,7 @@ public final class PaddrMenuModel {
                 }
                 shouldScheduleReconnect = true
             case .receiverUnavailable:
-                controllerConnected = false
+                clearControllerPresence()
                 isRunning = false
                 resolvePendingRelease()
                 sessionID = nil
@@ -1239,7 +1244,7 @@ public final class PaddrMenuModel {
                 shouldScheduleReconnect = true
             case let .failed(message):
                 sessionID = nil
-                controllerConnected = false
+                clearControllerPresence()
                 isRunning = false
                 resolvePendingRelease()
                 let failure = MenuFailure.output(diagnostic: message)
@@ -1264,6 +1269,11 @@ public final class PaddrMenuModel {
     private func update(_ summary: TrackpadRunSummary) {
         reportCount = summary.reportCount
         actionCount = summary.actionCount
+    }
+
+    private func clearControllerPresence() {
+        controllerConnected = false
+        batteryStatus = nil
     }
 
     private var currentStatusGeneration: UInt64 {

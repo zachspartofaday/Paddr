@@ -64,7 +64,7 @@ final class MenuViewPresentationTests: XCTestCase {
         )
     }
 
-    func testFourStatusPillsFitMinimumWindowWidth() async throws {
+    func testFiveStatusPillsFitMinimumWindowWidthWithUnavailableBattery() async throws {
         let store = BlockingProfileStore()
         let model = PaddrMenuModel(dependencies: dependencies(store: store))
         defer { store.releaseSave() }
@@ -72,13 +72,51 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertTrue(didInitialize)
         XCTAssertNil(model.receiverDescription)
         XCTAssertFalse(model.controllerConnected)
+        XCTAssertNil(model.batteryStatus)
 
+        assertApplyBarFitsMinimumWindow(model: model)
+    }
+
+    func testFiveStatusPillsFitMinimumWindowWidthWithLongestBatteryValue() async throws {
+        let store = BlockingProfileStore()
+        let session = PresentationSession()
+        let model = PaddrMenuModel(
+            dependencies: dependencies(
+                store: store,
+                session: session,
+                receiver: "Fake receiver"
+            )
+        )
+        defer { store.releaseSave() }
+        let didInitialize = await waitUntil { model.isInitialized }
+        XCTAssertTrue(didInitialize)
+        let didStart = await waitUntil { await session.startCount == 1 }
+        XCTAssertTrue(didStart)
+        await session.send(.controllerConnected)
+        await session.send(.batteryUpdated(.init(chargeState: .chargingDone, percentage: 100)))
+        let didPublishBattery = await waitUntil { model.batteryStatus?.percentage == 100 }
+        XCTAssertTrue(didPublishBattery)
+
+        assertApplyBarFitsMinimumWindow(model: model)
+        _ = await session.stop()
+    }
+
+    private func assertApplyBarFitsMinimumWindow(
+        model: PaddrMenuModel,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
         let controller = NSHostingController(rootView: ApplyBarView(model: model))
         let fitted = controller.sizeThatFits(
             in: NSSize(width: PaddrStyle.minimumWindowSize.width, height: 400)
         )
-        XCTAssertLessThanOrEqual(fitted.width, PaddrStyle.minimumWindowSize.width + 0.5)
-        XCTAssertGreaterThan(fitted.height, 0)
+        XCTAssertLessThanOrEqual(
+            fitted.width,
+            PaddrStyle.minimumWindowSize.width + 0.5,
+            file: file,
+            line: line
+        )
+        XCTAssertGreaterThan(fitted.height, 0, file: file, line: line)
     }
 
     private func hostedPadConfigurationHeight(initiallyExpanded: Bool) -> CGFloat {
@@ -127,12 +165,16 @@ final class MenuViewPresentationTests: XCTestCase {
         return view.subviews.lazy.compactMap { self.firstDescendant(of: type, in: $0) }.first
     }
 
-    private func dependencies(store: BlockingProfileStore) -> MenuDependencies {
+    private func dependencies(
+        store: BlockingProfileStore,
+        session: any TrackpadSessionControlling = InertSession(),
+        receiver: String? = nil
+    ) -> MenuDependencies {
         MenuDependencies(
-            session: InertSession(),
+            session: session,
             loadProfiles: { ConfigurationProfileLoadResult(document: .default) },
             saveProfiles: store.save,
-            probeReceiver: { nil },
+            probeReceiver: { receiver },
             accessibilityTrusted: { _ in true },
             openPrivacySettings: { _ in },
             sleep: { duration in try await Task.sleep(for: duration) },
@@ -141,10 +183,10 @@ final class MenuViewPresentationTests: XCTestCase {
     }
 
     private func waitUntil(
-        _ condition: @escaping @MainActor () -> Bool
+        _ condition: @escaping @MainActor () async -> Bool
     ) async -> Bool {
         for _ in 0..<200 {
-            if condition() {
+            if await condition() {
                 return true
             }
             try? await Task.sleep(for: .milliseconds(10))
@@ -166,6 +208,33 @@ private struct InertSession: TrackpadSessionControlling {
 
     @discardableResult
     func stop() async -> TrackpadSessionStopOutcome { .clean }
+}
+
+private actor PresentationSession: TrackpadSessionControlling {
+    private var continuation: AsyncStream<TrackpadSessionEvent>.Continuation?
+    private(set) var startCount = 0
+
+    func start(
+        configuration: TrackIsBackConfiguration,
+        observeOnly: Bool,
+        outputGate: OutputGate?
+    ) async -> AsyncStream<TrackpadSessionEvent> {
+        startCount += 1
+        let (stream, continuation) = AsyncStream<TrackpadSessionEvent>.makeStream()
+        self.continuation = continuation
+        return stream
+    }
+
+    @discardableResult
+    func stop() async -> TrackpadSessionStopOutcome {
+        continuation?.finish()
+        continuation = nil
+        return .clean
+    }
+
+    func send(_ event: TrackpadSessionEvent) {
+        continuation?.yield(event)
+    }
 }
 
 private final class BlockingProfileStore: @unchecked Sendable {

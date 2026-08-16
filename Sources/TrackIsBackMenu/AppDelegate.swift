@@ -240,6 +240,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         statusMenu.addItem(outputItem)
         statusMenu.addItem(.separator())
 
+        let batteryPresentation = BatteryStatusPresentation(status: model.batteryStatus)
+        let batteryLevelItem = NSMenuItem(
+            title: batteryPresentation.menuLevel,
+            action: nil,
+            keyEquivalent: ""
+        )
+        batteryLevelItem.isEnabled = false
+        statusMenu.addItem(batteryLevelItem)
+        let batteryChargeStateItem = NSMenuItem(
+            title: batteryPresentation.menuChargeState,
+            action: nil,
+            keyEquivalent: ""
+        )
+        batteryChargeStateItem.isEnabled = false
+        statusMenu.addItem(batteryChargeStateItem)
+        statusMenu.addItem(.separator())
+
         let profileHeader = NSMenuItem(title: String(localized: "Profiles"), action: nil, keyEquivalent: "")
         profileHeader.isEnabled = false
         statusMenu.addItem(profileHeader)

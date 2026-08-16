@@ -934,6 +934,59 @@ final class RuntimeTests: XCTestCase {
         XCTAssertLessThan(releaseIndex, lostIndex)
     }
 
+    func testBatteryReportsRequireAnAlreadyActiveSlotAndDoNotAffectOutputState() throws {
+        let clock = ManualUptimeClock()
+        let output = RecordingOutput()
+        let events = EventRecorder()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(batteryReport(chargeState: 1, percentage: 40), at: 0),
+            .slotReport(1, [0x46, 2], at: 10),
+            .slotReport(0, batteryReport(chargeState: 2, percentage: 60), at: 20),
+            .slotReport(1, batteryReport(chargeState: 2, percentage: 82), at: 30),
+            .stop
+        ])
+
+        let result = try run(hid: hid, clock: clock, output: output, events: events)
+
+        XCTAssertEqual(result.summary, .init(reportCount: 0, actionCount: 0))
+        XCTAssertEqual(events.events, [
+            .waitingForController("Fake receiver"),
+            .controllerConnected,
+            .batteryUpdated(.init(chargeState: .charging, percentage: 82))
+        ])
+        XCTAssertFalse(events.events.contains(.outputArmed))
+        XCTAssertEqual(output.actions, [])
+    }
+
+    func testBatteryDoesNotRefreshLivenessAndCannotPublishOrReacquireAtDeadline() throws {
+        let clock = ManualUptimeClock()
+        let output = RecordingOutput()
+        let events = EventRecorder()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report([0x46, 2], at: 0),
+            .report(batteryReport(chargeState: 1, percentage: 25), at: 999_999_999),
+            .report(batteryReport(chargeState: 2, percentage: 50), at: 1_000_000_000),
+            .slotReport(1, batteryReport(chargeState: 2, percentage: 60), at: 1_000_000_001),
+            .slotReport(1, [0x46, 2], at: 1_100_000_000),
+            .slotReport(1, batteryReport(chargeState: 0xFE, percentage: 75), at: 1_100_000_001),
+            .stop
+        ])
+
+        let result = try run(hid: hid, clock: clock, output: output, events: events)
+
+        XCTAssertEqual(result.summary, .init(reportCount: 0, actionCount: 0))
+        XCTAssertEqual(events.events, [
+            .waitingForController("Fake receiver"),
+            .controllerConnected,
+            .batteryUpdated(.init(chargeState: .discharging, percentage: 25)),
+            .controllerLost(.init(reportCount: 0, actionCount: 0)),
+            .controllerConnected,
+            .batteryUpdated(.init(chargeState: .unknown(0xFE), percentage: 75))
+        ])
+        XCTAssertFalse(events.events.contains(.outputArmed))
+        XCTAssertEqual(output.actions, [])
+    }
+
     func testOtherSlotReportsAndDisconnectsAreIgnoredWhileSlotActive() throws {
         let clock = ManualUptimeClock()
         let hid = ScriptedHID(clock: clock, steps: [
@@ -1153,6 +1206,10 @@ private func neutralReport() -> [UInt8] {
 
 private func heldLeftReport() -> [UInt8] {
     report(leftTouched: true, rightTouched: false)
+}
+
+private func batteryReport(chargeState: UInt8, percentage: UInt8) -> [UInt8] {
+    [0x43, chargeState, percentage] + [UInt8](repeating: 0, count: 12)
 }
 
 private func unknownReport() -> [UInt8] {
