@@ -178,6 +178,31 @@
         }
       }
     },
+    "Battery": {
+      "comment": "Heading for the active controller battery status.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Battery"
+          }
+        }
+      }
+    },
+    "Battery level: %arg": {
+      "comment": "Disabled status-menu detail; the argument is a compact battery percentage."
+    },
+    "Battery level: —": {
+      "comment": "Disabled status-menu detail shown before a battery report is available.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Battery level: —"
+          }
+        }
+      }
+    },
     "Behavior": {
       "localizations": {
         "en": {
@@ -256,6 +281,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "Center tap radius"
+          }
+        }
+      }
+    },
+    "Charge state: %arg": {
+      "comment": "Disabled status-menu detail; the argument is the controller charge state."
+    },
+    "Charge state: —": {
+      "comment": "Disabled status-menu detail shown before a battery report is available.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Charge state: —"
+          }
+        }
+      }
+    },
+    "Charging": {
+      "comment": "Controller battery charge state.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Charging"
+          }
+        }
+      }
+    },
+    "Charging complete": {
+      "comment": "Controller battery charge state indicating charging is done.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Charging complete"
           }
         }
       }
@@ -472,6 +533,17 @@
     "Deleting the active profile activates Default first. This cannot be undone.": {},
     "Discard Changes": {},
     "Discard unsaved changes?": {},
+    "Discharging": {
+      "comment": "Controller battery charge state.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discharging"
+          }
+        }
+      }
+    },
     "Down arrow": {
       "localizations": {
         "en": {
@@ -724,6 +796,9 @@
           }
         }
       }
+    },
+    "Level %arg, %arg": {
+      "comment": "Battery-pill accessibility value; the arguments are percentage and charge state."
     },
     "Minimize": {
       "localizations": {
@@ -1178,6 +1253,17 @@
         }
       }
     },
+    "Reset": {
+      "comment": "Controller battery charge state.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset"
+          }
+        }
+      }
+    },
     "Restore Defaults": {
       "comment": "Profile actions menu item that resets the draft configuration to defaults.",
       "localizations": {
@@ -1434,6 +1520,17 @@
         }
       }
     },
+    "Status unavailable": {
+      "comment": "Battery-pill accessibility value shown before a battery report is available.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status unavailable"
+          }
+        }
+      }
+    },
     "Step %arg of %arg": {},
     "Step %arg of %arg: %arg": {},
     "Switching profiles replaces the current draft. Unsaved changes will not be copied.": {},
@@ -1685,6 +1782,17 @@
         }
       }
     },
+    "Unknown": {
+      "comment": "Fallback label for an unrecognized controller battery charge state.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown"
+          }
+        }
+      }
+    },
     "Unsaved changes": {
       "localizations": {
         "en": {
@@ -1711,6 +1819,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Use Steam Controller trackpads without Steam Input. Paddr maps trackpad gestures to normal macOS mouse, scrolling, and keyboard input; it does not inject into games."
+          }
+        }
+      }
+    },
+    "Validating source": {
+      "comment": "Controller battery charge state while its power source is being validated.",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validating source"
           }
         }
       }

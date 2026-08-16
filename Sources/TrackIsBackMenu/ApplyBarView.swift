@@ -11,8 +11,12 @@ struct ApplyBarView: View {
         return "Idle"
     }
 
+    private var batteryPresentation: BatteryStatusPresentation {
+        BatteryStatusPresentation(status: model.batteryStatus)
+    }
+
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 4) {
             statusCells
             statusMessage
                 .frame(
@@ -82,6 +86,13 @@ struct ApplyBarView: View {
                 : LocalizedStringResource("Not found"),
             systemImage: model.controllerConnected ? "gamecontroller.fill" : "gamecontroller",
             state: model.controllerConnected ? .ready : .problem
+        )
+        StatusCell(
+            title: LocalizedStringResource("Battery"),
+            value: batteryPresentation.compactValue,
+            systemImage: batteryPresentation.systemImage,
+            state: .neutral,
+            accessibilityValue: batteryPresentation.accessibilityValue
         )
         StatusCell(
             title: LocalizedStringResource("Output"),
