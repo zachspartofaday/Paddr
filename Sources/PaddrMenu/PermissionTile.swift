@@ -8,16 +8,23 @@ struct PermissionTile: View {
     let settingsAction: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             Image(systemName: isGranted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                .foregroundStyle(isGranted ? PaddrStyle.accent : .orange)
+                .foregroundStyle(isGranted ? PaddrStyle.accentText : PaddrStyle.warningText)
+                .padding(.top, 2)
                 .accessibilityHidden(true)
 
-            Text(title)
-                .paddrTypography(.callout)
-                .bold()
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .paddrTypography(.callout)
+                    .bold()
+                Text(detail)
+                    .paddrTypography(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 8)
 
             if !isGranted {
                 Button("Request", action: requestAction)
@@ -27,16 +34,10 @@ struct PermissionTile: View {
                     .paddrActionButton()
             }
         }
-        .padding(.horizontal, 10)
-        .frame(maxWidth: .infinity, minHeight: 40)
-        .background(tileColor.opacity(0.07), in: .rect(cornerRadius: 10))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(tileColor.opacity(0.20), lineWidth: 1)
-        }
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
         .help(Text(detail))
         .accessibilityElement(children: .contain)
+        .accessibilityValue(isGranted ? Text("Ready") : Text("Needed"))
     }
-
-    private var tileColor: Color { isGranted ? PaddrStyle.accent : .orange }
 }

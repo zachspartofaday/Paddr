@@ -146,6 +146,8 @@ struct OnboardingGuideView: View {
                         : Text("Input Monitoring access is needed")
                 )
 
+                Spacer(minLength: 8)
+
                 Button("Request", action: model.requestInputMonitoring)
                     .paddrActionButton(prominent: true)
                 Button("Open Settings", action: model.openInputMonitoringSettings)
@@ -163,6 +165,8 @@ struct OnboardingGuideView: View {
                         ? Text("Accessibility access is ready")
                         : Text("Accessibility access is needed")
                 )
+
+                Spacer(minLength: 8)
 
                 Button("Request", action: model.requestAccessibility)
                     .paddrActionButton(prominent: true)

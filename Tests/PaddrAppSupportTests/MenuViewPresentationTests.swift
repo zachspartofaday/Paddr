@@ -9,6 +9,205 @@ import PaddrCore
 
 @MainActor
 final class MenuViewPresentationTests: XCTestCase {
+    func testCapacitivePadSurfaceKeepsFiniteBoundsAcrossAdaptiveEnvironments() {
+        let size = NSSize(width: PaddrStyle.zoneMapWidth, height: PaddrStyle.zoneMapHeight)
+
+        for colorScheme in [ColorScheme.light, .dark] {
+            for contrast in [ColorSchemeContrast.standard, .increased] {
+                for reduceTransparency in [false, true] {
+                    let view = CapacitivePadSurface()
+                        .environment(\.colorScheme, colorScheme)
+                        .environment(\._colorSchemeContrast, contrast)
+                        .environment(\._accessibilityReduceTransparency, reduceTransparency)
+                        .frame(width: size.width, height: size.height)
+                    let hostingView = NSHostingView(rootView: view)
+                    hostingView.frame = NSRect(origin: .zero, size: size)
+                    hostingView.layoutSubtreeIfNeeded()
+
+                    XCTAssertTrue(hostingView.fittingSize.width.isFinite)
+                    XCTAssertTrue(hostingView.fittingSize.height.isFinite)
+                    XCTAssertEqual(hostingView.fittingSize.width, size.width, accuracy: 0.5)
+                    XCTAssertEqual(hostingView.fittingSize.height, size.height, accuracy: 0.5)
+                    XCTAssertTrue(hostingView.accessibilityChildren()?.isEmpty ?? true)
+                }
+            }
+        }
+    }
+
+    func testEveryOnboardingPageFitsMinimumGuideWindow() throws {
+        let model = PaddrMenuModel(dependencies: dependencies(store: BlockingProfileStore()))
+
+        for pageIndex in 0..<OnboardingPager.pageCount {
+            var pager = OnboardingPager()
+            for _ in 0..<pageIndex { pager.advance() }
+            let view = OnboardingGuideView(
+                model: model,
+                onSkip: {},
+                onComplete: {},
+                initialPager: pager
+            )
+            let hostingView = NSHostingView(rootView: view)
+            hostingView.frame = NSRect(origin: .zero, size: PaddrStyle.minimumGuideWindowSize)
+            hostingView.layoutSubtreeIfNeeded()
+
+            XCTAssertEqual(
+                hostingView.fittingSize.height,
+                PaddrStyle.minimumGuideWindowSize.height,
+                accuracy: 0.5
+            )
+            let scrollView = try XCTUnwrap(firstDescendant(of: NSScrollView.self, in: hostingView))
+            let documentView = try XCTUnwrap(scrollView.documentView)
+            documentView.layoutSubtreeIfNeeded()
+            XCTAssertLessThanOrEqual(
+                documentView.fittingSize.height,
+                scrollView.contentSize.height + 0.5,
+                "Guide page \(pageIndex + 1) should not require scrolling"
+            )
+        }
+    }
+
+    func testEveryPadModeAndZoneLayoutFitsExpandedCardAtMinimumWidth() {
+        var configurations = PadMode.allCases.map { PadConfiguration(mode: $0) }
+        configurations += PadZoneLayout.allCases.map { layout in
+            var configuration = PadConfiguration(mode: .dpad)
+            configuration.zoneLayout = layout
+            return configuration
+        }
+        let size = NSSize(
+            width: PaddrStyle.minimumWindowSize.width - (2 * PaddrStyle.panelPadding),
+            height: PaddrStyle.padConfigurationCardHeight
+        )
+
+        for configuration in configurations {
+            let view = PadConfigurationView(
+                side: .left,
+                configuration: .constant(configuration),
+                initiallyExpanded: true
+            )
+            .frame(width: size.width, height: size.height)
+            let hostingView = NSHostingView(rootView: view)
+            hostingView.frame = NSRect(origin: .zero, size: size)
+            hostingView.layoutSubtreeIfNeeded()
+
+            XCTAssertTrue(hostingView.fittingSize.width.isFinite)
+            XCTAssertEqual(hostingView.fittingSize.height, size.height, accuracy: 0.5)
+            for control in descendants(of: NSControl.self, in: hostingView) {
+                assertControlFits(control, in: hostingView)
+            }
+        }
+    }
+
+    func testPointerToggleFitsDefaultPadColumnWidth() throws {
+        let size = NSSize(
+            width: PaddrStyle.padColumnWidth,
+            height: PaddrStyle.padConfigurationCardHeight
+        )
+        let view = PadConfigurationView(
+            side: .right,
+            configuration: .constant(PadConfiguration(mode: .mouse)),
+            initiallyExpanded: true
+        )
+        .frame(width: size.width, height: size.height)
+        let hostingView = NSHostingView(rootView: view)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+
+        let toggle = try XCTUnwrap(firstDescendant(of: NSSwitch.self, in: hostingView))
+        XCTAssertEqual(toggle.state, .on)
+        assertControlFits(toggle, in: hostingView)
+    }
+
+    func testPointerSettingExtremesFitAndPreserveSwitchSemantics() throws {
+        let cases: [(Double, Double, Double, CenterTapTrackingMode, NSControl.StateValue)] = [
+            (
+                ConfigurationLimits.sensitivity.lowerBound,
+                ConfigurationLimits.mouseAcceleration.lowerBound,
+                ConfigurationLimits.mouseDeadzone.lowerBound,
+                .coupled,
+                .off
+            ),
+            (
+                ConfigurationLimits.sensitivity.upperBound,
+                ConfigurationLimits.mouseAcceleration.upperBound,
+                ConfigurationLimits.mouseDeadzone.upperBound,
+                .decoupled,
+                .on
+            )
+        ]
+        let size = NSSize(
+            width: PaddrStyle.minimumWindowSize.width - (2 * PaddrStyle.panelPadding),
+            height: PaddrStyle.padConfigurationCardHeight
+        )
+
+        for (sensitivity, acceleration, radius, trackingMode, switchState) in cases {
+            var configuration = PadConfiguration(mode: .mouse)
+            configuration.sensitivity = sensitivity
+            configuration.mouseAcceleration = acceleration
+            configuration.mouseDeadzone = radius
+            configuration.centerTapTrackingMode = trackingMode
+            let view = PadConfigurationView(
+                side: .right,
+                configuration: .constant(configuration),
+                initiallyExpanded: true
+            )
+            .frame(width: size.width, height: size.height)
+            let hostingView = NSHostingView(rootView: view)
+            hostingView.frame = NSRect(origin: .zero, size: size)
+            hostingView.layoutSubtreeIfNeeded()
+
+            let toggle = try XCTUnwrap(firstDescendant(of: NSSwitch.self, in: hostingView))
+            XCTAssertEqual(toggle.state, switchState)
+            for control in descendants(of: NSControl.self, in: hostingView) {
+                assertControlFits(control, in: hostingView)
+            }
+        }
+    }
+
+    func testOnboardingPermissionStatesFitMinimumGuideWindow() throws {
+        let states: [(Bool, InputMonitoringAccess)] = [
+            (true, .granted),
+            (false, .denied)
+        ]
+
+        for (accessibilityGranted, inputMonitoringAccess) in states {
+            var pager = OnboardingPager()
+            pager.advance()
+            pager.advance()
+            let model = PaddrMenuModel(
+                dependencies: dependencies(
+                    store: BlockingProfileStore(),
+                    accessibilityGranted: accessibilityGranted,
+                    inputMonitoringAccess: inputMonitoringAccess
+                )
+            )
+            let view = OnboardingGuideView(
+                model: model,
+                onSkip: {},
+                onComplete: {},
+                initialPager: pager
+            )
+            let hostingView = NSHostingView(rootView: view)
+            hostingView.frame = NSRect(origin: .zero, size: PaddrStyle.minimumGuideWindowSize)
+            hostingView.layoutSubtreeIfNeeded()
+
+            XCTAssertEqual(
+                hostingView.fittingSize.height,
+                PaddrStyle.minimumGuideWindowSize.height,
+                accuracy: 0.5
+            )
+            let scrollView = try XCTUnwrap(firstDescendant(of: NSScrollView.self, in: hostingView))
+            let documentView = try XCTUnwrap(scrollView.documentView)
+            documentView.layoutSubtreeIfNeeded()
+            XCTAssertLessThanOrEqual(
+                documentView.fittingSize.height,
+                scrollView.contentSize.height + 0.5
+            )
+            for control in descendants(of: NSControl.self, in: hostingView) {
+                assertControlFits(control, in: hostingView)
+            }
+        }
+    }
+
     func testAccessibilityOnboardingPageFitsCompactWindowWithoutScrolling() throws {
         var pager = OnboardingPager()
         pager.advance()
@@ -267,14 +466,17 @@ final class MenuViewPresentationTests: XCTestCase {
     private func dependencies(
         store: BlockingProfileStore,
         session: any TrackpadSessionControlling = InertSession(),
-        receiver: String? = nil
+        receiver: String? = nil,
+        accessibilityGranted: Bool = true,
+        inputMonitoringAccess: InputMonitoringAccess = .granted
     ) -> MenuDependencies {
         MenuDependencies(
             session: session,
             loadProfiles: { ConfigurationProfileLoadResult(document: .default) },
             saveProfiles: store.save,
             probeReceiver: { receiver },
-            accessibilityTrusted: { _ in true },
+            accessibilityTrusted: { _ in accessibilityGranted },
+            inputMonitoringAccess: { _ in inputMonitoringAccess },
             openPrivacySettings: { _ in },
             sleep: { duration in try await Task.sleep(for: duration) },
             reconnectDelay: { _ in throw CancellationError() }
