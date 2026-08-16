@@ -288,7 +288,7 @@ public final class PaddrMenuModel {
         isInitialized = true
         // Observation opens the puck at launch, so the one-time Input Monitoring prompt
         // belongs here rather than at first output enable.
-        inputMonitoringGranted = dependencies.inputMonitoringGranted(true)
+        inputMonitoringGranted = dependencies.inputMonitoringAccess(true) == .granted
         _ = await refreshStatusNow(statusGeneration: statusGeneration)
         if terminationState == .idle {
             startLifecycle(
@@ -316,7 +316,7 @@ public final class PaddrMenuModel {
             self.receiverDescription = receiverDescription
         }
         accessibilityTrusted = dependencies.accessibilityTrusted(false)
-        inputMonitoringGranted = dependencies.inputMonitoringGranted(false)
+        inputMonitoringGranted = dependencies.inputMonitoringAccess(false) == .granted
         if isEnabled, !accessibilityTrusted, sessionID != nil {
             isEnabled = false
             publishStatus(.failure(.accessibilityRequired))
@@ -509,13 +509,21 @@ public final class PaddrMenuModel {
 
     public func requestInputMonitoring() {
         guard terminationState == .idle else { return }
-        inputMonitoringGranted = dependencies.inputMonitoringGranted(true)
-        if inputMonitoringGranted {
+        // The native prompt exists only while access is undetermined; once denied, System
+        // Settings is the only recovery path, so a denied request routes there directly.
+        switch dependencies.inputMonitoringAccess(true) {
+        case .granted:
+            inputMonitoringGranted = true
             preservingCurrentOperationalStatusAuthority {
                 publishStatus(operationalStatus)
             }
-        } else {
+        case .undetermined:
+            inputMonitoringGranted = false
             publishStatus(.requestingInputMonitoring)
+        case .denied:
+            inputMonitoringGranted = false
+            dependencies.openPrivacySettings("Privacy_ListenEvent")
+            publishStatus(.inputMonitoringSettings)
         }
         schedulePermissionRefresh()
     }

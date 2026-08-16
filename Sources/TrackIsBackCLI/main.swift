@@ -321,7 +321,7 @@ private func canonicalDocument(
 }
 
 private func run(_ options: CLIOptions) throws {
-    print("Input monitoring: \(Permissions.inputMonitoringGranted(prompt: false) ? "granted" : "needed to receive puck reports")")
+    print("Input monitoring: \(Permissions.inputMonitoringAccess(requestingIfUndetermined: false) == .granted ? "granted" : "needed to receive puck reports")")
     print("Accessibility: \(Permissions.accessibilityTrusted(prompt: false) ? "granted" : "needed for live output")")
     guard let deviceSummary = TritonHIDDevice.probe() else {
         throw TrackIsBackError.device("No Steam Controller 2 puck interface was found.")
