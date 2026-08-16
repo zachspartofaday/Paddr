@@ -11,44 +11,26 @@ struct PadModePreview: View {
     let deadzone: Double
 
     var body: some View {
-        Canvas { context, size in
-            let bounds = CGRect(origin: .zero, size: size)
-            let padShape = Path(
-                roundedRect: bounds,
-                cornerRadius: PaddrStyle.padPreviewCornerRadius
-            )
-            context.fill(
-                padShape,
-                with: .linearGradient(
-                    Gradient(colors: [
-                        Color.primary.opacity(0.085),
-                        Color.primary.opacity(0.035)
-                    ]),
-                    startPoint: CGPoint(x: bounds.midX, y: bounds.minY),
-                    endPoint: CGPoint(x: bounds.midX, y: bounds.maxY)
-                )
-            )
+        ZStack {
+            CapacitivePadSurface()
 
-            switch mode {
-            case .mouse:
-                drawPointerOverlay(in: bounds, context: &context)
-            case .scroll:
-                drawScrollChevrons(in: bounds, context: &context)
-            case .disabled, .dpad:
-                break
+            Canvas { context, size in
+                let bounds = CGRect(origin: .zero, size: size)
+                switch mode {
+                case .mouse:
+                    drawPointerOverlay(in: bounds, context: &context)
+                case .scroll:
+                    drawScrollChevrons(in: bounds, context: &context)
+                case .disabled, .dpad:
+                    break
+                }
             }
-        }
-        .clipShape(.rect(cornerRadius: PaddrStyle.padPreviewCornerRadius))
-        .overlay {
-            ZStack {
-                RoundedRectangle(cornerRadius: PaddrStyle.padPreviewCornerRadius)
-                    .strokeBorder(.white.opacity(0.10), lineWidth: 1)
-                    .padding(1)
-                RoundedRectangle(cornerRadius: PaddrStyle.padPreviewCornerRadius)
-                    .strokeBorder(.primary.opacity(0.30), lineWidth: 1)
-            }
+            .clipShape(.rect(cornerRadius: PaddrStyle.padPreviewCornerRadius))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
         .opacity(mode == .disabled ? 0.45 : 1)
+        .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 

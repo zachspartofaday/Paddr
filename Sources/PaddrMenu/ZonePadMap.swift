@@ -13,34 +13,17 @@ struct ZonePadMap: View {
         GeometryReader { proxy in
             Canvas { context, size in
                 let bounds = CGRect(origin: .zero, size: size)
-                let padShape = Path(roundedRect: bounds, cornerRadius: PaddrStyle.padPreviewCornerRadius)
-                context.fill(
-                    padShape,
-                    with: .linearGradient(
-                        Gradient(colors: [
-                            Color.primary.opacity(0.085),
-                            Color.primary.opacity(0.035)
-                        ]),
-                        startPoint: CGPoint(x: bounds.midX, y: bounds.minY),
-                        endPoint: CGPoint(x: bounds.midX, y: bounds.maxY)
-                    )
-                )
 
                 for zone in layout.zones {
                     let path = path(for: zone, in: bounds)
                     let isSelected = zone == selection
                     context.fill(
                         path,
-                        with: isSelected
-                            ? .linearGradient(
-                                Gradient(colors: [
-                                    PaddrStyle.accent.opacity(0.34),
-                                    PaddrStyle.accent.opacity(0.18)
-                                ]),
-                                startPoint: CGPoint(x: bounds.midX, y: bounds.minY),
-                                endPoint: CGPoint(x: bounds.midX, y: bounds.maxY)
-                            )
-                            : .color(.primary.opacity(0.025))
+                        with: .color(
+                            isSelected
+                                ? PaddrStyle.accent.opacity(0.25)
+                                : .primary.opacity(0.025)
+                        )
                     )
                     context.stroke(
                         path,
@@ -66,17 +49,8 @@ struct ZonePadMap: View {
                 }
             }
             .clipShape(.rect(cornerRadius: PaddrStyle.padPreviewCornerRadius))
-            .overlay {
-                ZStack {
-                    RoundedRectangle(cornerRadius: PaddrStyle.padPreviewCornerRadius)
-                        .strokeBorder(.white.opacity(0.10), lineWidth: 1)
-                        .padding(1)
-                    RoundedRectangle(cornerRadius: PaddrStyle.padPreviewCornerRadius)
-                        .strokeBorder(
-                            .primary.opacity(0.30),
-                            lineWidth: 1
-                        )
-                }
+            .background {
+                CapacitivePadSurface()
             }
             .contentShape(.interaction, .rect(cornerRadius: PaddrStyle.padPreviewCornerRadius))
             .contentShape(.focusEffect, .rect(cornerRadius: PaddrStyle.padPreviewCornerRadius))
