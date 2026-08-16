@@ -4,29 +4,11 @@ import SwiftUI
 struct PaddrSectionContainer<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
-
     var body: some View {
         content()
             .padding(.horizontal, PaddrStyle.insetHorizontalPadding)
             .padding(.vertical, PaddrStyle.insetVerticalPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                reduceTransparency
-                    ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor))
-                    : AnyShapeStyle(Color.primary.opacity(0.032)),
-                in: .rect(cornerRadius: PaddrStyle.insetCornerRadius)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: PaddrStyle.insetCornerRadius)
-                    .strokeBorder(
-                        Color(nsColor: .separatorColor).opacity(
-                            colorSchemeContrast == .increased ? 0.95 : 0.18
-                        ),
-                        lineWidth: colorSchemeContrast == .increased ? 1.5 : 1
-                    )
-            }
     }
 }
 

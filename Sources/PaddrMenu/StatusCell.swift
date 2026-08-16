@@ -54,6 +54,7 @@ struct StatusCell: View {
             valueText
                 .paddrTypography(.callout)
                 .bold()
+                .monospacedDigit()
                 .foregroundStyle(state.textColor)
                 .lineLimit(1)
         }

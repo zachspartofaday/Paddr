@@ -24,7 +24,10 @@ struct TopControlsView: View {
                     }
                 }
             }
-            if !model.hasSystemAccess { permissionsContent }
+            if !model.hasSystemAccess {
+                PaddrInsetDivider()
+                permissionsContent
+            }
         }
         .padding(PaddrStyle.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)

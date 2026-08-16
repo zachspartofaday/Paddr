@@ -71,7 +71,6 @@ enum PaddrStyle {
     static let cardHeaderHeight: CGFloat = 28
     static let behaviorRowHeight: CGFloat = 28
     static let behaviorPickerWidth: CGFloat = 272
-    static let insetCornerRadius: CGFloat = 12
     static let insetHorizontalPadding: CGFloat = 14
     static let insetVerticalPadding: CGFloat = 14
     static let insetHeaderHeight: CGFloat = 28

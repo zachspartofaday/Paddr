@@ -47,15 +47,22 @@ struct PadConfigurationView: View {
 
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: PaddrStyle.settingsRowSpacing) {
-                HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: PaddrStyle.settingsControlSpacing) {
+                    Text("Behavior")
+                        .paddrTypography(.callout)
+                        .bold()
+
+                    Spacer(minLength: PaddrStyle.settingsControlSpacing)
+
                     PadModePicker(selection: $configuration.mode)
                         .frame(width: PaddrStyle.behaviorPickerWidth)
-
-                    Spacer(minLength: 8)
                 }
                 .frame(maxWidth: .infinity, minHeight: PaddrStyle.behaviorRowHeight)
                 .padding(.horizontal, PaddrStyle.insetHorizontalPadding)
+
+                PaddrInsetDivider()
+                    .padding(.top, PaddrStyle.dividerTopSpacing)
 
                 PaddrSectionContainer {
                     modeSettings
@@ -140,6 +147,7 @@ struct PadConfigurationView: View {
                             : LocalizedStringResource("Off")
                     )
                     .help("When on, pointer movement continues inside and across the center tap radius. When off, the radius also acts as a pointer dead zone.")
+                    PaddrInsetDivider()
                     TapActionPicker(selection: $configuration.tapKey)
                 }
             }

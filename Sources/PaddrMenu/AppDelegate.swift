@@ -247,6 +247,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             keyEquivalent: ""
         )
         batteryLevelItem.isEnabled = false
+        batteryLevelItem.image = NSImage(
+            systemSymbolName: batteryPresentation.systemImage,
+            accessibilityDescription: String(localized: "Battery")
+        )
         statusMenu.addItem(batteryLevelItem)
         let batteryChargeStateItem = NSMenuItem(
             title: batteryPresentation.menuChargeState,
@@ -254,6 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             keyEquivalent: ""
         )
         batteryChargeStateItem.isEnabled = false
+        batteryChargeStateItem.indentationLevel = 1
         statusMenu.addItem(batteryChargeStateItem)
         statusMenu.addItem(.separator())
 
@@ -270,6 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 item.target = self
                 item.representedObject = profile.id.rawValue
                 item.state = profile.id == model.activeProfileID ? .on : .off
+                item.indentationLevel = 1
                 statusMenu.addItem(item)
             }
         } else {
@@ -279,6 +285,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 keyEquivalent: ""
             )
             item.target = self
+            item.indentationLevel = 1
             statusMenu.addItem(item)
         }
 
