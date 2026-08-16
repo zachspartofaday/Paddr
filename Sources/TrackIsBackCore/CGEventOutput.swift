@@ -19,18 +19,31 @@ public enum Permissions {
         #endif
     }
 
-    /// Input Monitoring (TCC ListenEvent) covers receiving puck HID reports. Prompting posts
-    /// the one-time system dialog and returns the current grant; the user grants asynchronously.
-    public static func inputMonitoringGranted(prompt: Bool) -> Bool {
+    /// Input Monitoring (TCC ListenEvent) covers receiving puck HID reports. The native system
+    /// prompt exists only while the state is undetermined; once denied, only System Settings can
+    /// re-enable it, so callers must route a denied request to Settings instead of re-prompting.
+    public static func inputMonitoringAccess(requestingIfUndetermined request: Bool) -> InputMonitoringAccess {
         #if canImport(IOKit)
-        if prompt {
-            return IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+        switch IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) {
+        case kIOHIDAccessTypeGranted:
+            return .granted
+        case kIOHIDAccessTypeDenied:
+            return .denied
+        default:
+            guard request else { return .undetermined }
+            // The prompt is asynchronous: a false return means "answer pending", not denied.
+            return IOHIDRequestAccess(kIOHIDRequestTypeListenEvent) ? .granted : .undetermined
         }
-        return IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
         #else
-        return false
+        return .denied
         #endif
     }
+}
+
+public enum InputMonitoringAccess: Equatable, Sendable {
+    case granted
+    case denied
+    case undetermined
 }
 
 public protocol TrackpadOutputDispatching: Sendable {

@@ -507,13 +507,13 @@
         }
       }
     },
-    "Enable Paddr in Input Monitoring, then return to the app.": {
+    "Enable Paddr in Input Monitoring (add it with + if it isn't listed), then relaunch Paddr.": {
       "comment": "Status guidance after opening Input Monitoring settings.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enable Paddr in Input Monitoring, then return to the app."
+            "value": "Enable Paddr in Input Monitoring (add it with + if it isn't listed), then relaunch Paddr."
           }
         }
       }
