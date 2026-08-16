@@ -321,6 +321,10 @@ final class ConfigurationProfileTests: XCTestCase {
         XCTAssertEqual(result.document.activeProfile?.name, "Default")
         XCTAssertEqual(result.document.activeProfileID, .default)
         XCTAssertTrue(result.document.userProfiles.isEmpty)
+        XCTAssertEqual(
+            result.document.activeProfile?.configuration,
+            TrackIsBackConfiguration.formerCoupledDefault
+        )
         XCTAssertEqual(result.document.builtInDefaultCenterTapTrackingMode, .coupled)
         XCTAssertEqual(
             result.document.activeProfile?.configuration.left.centerTapTrackingMode,

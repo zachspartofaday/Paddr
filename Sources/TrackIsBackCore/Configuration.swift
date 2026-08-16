@@ -261,6 +261,11 @@ public struct TrackIsBackConfiguration: Codable, Equatable, Sendable {
         right: PadConfiguration(mode: .mouse)
     )
 
+    public static let formerCoupledDefault = TrackIsBackConfiguration(
+        left: PadConfiguration(mode: .scroll, centerTapTrackingMode: .coupled),
+        right: PadConfiguration(mode: .mouse, centerTapTrackingMode: .coupled)
+    )
+
     private enum CodingKeys: String, CodingKey { case left, right }
 
     public init(left: PadConfiguration, right: PadConfiguration) {

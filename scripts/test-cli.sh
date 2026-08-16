@@ -113,6 +113,24 @@ if [ "$status" -ne 2 ] \
     exit 1
 fi
 
+former_default_input="$test_dir/former-default-input.json"
+former_default_input_before="$test_dir/former-default-input-before.json"
+former_default_output="$test_dir/former-default-output.json"
+printf '%s\n' '{"left":{"mode":"scroll"},"right":{"mode":"mouse"}}' >"$former_default_input"
+cp "$former_default_input" "$former_default_input_before"
+"$cli_path" --config "$former_default_input" --write-config "$former_default_output" \
+    >"$stdout_path" 2>"$stderr_path"
+if ! cmp -s "$former_default_input" "$former_default_input_before"; then
+    echo "Former raw default --write-config modified its source bytes." >&2
+    exit 1
+fi
+if [ "$(plutil -extract builtInDefaultCenterTapTrackingMode raw -o - "$former_default_output")" != coupled ] \
+    || [ "$(plutil -extract activeProfileID raw -o - "$former_default_output")" != 00000000-0000-0000-0000-000000000001 ] \
+    || [ "$(plutil -extract userProfiles json -o - "$former_default_output")" != '[]' ]; then
+    echo "Former raw default --write-config did not preserve the coupled built-in Default shape." >&2
+    exit 1
+fi
+
 profile_store="$test_dir/profiles.json"
 input_before="$test_dir/input-before.json"
 cp "$input_path" "$input_before"

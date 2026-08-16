@@ -317,6 +317,9 @@ private func canonicalDocument(
     preserving source: ConfigurationProfileDocument?
 ) throws -> ConfigurationProfileDocument {
     var document = source ?? .default
+    if source == nil, configuration == TrackIsBackConfiguration.formerCoupledDefault {
+        document.builtInDefaultCenterTapTrackingMode = .coupled
+    }
     guard let builtInDefaultConfiguration = document.profile(id: .default)?.configuration else {
         throw TrackIsBackError.configuration("The built-in Default profile is unavailable.")
     }
