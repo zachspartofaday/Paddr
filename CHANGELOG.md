@@ -2,13 +2,40 @@
 
 User-visible changes to Paddr are recorded here. Release entries describe confirmed behavior at the time of each release; later entries may supersede earlier limitations.
 
-## Unreleased
+## 0.10.1 — 2026-08-17
 
-- Superseded the 0.9.11 **Center tap radius** known issue ([#50](https://github.com/zachspartofaday/Paddr/issues/50)): Pointer mode can now track across the full pad while the radius continues to define the tap area. Each pad has a **Track pointer inside tap radius** switch for choosing full-pad tracking or the former coupled tracking dead zone. Fresh profile stores and newly created configurations use full-pad tracking; existing canonical and raw configurations preserve coupled behavior until changed, including the built-in Default synthesized for an existing canonical document. Duplicating Default preserves that source document’s behavior.
-- Added the controller's passively reported battery percentage and charge state to a reserved **Battery** status pill and the native status menu, with stale battery state cleared whenever the active controller is lost or replaced ([#54](https://github.com/zachspartofaday/Paddr/issues/54)).
-- Fixed the controller staying **Not found** on some pucks even though macOS saw the controller ([#52](https://github.com/zachspartofaday/Paddr/issues/52)). Paddr now listens on all four controller slots the puck exposes (USB interfaces 2–5) instead of a single heuristically chosen interface, accepts the shorter controller-state report variants some firmware emits instead of requiring exactly 54-byte reports, and reacts to the puck's explicit wireless connect/disconnect events so controller status updates immediately.
-- The bottom-bar puck description now lists every opened puck interface and the observed report sizes, which makes future connectivity reports easier to diagnose.
-- Paddr now requests **Input Monitoring** at first launch and surfaces its state ahead of Accessibility in the permissions row, the onboarding guide, and PaddrCLI — it is the grant that makes the controller visible at all, so it leads every permission surface. Without that grant macOS can withhold puck reports, which also presents as **Controller · Not found**.
+Paddr 0.10.1 makes controller setup more dependable, pointer tracking more natural, and the configuration window easier to understand at a glance.
+
+### More dependable controller setup
+
+- Paddr now asks for **Input Monitoring** first, before Accessibility. This is the permission macOS needs to make the puck's controller reports available at all.
+- Controller discovery works across every controller interface exposed by the puck, accepts the shorter report variants used by some firmware, and responds immediately to wireless connect/disconnect events.
+- The status bar now separates **Puck**, **Controller**, **Battery**, **Output**, and **Access**, so each status describes one thing clearly. Battery percentage and charge state are also available from the native status menu.
+- The puck diagnostic description lists every opened interface and observed report size, making connection problems easier to diagnose.
+
+### Pointer behavior that feels right
+
+- Pointer mode can now track across the full pad while **Center tap radius** continues to limit touch taps. Each pad has a **Track pointer inside tap radius** switch for restoring the former coupled behavior when needed.
+- New profiles use full-pad pointer tracking by default. Existing configuration files preserve their previous behavior until you change the setting.
+- Pointer tracking, scrolling, touch taps, and Zones continue to work independently on the left and right pads.
+
+### Safer everyday use
+
+- Turning output off releases held keyboard keys and mouse buttons before the interface reports **Idle**.
+- If the controller disconnects, Paddr releases mapped input and waits for neutral pad input before resuming after reconnect.
+- The first-launch guide now explains connection, permissions, pad setup, and everyday use without changing a profile or enabling output on its own.
+
+### A clearer native interface
+
+- Profile actions, save state, and connection status now have a more consistent hierarchy.
+- Pad surfaces, status cards, permission tiles, and Zone maps use a unified adaptive appearance with stronger accessibility contrast and more predictable sizing.
+- The configuration window and onboarding guide retain their established pad appearance while fitting compact windows and larger text more reliably.
+
+### Compatibility
+
+- Confirmed environment: macOS 27 Developer Beta 5 or later with a puck-connected Steam Controller 2.
+- Bluetooth, direct USB, and alternate receiver hardware remain unvalidated.
+- Paddr emits standard mouse, scroll, and keyboard events; it does not replace native controller axes or require Steam Input.
 
 ## 0.9.11 — 2026-08-14
 
