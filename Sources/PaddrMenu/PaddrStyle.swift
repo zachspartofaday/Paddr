@@ -8,12 +8,16 @@ enum PaddrTextRole {
     case pageTitle
     /// Pad-card and guide-page titles.
     case cardTitle
+    /// Titles for preview and settings regions within a card.
+    case sectionTitle
     /// Column and band headers.
     case sectionLabel
     /// Settings-row labels, normally paired with an SF Symbol.
     case rowLabel
     /// Status values and numeric readouts.
     case value
+    /// Compact status values; matches status-label size while stabilizing digits.
+    case statusValue
     /// Detail and secondary text.
     case caption
 
@@ -21,9 +25,11 @@ enum PaddrTextRole {
         switch self {
         case .pageTitle: .title2.bold()
         case .cardTitle: .headline
+        case .sectionTitle: .headline
         case .sectionLabel: .subheadline.weight(.semibold)
         case .rowLabel: .callout
         case .value: .callout.monospacedDigit()
+        case .statusValue: .caption.monospacedDigit()
         case .caption: .caption
         }
     }
@@ -57,14 +63,17 @@ enum PaddrStyle {
         /// `row` plus a `Spacing.s2` inset above and below.
         static let commandBar: CGFloat = 54
 
-        /// Content width at the default window size. Wider restored or user-sized
-        /// windows remain fluid instead of introducing fixed dead gutters.
-        static let defaultContentWidth: CGFloat = 820
         static let outerSpacing: CGFloat = 24
+        /// Fresh windows match the approved side-by-side preview-and-settings composition.
+        /// Restored and user-sized windows remain fluid around this default.
+        static let defaultWindowSize = NSSize(width: 1_280, height: 700)
+        static let defaultContentWidth = defaultWindowSize.width - (2 * outerSpacing)
         /// Below this content width, two complete pad editors no longer have
         /// enough room for their native mode controls and stack vertically.
         static let padEditorColumnsBreakpoint: CGFloat = 760
-        static let defaultWindowSize = NSSize(width: 868, height: 680)
+        /// The status row has its own content budget and can remain inline well below
+        /// the wider editor default.
+        static let statusBarInlineBreakpoint: CGFloat = 868
         static let minimumWindowSize = NSSize(width: 680, height: 520)
         static let guideWindowSize = NSSize(width: 720, height: 480)
         static let minimumGuideWindowSize = NSSize(width: 640, height: 460)
@@ -160,8 +169,7 @@ enum PaddrStyle {
     static let minimumPadSectionWidth = minimumPadColumnWidth - (4 * Spacing.s3)
     static let previewInspectorColumnsBreakpoint = Metrics.zoneMapWidth
         + minimumPadSectionWidth
-        + (2 * Spacing.s3)
-        + 1
+        + Spacing.s3
     static let behaviorPickerWidth: CGFloat = 272
     static let sliderMinimumWidth = minimumPadSectionWidth
         - Width.labelColumnWide

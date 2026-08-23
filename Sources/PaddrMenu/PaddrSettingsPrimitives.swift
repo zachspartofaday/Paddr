@@ -51,19 +51,21 @@ struct PaddrInsetDivider: View {
     }
 }
 
-/// The single settings-row grammar: a fixed label column carrying an SF Symbol, and a
-/// trailing control column, on the shared `Metrics.row` height family.
+/// The single settings-row grammar: a label carrying an SF Symbol and a trailing control
+/// column on the shared `Metrics.row` height family. Most rows use a fixed label column;
+/// unusually long labels can opt into their intrinsic width.
 struct PaddrSettingsRow<Control: View>: View {
     let title: LocalizedStringResource
     let systemImage: String
     /// Picker rows and slider rows need different label columns; see `PaddrStyle.Width`.
-    var labelWidth: CGFloat = PaddrStyle.Width.labelColumn
+    var labelWidth: CGFloat? = PaddrStyle.Width.labelColumn
     @ViewBuilder let control: () -> Control
 
     var body: some View {
         HStack(spacing: PaddrStyle.Spacing.s3) {
             label
                 .frame(width: labelWidth, alignment: .leading)
+                .fixedSize(horizontal: labelWidth == nil, vertical: false)
             control()
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }

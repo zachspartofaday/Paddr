@@ -63,8 +63,9 @@ struct TopControlsView: View {
     private var permissionsContent: some View {
         VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s2) {
             Text("Permissions")
-                .paddrTypography(.sectionLabel)
+                .paddrTypography(.sectionTitle)
                 .fixedSize()
+                .accessibilityAddTraits(.isHeader)
 
             inputMonitoringTile
             accessibilityTile

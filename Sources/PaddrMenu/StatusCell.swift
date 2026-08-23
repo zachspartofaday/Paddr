@@ -57,15 +57,17 @@ struct StatusCell: View {
                 .symbolRenderingMode(.hierarchical)
                 .accessibilityHidden(true)
 
-            Text(title)
-                .paddrTypography(.caption)
-                .foregroundStyle(.secondary)
-            valueText
-                .paddrTypography(.value)
-                .foregroundStyle(state.textColor)
-                .lineLimit(1)
+            HStack(spacing: PaddrStyle.Spacing.s2) {
+                Text(title)
+                    .paddrTypography(.caption)
+                    .foregroundStyle(.secondary)
+                valueText
+                    .paddrTypography(.statusValue)
+                    .foregroundStyle(state.textColor)
+                    .lineLimit(1)
+            }
         }
-        .padding(.horizontal, PaddrStyle.Spacing.s1)
+        .padding(.horizontal, PaddrStyle.Spacing.s2)
         .frame(minHeight: PaddrStyle.Metrics.row)
         .background(
             state.color.opacity(0.12),

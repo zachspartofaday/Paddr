@@ -17,6 +17,7 @@ struct ButtonZoneConfigurationView: View {
         PaddrAdaptiveSplitView(
             breakpoint: PaddrStyle.previewInspectorColumnsBreakpoint,
             leadingWidth: PaddrStyle.Metrics.zoneMapWidth,
+            showsDivider: false,
             leading: { mapSection },
             trailing: { inspector }
         )
@@ -37,8 +38,9 @@ struct ButtonZoneConfigurationView: View {
     private var mapSection: some View {
         VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
             Text("Area map")
-                .paddrTypography(.sectionLabel)
+                .paddrTypography(.sectionTitle)
                 .frame(minHeight: PaddrStyle.Metrics.row)
+                .accessibilityAddTraits(.isHeader)
             padMap
                 .frame(
                     width: PaddrStyle.Metrics.zoneMapWidth,
@@ -52,25 +54,17 @@ struct ButtonZoneConfigurationView: View {
     private var inspector: some View {
         VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
             Text(LocalizedStringResource("Zone settings"))
-                .paddrTypography(.sectionLabel)
+                .paddrTypography(.sectionTitle)
                 .frame(minHeight: PaddrStyle.Metrics.row)
                 .accessibilityAddTraits(.isHeader)
 
-            HStack(spacing: PaddrStyle.Spacing.s3) {
-                Text(LocalizedStringResource("Mode"))
-                    .paddrTypography(.sectionLabel)
-                Spacer(minLength: PaddrStyle.Spacing.s3)
+            PaddrSettingsRow(title: "Mode", systemImage: "square.grid.2x2") {
                 areaLayoutPicker
             }
-            .frame(minHeight: PaddrStyle.Metrics.row)
 
-            HStack(spacing: PaddrStyle.Spacing.s3) {
-                selectedAreaTitle
-                Spacer(minLength: PaddrStyle.Spacing.s3)
+            PaddrSettingsRow(title: "Selected area", systemImage: selectedZone.systemImage) {
                 selectedAreaPicker
             }
-            .frame(minHeight: PaddrStyle.Metrics.row)
-            .frame(maxWidth: .infinity)
 
             PaddrSettingsRow(title: "Action", systemImage: "keyboard") {
                 OutputBindingPicker(
@@ -118,11 +112,6 @@ struct ButtonZoneConfigurationView: View {
         .paddrMenuSelector()
         .frame(width: PaddrStyle.Width.controlMedium, alignment: .trailing)
         .help("Choose how the trackpad is divided into button areas.")
-    }
-
-    private var selectedAreaTitle: some View {
-        Text("Selected area")
-            .paddrTypography(.sectionLabel)
     }
 
     private var selectedAreaPicker: some View {

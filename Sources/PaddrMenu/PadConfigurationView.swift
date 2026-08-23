@@ -125,18 +125,26 @@ struct PadConfigurationView: View {
                         valueText: configuration.mouseDeadzone.formatted(.percent.precision(.fractionLength(0)))
                     )
                     .help("The radius starts at the pad center. Leaving it cancels the tap. At 0%, taps use the maximum-movement limit.")
-                    Toggle(
-                        "Track pointer inside tap radius",
-                        isOn: tracksPointerInsideTapRadius
-                    )
-                    .toggleStyle(.switch)
-                    .accessibilityLabel("Track pointer inside tap radius")
-                    .accessibilityValue(
-                        configuration.centerTapTrackingMode == .decoupled
-                            ? LocalizedStringResource("On")
-                            : LocalizedStringResource("Off")
-                    )
-                    .help("When on, pointer movement continues inside and across the center tap radius. When off, the radius also acts as a pointer dead zone.")
+                    PaddrSettingsRow(
+                        title: "Track pointer inside tap radius",
+                        systemImage: "cursorarrow.motionlines",
+                        labelWidth: nil
+                    ) {
+                        Toggle(
+                            "Track pointer inside tap radius",
+                            isOn: tracksPointerInsideTapRadius
+                        )
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .accessibilityLabel("Track pointer inside tap radius")
+                        .accessibilityValue(
+                            configuration.centerTapTrackingMode == .decoupled
+                                ? LocalizedStringResource("On")
+                                : LocalizedStringResource("Off")
+                        )
+                        .help("When on, pointer movement continues inside and across the center tap radius. When off, the radius also acts as a pointer dead zone.")
+                        .paddrAccessibilityID("pad", side.rawValue, "pointer-tracking")
+                    }
                     TapActionPicker(selection: $configuration.tapKey)
                 }
             }
@@ -163,6 +171,7 @@ struct PadConfigurationView: View {
         PaddrAdaptiveSplitView(
             breakpoint: PaddrStyle.previewInspectorColumnsBreakpoint,
             leadingWidth: PaddrStyle.Metrics.zoneMapWidth,
+            showsDivider: false,
             leading: { previewSection(title: previewTitle) },
             trailing: { settingsSection(settings) }
         )
@@ -173,7 +182,7 @@ struct PadConfigurationView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
             Text(settingsTitle)
-                .paddrTypography(.sectionLabel)
+                .paddrTypography(.sectionTitle)
                 .frame(minHeight: PaddrStyle.Metrics.row)
                 .accessibilityAddTraits(.isHeader)
             settings()
@@ -185,8 +194,9 @@ struct PadConfigurationView: View {
     private func previewSection(title: LocalizedStringResource) -> some View {
         VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
             Text(title)
-                .paddrTypography(.sectionLabel)
+                .paddrTypography(.sectionTitle)
                 .frame(minHeight: PaddrStyle.Metrics.row)
+                .accessibilityAddTraits(.isHeader)
             PadModePreview(mode: configuration.mode, deadzone: configuration.mouseDeadzone)
                 .frame(
                     width: PaddrStyle.Metrics.zoneMapWidth,

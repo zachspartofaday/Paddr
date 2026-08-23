@@ -73,13 +73,13 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
             "Sub-default widths must keep the nonoverflowing stacked payload"
         )
 
-        hostingView.frame.size.width = PaddrStyle.Metrics.defaultWindowSize.width
+        hostingView.frame.size.width = PaddrStyle.Metrics.statusBarInlineBreakpoint
         await settle(hostingView)
         XCTAssertEqual(
             hostingView.fittingSize.height,
             PaddrStyle.Metrics.commandBar,
             accuracy: 0.5,
-            "The default window width should restore the single-row status bar"
+            "The status bar should become a single row at its independent content breakpoint"
         )
     }
 
@@ -127,7 +127,7 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         let model = makeMenuModel()
         let didInitialize = await waitUntil { model.isInitialized && model.hasSystemAccess }
         XCTAssertTrue(didInitialize)
-        let restoredWidth: CGFloat = 1_120
+        let restoredWidth: CGFloat = 1_440
         let hostingView = NSHostingView(rootView: ConfigurationView(model: model))
         hostingView.frame = NSRect(x: 0, y: 0, width: restoredWidth, height: 900)
         await settle(hostingView)
@@ -143,7 +143,7 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
             abs(frame(of: left, in: hostingView).midX - frame(of: right, in: hostingView).midX),
             expectedColumnWidth + PaddrStyle.Spacing.s3,
             accuracy: 1,
-            "A restored wide window must expand both pad columns instead of centering an 820pt island"
+            "A restored wide window must expand both pad columns instead of centering a default-width island"
         )
     }
 
@@ -173,6 +173,11 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         XCTAssertEqual(
             PaddrStyle.padColumnWidth,
             (PaddrStyle.Metrics.defaultContentWidth - PaddrStyle.Spacing.s3) / 2
+        )
+        XCTAssertGreaterThanOrEqual(
+            PaddrStyle.padColumnWidth - (4 * PaddrStyle.Spacing.s3),
+            PaddrStyle.previewInspectorColumnsBreakpoint,
+            "Each default pad card must keep its preview and inspector in columns"
         )
 
         let leftCard = try XCTUnwrap(

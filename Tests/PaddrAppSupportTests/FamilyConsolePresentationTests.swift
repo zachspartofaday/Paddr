@@ -11,8 +11,10 @@ final class FamilyConsolePresentationTests: XCTestCase {
     func testFamilyConsoleGeometryMatchesApprovedContract() {
         XCTAssertEqual(PaddrStyle.Metrics.controlHeight, 38)
         XCTAssertEqual(PaddrStyle.Radius.control, 7)
-        XCTAssertEqual(PaddrStyle.Metrics.defaultContentWidth, 820)
+        XCTAssertEqual(PaddrStyle.Metrics.defaultWindowSize, NSSize(width: 1_280, height: 700))
+        XCTAssertEqual(PaddrStyle.Metrics.defaultContentWidth, 1_232)
         XCTAssertEqual(PaddrStyle.Metrics.outerSpacing, 24)
+        XCTAssertEqual(PaddrStyle.Metrics.statusBarInlineBreakpoint, 868)
     }
 
     func testFamilyConsolePaletteMatchesApprovedValues() throws {

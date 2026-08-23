@@ -337,6 +337,46 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertEqual(frame.midY, hostingView.bounds.midY, accuracy: 0.5)
     }
 
+    func testFlexibleSettingsRowAlignsItsSwitchWithThePickerControlEdge() throws {
+        let rows = VStack(spacing: PaddrStyle.Spacing.s3) {
+            PaddrSettingsRow(
+                title: "Track pointer inside tap radius",
+                systemImage: "cursorarrow.motionlines",
+                labelWidth: nil
+            ) {
+                Toggle("Track pointer inside tap radius", isOn: .constant(true))
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+            }
+            PaddrSettingsRow(title: "Touch tap", systemImage: "hand.tap") {
+                SettingsControlEdgeProbe(identifier: "picker-edge")
+                    .frame(width: PaddrStyle.Width.control)
+            }
+        }
+        .frame(width: PaddrStyle.minimumPadSectionWidth)
+        let hostingView = NSHostingView(rootView: rows)
+        hostingView.frame = NSRect(
+            origin: .zero,
+            size: NSSize(
+                width: PaddrStyle.minimumPadSectionWidth,
+                height: hostingView.fittingSize.height
+            )
+        )
+        hostingView.layoutSubtreeIfNeeded()
+
+        let toggle = try XCTUnwrap(firstDescendant(of: NSSwitch.self, in: hostingView))
+        let pickerEdge = try XCTUnwrap(
+            descendants(of: NSView.self, in: hostingView).first {
+                $0.identifier?.rawValue == "picker-edge"
+            }
+        )
+        XCTAssertEqual(
+            toggle.convert(toggle.bounds, to: hostingView).maxX,
+            pickerEdge.convert(pickerEdge.bounds, to: hostingView).maxX,
+            accuracy: 1
+        )
+    }
+
     func testSettingsGroupAddsItsSeparatingDividerOnlyWhenDeclared() {
         func groupHeight(showsLeadingDivider: Bool) -> CGFloat {
             let group = PaddrSettingsGroup(showsLeadingDivider: showsLeadingDivider) {
@@ -366,20 +406,25 @@ final class MenuViewPresentationTests: XCTestCase {
             PaddrStyle.minimumPadSectionWidth,
             "A picker row's inline branch must fit the inspector column"
         )
-        // The area-layout row is Text + HStack spacing + Spacer(minLength:) + HStack spacing
-        // + picker, so it spends three `s3` gaps, not one. At `controlWide` its label was
-        // left 30pt and wrapped mid-word.
-        let modeLabel = NSHostingView(
-            rootView: Text(LocalizedStringResource("Mode")).paddrTypography(.sectionLabel)
-        )
-        modeLabel.layoutSubtreeIfNeeded()
+        let modeRow = PaddrSettingsRow(title: "Mode", systemImage: "square.grid.2x2") {
+            Picker("Area layout", selection: .constant(PadZoneLayout.fourCorners)) {
+                Text("Four corners").tag(PadZoneLayout.fourCorners)
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(width: PaddrStyle.Width.controlMedium)
+        }
+        .frame(width: PaddrStyle.minimumPadSectionWidth)
+        let modeHostingView = NSHostingView(rootView: modeRow)
+        modeHostingView.layoutSubtreeIfNeeded()
         XCTAssertLessThanOrEqual(
-            modeLabel.fittingSize.width,
-            PaddrStyle.minimumPadSectionWidth
-                - PaddrStyle.Width.controlMedium
-                - (3 * PaddrStyle.Spacing.s3),
-            "The area-layout row starves its label, which then wraps mid-word"
+            PaddrStyle.Width.labelColumn
+                + PaddrStyle.Spacing.s3
+                + PaddrStyle.Width.controlMedium,
+            PaddrStyle.minimumPadSectionWidth,
+            "The icon-bearing area-layout row must fit the inspector column"
         )
+        XCTAssertEqual(modeHostingView.fittingSize.height, PaddrStyle.Metrics.row, accuracy: 0.5)
 
         let row = PaddrSettingsRow(title: "Action", systemImage: "keyboard") {
             OutputBindingPicker(
@@ -438,8 +483,7 @@ final class MenuViewPresentationTests: XCTestCase {
             PaddrStyle.previewInspectorColumnsBreakpoint,
             PaddrStyle.Metrics.zoneMapWidth
                 + PaddrStyle.minimumPadSectionWidth
-                + (2 * PaddrStyle.Spacing.s3)
-                + 1,
+                + PaddrStyle.Spacing.s3,
             "The nested split must derive its breakpoint from the complete rendered row"
         )
     }
@@ -633,6 +677,51 @@ final class MenuViewPresentationTests: XCTestCase {
         _ = await session.stop()
     }
 
+    func testWidestStatusPayloadsFitMinimumBarContentWidth() {
+        let row = HStack(spacing: PaddrStyle.Spacing.s1) {
+            StatusCell(
+                title: "Puck",
+                value: LocalizedStringResource("Not found"),
+                systemImage: "cable.connector.slash",
+                state: .problem
+            )
+            StatusCell(
+                title: "Controller",
+                value: LocalizedStringResource("Not found"),
+                systemImage: "gamecontroller",
+                state: .problem
+            )
+            StatusCell(
+                title: "Battery",
+                value: String("100%"),
+                systemImage: "battery.100percent",
+                state: .neutral
+            )
+            StatusCell(
+                title: "Output",
+                value: LocalizedStringResource("Releasing"),
+                systemImage: "pause.circle",
+                state: .neutral
+            )
+            StatusCell(
+                title: "Access",
+                value: LocalizedStringResource("Needed"),
+                systemImage: "exclamationmark.shield",
+                state: .problem
+            )
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        let hostingView = NSHostingView(rootView: row)
+        hostingView.layoutSubtreeIfNeeded()
+
+        XCTAssertLessThanOrEqual(
+            hostingView.fittingSize.width,
+            PaddrStyle.Metrics.minimumWindowSize.width
+                - (2 * PaddrStyle.Metrics.outerSpacing)
+        )
+        XCTAssertEqual(hostingView.fittingSize.height, PaddrStyle.Metrics.row, accuracy: 0.5)
+    }
+
     private func assertApplyBarFitsMinimumWindow(
         model: PaddrMenuModel,
         file: StaticString = #filePath,
@@ -786,6 +875,20 @@ private struct WindowToolbarProbe: View {
                     Button("Refresh", systemImage: "arrow.clockwise") {}
                 }
             }
+    }
+}
+
+private struct SettingsControlEdgeProbe: NSViewRepresentable {
+    let identifier: String
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.identifier = NSUserInterfaceItemIdentifier(identifier)
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        view.identifier = NSUserInterfaceItemIdentifier(identifier)
     }
 }
 

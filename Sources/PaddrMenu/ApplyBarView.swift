@@ -17,7 +17,7 @@ struct ApplyBarView: View {
     }
 
     var body: some View {
-        let usesInlineLayout = availableWidth >= PaddrStyle.Metrics.defaultWindowSize.width
+        let usesInlineLayout = availableWidth >= PaddrStyle.Metrics.statusBarInlineBreakpoint
         let contentLayout = usesInlineLayout
             ? AnyLayout(HStackLayout(alignment: .center, spacing: PaddrStyle.Spacing.s1))
             : AnyLayout(VStackLayout(alignment: .leading, spacing: PaddrStyle.Spacing.s1))

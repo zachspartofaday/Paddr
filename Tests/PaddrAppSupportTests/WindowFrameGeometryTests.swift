@@ -5,12 +5,12 @@ import XCTest
 final class WindowFrameGeometryTests: XCTestCase {
     func testFullSizeContentAddsTheTitlebarAndToolbarInsetToRequestedLayoutSize() {
         let result = WindowFrameGeometry.contentSize(
-            forLayoutSize: CGSize(width: 868, height: 680),
-            currentContentRect: CGRect(x: 0, y: 0, width: 868, height: 720),
-            currentLayoutRect: CGRect(x: 0, y: 0, width: 868, height: 680)
+            forLayoutSize: CGSize(width: 1_280, height: 700),
+            currentContentRect: CGRect(x: 0, y: 0, width: 1_280, height: 740),
+            currentLayoutRect: CGRect(x: 0, y: 0, width: 1_280, height: 700)
         )
 
-        XCTAssertEqual(result, CGSize(width: 868, height: 720))
+        XCTAssertEqual(result, CGSize(width: 1_280, height: 740))
     }
 
     func testTraditionalContentWithoutAnInternalChromeInsetKeepsRequestedLayoutSize() {

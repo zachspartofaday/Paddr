@@ -125,10 +125,13 @@ editor subtrees during reflow.
 | `cautionAmber` | `#FFB340` |
 | primary / secondary / tertiary text | `#FFFFFF` / `#D7E9FF` / `#9DC4F8` |
 | control height / radius | `38` / `7` points |
-| default content width / outer spacing | `820` / `24` points; wider windows remain fluid |
+| reference content width / outer spacing | `820` / `24` points; Paddr retains the outer spacing |
+| Paddr default usable window / content width | `1280 × 700` / `1232` points; product-local width keeps both nested pad editors in columns |
 
-Paddr keeps those canonical values intact. The following Paddr-local semantic derivatives
-pair them accessibly and are not additional claims of BottleRocket token parity:
+Paddr keeps the canonical palette, text hierarchy, control sizing, and outer spacing intact.
+Its wider default window is the product-local layout decision described below. The following
+Paddr-local semantic derivatives pair the shared tokens accessibly and are not additional
+claims of BottleRocket token parity:
 
 | Semantic use | Paddr resolution |
 | --- | --- |
@@ -144,14 +147,17 @@ pair them accessibly and are not additional claims of BottleRocket token parity:
 - Left and Right configurations remain independent and keep their existing encoded form.
 - Both Left and Right editors stay mounted and independently bound to their existing
   configuration values. There is no selected-side state or persistence seam.
-- Default geometry uses two equal 404-point pad columns. Wider user or restored windows
-  expand those columns fluidly; document height remains user/autosave-controlled and the
-  configuration surface scrolls within it.
+- Fresh default geometry uses a 1280×700-point usable window and two equal 610-point pad
+  columns, keeping each pad preview and its settings visible side-by-side. Wider user or
+  restored windows expand those columns fluidly; existing autosaved sizes remain respected,
+  document height remains user-controlled, and the configuration surface scrolls within it.
 - The fixed 190×182 pad maps center inside compact sections, and settings-row width budgets
-  include both card and section insets before selecting a horizontal nested split.
+  include both card and section insets before selecting a horizontal nested split. Preview
+  and settings columns use whitespace rather than a vertical divider.
 - Responsive pad and zone layouts use `AnyLayout` to move one mounted child tree;
   no stateful editor or control closure is duplicated under `ViewThatFits`.
-- Every status uses text and an SF Symbol as well as color. Increased Contrast,
+- Every status uses text and an SF Symbol as well as color. Compact labels and values share
+  one text size, with distinct title-to-value spacing and consistent inset padding. Increased Contrast,
   Differentiate Without Color, Reduce Transparency, and Reduce Motion are resolved by
   `PaddrAppearance`.
 - Status and menu semantics are ordered and deterministic. The pure readiness resolver
