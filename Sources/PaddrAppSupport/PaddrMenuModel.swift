@@ -116,7 +116,8 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var permissionRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var terminationTask: Task<Void, Never>?
     @ObservationIgnored private var terminationState = TerminationState.idle
-    @ObservationIgnored private var terminationCompletions: [@MainActor () -> Void] = []
+    @ObservationIgnored private var terminationReleasePending = false
+    @ObservationIgnored private var terminationCompletions: [@MainActor (Bool) -> Void] = []
     @ObservationIgnored public var statusDidChange: (@MainActor () -> Void)?
 
     public var hasUnsavedChanges: Bool { needsInitialSave || configuration != savedConfiguration }
@@ -755,7 +756,7 @@ public final class PaddrMenuModel {
         statusDidChange?()
     }
 
-    public func stopForTermination(completion: @escaping @MainActor () -> Void) -> Bool {
+    public func stopForTermination(completion: @escaping @MainActor (Bool) -> Void) -> Bool {
         switch terminationState {
         case .stopping:
             terminationCompletions.append(completion)
@@ -799,13 +800,13 @@ public final class PaddrMenuModel {
         resolvePendingRelease()
 
         terminationTask = Task { [self] in
-            await dependencies.session.stop()
+            let stopOutcome = await dependencies.session.stop()
             await priorConfigurationTask?.value
             await priorStatusRefreshTask?.value
             await priorLifecycleTask?.value
             await priorReconnectTask?.value
             await priorPermissionTask?.value
-            completeTermination()
+            completeTermination(stopOutcome: stopOutcome)
         }
         statusDidChange?()
         return true
@@ -1417,7 +1418,7 @@ public final class PaddrMenuModel {
 
     var hasPendingLifecycleWork: Bool {
         isEnabled || sessionID != nil || isRunning || configurationTask != nil
-            || lifecycleTask != nil || reconnectTask != nil
+            || lifecycleTask != nil || reconnectTask != nil || terminationReleasePending
     }
 
     private func clearConfigurationTask(operation: UInt64) {
@@ -1435,9 +1436,8 @@ public final class PaddrMenuModel {
         statusDidChange?()
     }
 
-    private func completeTermination() {
+    private func completeTermination(stopOutcome: TrackpadSessionStopOutcome) {
         guard terminationState == .stopping else { return }
-        terminationState = .finished
         initializationTask = nil
         configurationTask = nil
         profileOperationInProgress = false
@@ -1455,7 +1455,19 @@ public final class PaddrMenuModel {
         pendingReleaseRevision = nil
         let completions = terminationCompletions
         terminationCompletions.removeAll()
-        for completion in completions { completion() }
+        let shouldTerminate: Bool
+        switch stopOutcome {
+        case .clean:
+            terminationState = .finished
+            terminationReleasePending = false
+            shouldTerminate = true
+        case let .failed(diagnostic):
+            terminationState = .idle
+            terminationReleasePending = true
+            publishStatus(.failure(.output(diagnostic: diagnostic)))
+            shouldTerminate = false
+        }
+        for completion in completions { completion(shouldTerminate) }
         statusDidChange?()
     }
 

@@ -1703,12 +1703,45 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.isRunning }
 
         var didComplete = false
-        XCTAssertTrue(model.stopForTermination { didComplete = true })
+        XCTAssertTrue(model.stopForTermination { _ in didComplete = true })
         await waitUntil(model: model) { didComplete }
 
         let stopCount = await session.stopCount
         XCTAssertEqual(stopCount, 2)
         XCTAssertEqual(model.status, .releasingOutputs)
+    }
+
+    func testTerminationFailureCancelsExitAndRetainsARequiredCleanupRetry() async {
+        let state = readyState(receiver: nil)
+        let session = GatedSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        state.receiver = "Fake"
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+        await session.setStopOutcome(.failed("Injected persistent release failure."))
+
+        var replies: [Bool] = []
+        XCTAssertTrue(model.stopForTermination { replies.append($0) })
+        await waitUntil(model: model) { replies.count == 1 }
+
+        XCTAssertEqual(replies, [false])
+        XCTAssertEqual(
+            model.status,
+            .failure(.output(diagnostic: "Injected persistent release failure."))
+        )
+        XCTAssertTrue(model.hasPendingLifecycleWork)
+        let failedStopCount = await session.stopCount
+        XCTAssertEqual(failedStopCount, 2)
+
+        await session.setStopOutcome(.clean)
+        XCTAssertTrue(model.stopForTermination { replies.append($0) })
+        await waitUntil(model: model) { replies.count == 2 }
+
+        XCTAssertEqual(replies, [false, true])
+        XCTAssertFalse(model.hasPendingLifecycleWork)
+        let recoveredStopCount = await session.stopCount
+        XCTAssertEqual(recoveredStopCount, 3)
     }
 
     func testTerminationCannotBeSupersededAndRepliesToEveryWaitingRequestOnce() async {
@@ -1722,13 +1755,13 @@ final class MenuModelTests: XCTestCase {
 
         var firstReplyCount = 0
         var secondReplyCount = 0
-        XCTAssertTrue(model.stopForTermination { firstReplyCount += 1 })
+        XCTAssertTrue(model.stopForTermination { _ in firstReplyCount += 1 })
         await session.waitForStop(2)
 
         model.isEnabled = false
         model.configuration.left.sensitivity = 4
         model.saveAndApply()
-        XCTAssertTrue(model.stopForTermination { secondReplyCount += 1 })
+        XCTAssertTrue(model.stopForTermination { _ in secondReplyCount += 1 })
         XCTAssertEqual(firstReplyCount, 0)
         XCTAssertEqual(secondReplyCount, 0)
 
@@ -1755,7 +1788,7 @@ final class MenuModelTests: XCTestCase {
         await session.waitForStop(1)
 
         var didReply = false
-        XCTAssertTrue(model.stopForTermination { didReply = true })
+        XCTAssertTrue(model.stopForTermination { _ in didReply = true })
         await session.waitForStop(2)
         XCTAssertFalse(didReply)
 
@@ -1779,7 +1812,7 @@ final class MenuModelTests: XCTestCase {
 
         model.isEnabled = false
         var didReply = false
-        XCTAssertTrue(model.stopForTermination { didReply = true })
+        XCTAssertTrue(model.stopForTermination { _ in didReply = true })
         await session.waitForStop(2)
         XCTAssertFalse(didReply)
 
@@ -1806,7 +1839,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.status == .waitingForController }
 
         var didReply = false
-        XCTAssertTrue(model.stopForTermination { didReply = true })
+        XCTAssertTrue(model.stopForTermination { _ in didReply = true })
         await waitUntil(model: model) { didReply }
 
         state.receiver = "Late controller"
@@ -1830,7 +1863,7 @@ final class MenuModelTests: XCTestCase {
         model.saveAndApply()
         await session.waitForStop(2)
         var didReply = false
-        XCTAssertTrue(model.stopForTermination { didReply = true })
+        XCTAssertTrue(model.stopForTermination { _ in didReply = true })
         await session.waitForStop(3)
         XCTAssertFalse(didReply)
 
@@ -1854,7 +1887,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { !model.hasPendingLifecycleWork }
 
         var didReply = false
-        XCTAssertFalse(model.stopForTermination { didReply = true })
+        XCTAssertFalse(model.stopForTermination { _ in didReply = true })
         XCTAssertFalse(didReply)
     }
 
@@ -2554,7 +2587,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.profileSelectionPresentation, .switching(to: second.id, named: second.name))
 
         var didComplete = false
-        XCTAssertTrue(model.stopForTermination { didComplete = true })
+        XCTAssertTrue(model.stopForTermination { _ in didComplete = true })
         XCTAssertEqual(model.profileSelectionPresentation, .switching(to: second.id, named: second.name))
         state.saveGate = nil
         saveGate.signal()

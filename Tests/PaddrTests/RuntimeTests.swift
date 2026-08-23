@@ -1329,6 +1329,74 @@ final class RuntimeTests: XCTestCase {
         )
     }
 
+    func testPublicStopTokenCanBeReusedAfterADrainedRun() throws {
+        let stopToken = TrackpadStopToken()
+
+        for timestamp in [UInt64(10), UInt64(20)] {
+            let clock = ManualUptimeClock()
+            let hid = ScriptedHID(clock: clock, steps: [
+                .report(neutralReport(), at: timestamp),
+                .stop
+            ])
+            let result = try TrackpadRuntime.run(
+                configuration: .default,
+                observeOnly: false,
+                stopToken: stopToken,
+                dependencies: TrackpadRuntimeDependencies(
+                    openHID: { hid },
+                    makeOutput: { RecordingOutput() },
+                    uptimeNanoseconds: { clock.now }
+                )
+            )
+
+            XCTAssertEqual(result.summary.reportCount, 1)
+        }
+    }
+
+    func testPublicStopTokenReuseRejectsAnUnresolvedPriorLedgerWithoutOpeningHID() throws {
+        let stopToken = TrackpadStopToken()
+        let firstClock = ManualUptimeClock()
+        let firstHID = ScriptedHID(clock: firstClock, steps: [
+            .report(neutralReport(), at: 0),
+            .report(heldLeftReport(), at: 10),
+            .stop
+        ])
+        var configuration = PaddrConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+
+        XCTAssertThrowsError(try TrackpadRuntime.run(
+            configuration: configuration,
+            observeOnly: false,
+            stopToken: stopToken,
+            dependencies: TrackpadRuntimeDependencies(
+                openHID: { firstHID },
+                makeOutput: { FailingReleaseOutput() },
+                uptimeNanoseconds: { firstClock.now }
+            )
+        ))
+
+        let secondClock = ManualUptimeClock()
+        let secondHID = ScriptedHID(clock: secondClock, steps: [.stop])
+        let openCount = Mutex(0)
+        XCTAssertThrowsError(try TrackpadRuntime.run(
+            configuration: .default,
+            observeOnly: false,
+            stopToken: stopToken,
+            dependencies: TrackpadRuntimeDependencies(
+                openHID: {
+                    openCount.withLock { $0 += 1 }
+                    return secondHID
+                },
+                makeOutput: { RecordingOutput() },
+                uptimeNanoseconds: { secondClock.now }
+            )
+        )) { error in
+            XCTAssertTrue(String(describing: error).contains("before reusing the stop token"))
+        }
+        XCTAssertEqual(openCount.withLock { $0 }, 0)
+    }
+
     private func run(
         configuration: PaddrConfiguration = .default,
         observeOnly: Bool = false,

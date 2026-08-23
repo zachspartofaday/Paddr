@@ -577,7 +577,8 @@ private final class RetainedLedgerRuntime: Sendable {
         event: @escaping @Sendable (TrackpadSessionEvent) -> Void
     ) throws -> TrackpadRunResult {
         let ledger = HeldOutputLedger(output: output)
-        stopToken.retainOutputLedger(ledger)
+        try stopToken.beginRun(retaining: ledger)
+        defer { stopToken.finishRun() }
         try ledger.dispatch([.key(key, isPressed: true)])
         let started = count.withLock { count in
             count += 1

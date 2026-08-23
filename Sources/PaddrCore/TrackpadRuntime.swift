@@ -5,6 +5,7 @@ public final class TrackpadStopToken: Sendable {
     private struct State: ~Copyable {
         var isStopped = false
         var outputLedger: HeldOutputLedger?
+        var hasActiveRun = false
     }
 
     private let state = Mutex(State())
@@ -19,11 +20,34 @@ public final class TrackpadStopToken: Sendable {
         state.withLock { !$0.isStopped }
     }
 
-    func retainOutputLedger(_ ledger: HeldOutputLedger) {
-        state.withLock { state in
-            precondition(state.outputLedger == nil, "A stop token can retain only one output ledger.")
-            state.outputLedger = ledger
+    func beginRun(retaining ledger: HeldOutputLedger) throws {
+        let priorLedger: HeldOutputLedger? = try state.withLock { state in
+            guard !state.hasActiveRun else {
+                throw PaddrError.output("The stop token is already attached to an active run.")
+            }
+            state.hasActiveRun = true
+            return state.outputLedger
         }
+
+        do {
+            if let priorLedger {
+                let releaseAttempt = priorLedger.releasePending(maxPasses: 2)
+                guard releaseAttempt.isDrained else {
+                    throw PaddrError.output(
+                        "Could not release held outputs before reusing the stop token: "
+                            + "\(releaseAttempt.diagnostic)."
+                    )
+                }
+            }
+            state.withLock { $0.outputLedger = ledger }
+        } catch {
+            state.withLock { $0.hasActiveRun = false }
+            throw error
+        }
+    }
+
+    func finishRun() {
+        state.withLock { $0.hasActiveRun = false }
     }
 
     var hasPendingOutputs: Bool {
@@ -204,9 +228,10 @@ public enum TrackpadRuntime {
                 durationNanoseconds: try validatedDurationNanoseconds($0)
             )
         }
-        let device = try dependencies.openHID()
         let output = HeldOutputLedger(output: dependencies.makeOutput())
-        stopToken.retainOutputLedger(output)
+        try stopToken.beginRun(retaining: output)
+        defer { stopToken.finishRun() }
+        let device = try dependencies.openHID()
         var controllerEpoch: ControllerEpoch?
         var controllerLive = false
         var lastAcceptedReportUptime: UInt64?
