@@ -14,38 +14,15 @@ struct ConfigurationView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
                         TopControlsView(model: model)
-                        ViewThatFits(in: .horizontal) {
-                            HStack(alignment: .top, spacing: PaddrStyle.Spacing.s3) {
-                                PadConfigurationView(
-                                    side: .left,
-                                    configuration: $model.configuration.left
-                                )
-                                .frame(width: PaddrStyle.padColumnWidth)
-
-                                PadConfigurationView(
-                                    side: .right,
-                                    configuration: $model.configuration.right
-                                )
-                                .frame(width: PaddrStyle.padColumnWidth)
-                            }
-                            .frame(maxWidth: .infinity)
-
-                            VStack(spacing: PaddrStyle.Spacing.s3) {
-                                PadConfigurationView(
-                                    side: .left,
-                                    configuration: $model.configuration.left
-                                )
-                                PadConfigurationView(
-                                    side: .right,
-                                    configuration: $model.configuration.right
-                                )
-                            }
-                        }
-                        .disabled(!model.activeProfileControlsAppearEnabled)
-                        .allowsHitTesting(model.canEditActiveProfile)
-                        .accessibilityRespondsToUserInteraction(model.canEditActiveProfile)
+                        FocusedPadConfigurationView(
+                            configuration: $model.configuration,
+                            appearsEnabled: model.activeProfileControlsAppearEnabled,
+                            isEditable: model.canEditActiveProfile
+                        )
                     }
-                    .padding(PaddrStyle.Spacing.s4)
+                    .frame(maxWidth: PaddrStyle.Metrics.contentMaxWidth)
+                    .padding(PaddrStyle.Metrics.outerSpacing)
+                    .frame(maxWidth: .infinity)
                     .onGeometryChange(
                         for: CGFloat.self,
                         of: { $0.size.height },
@@ -73,8 +50,11 @@ struct ConfigurationView: View {
             minHeight: PaddrStyle.Metrics.minimumWindowSize.height
         )
         .paddrTypography(.rowLabel)
-        .controlSize(.regular)
-        .tint(PaddrStyle.accent)
+        .foregroundStyle(PaddrStyle.textPrimary)
+        .controlSize(.large)
+        .tint(PaddrStyle.controlTint)
+        .preferredColorScheme(.dark)
+        .paddrAccessibilityID("configuration")
         .background {
             if configurationContentHeight > 0 {
                 WindowContentFitter(
@@ -90,6 +70,7 @@ struct ConfigurationView: View {
                 Button("Refresh", systemImage: "arrow.clockwise", action: model.refreshStatus)
                     .labelStyle(.iconOnly)
                     .help("Refresh controller and permission status")
+                    .paddrAccessibilityID("toolbar", "refresh")
 
                 Toggle("Trackpad output", isOn: $model.isEnabled)
                     .labelsHidden()
@@ -100,6 +81,13 @@ struct ConfigurationView: View {
                             ? LocalizedStringResource("On")
                             : LocalizedStringResource("Off")
                     )
+                    .help(
+                        Text(
+                            model.readiness.outputDisabledReason?.message
+                                ?? LocalizedStringResource("Enable or disable mapped trackpad output")
+                        )
+                    )
+                    .paddrAccessibilityID("toolbar", "output")
             }
         }
     }

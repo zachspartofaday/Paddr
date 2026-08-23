@@ -56,6 +56,11 @@ verify_app() {
     done
 
     test -f "$verified_app/Contents/Resources/en.lproj/Localizable.strings"
+    test -f "$verified_app/Contents/Resources/ThirdPartyNotices.txt"
+    grep -q '6c65d74fac9add281918438629228333535752a4' \
+        "$verified_app/Contents/Resources/ThirdPartyNotices.txt"
+    grep -q 'Permission is hereby granted' \
+        "$verified_app/Contents/Resources/ThirdPartyNotices.txt"
     codesign --verify --deep --strict --verbose=2 "$verified_app"
 
     find "$verified_app/Contents" -mindepth 1 -print | while IFS= read -r item; do
@@ -63,6 +68,7 @@ verify_app() {
         case "$relative" in
             Contents/Info.plist|Contents/MacOS|Contents/MacOS/Paddr|Contents/Resources|\
             Contents/Resources/AppIcon.icns|Contents/Resources/Assets.car|\
+            Contents/Resources/ThirdPartyNotices.txt|\
             Contents/Resources/en.lproj|Contents/Resources/en.lproj/Localizable.strings|\
             Contents/_CodeSignature|Contents/_CodeSignature/CodeResources|\
             Contents/CodeResources) ;;

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ApplyBarView: View {
     @Bindable var model: PaddrMenuModel
+    @State private var availableWidth: CGFloat = 0
 
     private var outputValue: LocalizedStringResource {
         if model.isRunning { return "Active" }
@@ -16,24 +17,43 @@ struct ApplyBarView: View {
     }
 
     var body: some View {
-        HStack(spacing: PaddrStyle.Spacing.s1) {
-            statusCells
+        let usesInlineLayout = availableWidth >= PaddrStyle.Metrics.defaultWindowSize.width
+        let contentLayout = usesInlineLayout
+            ? AnyLayout(HStackLayout(alignment: .center, spacing: PaddrStyle.Spacing.s1))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: PaddrStyle.Spacing.s1))
+
+        contentLayout {
+            HStack(spacing: PaddrStyle.Spacing.s1) {
+                statusCells
+            }
+            .fixedSize(horizontal: true, vertical: false)
+
             statusMessage
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(
                     maxWidth: .infinity,
                     minHeight: PaddrStyle.Metrics.row,
-                    maxHeight: PaddrStyle.Metrics.row,
                     alignment: .leading
                 )
         }
-        .padding(.horizontal, PaddrStyle.Spacing.s4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: PaddrStyle.Metrics.contentMaxWidth)
+        .padding(.horizontal, PaddrStyle.Metrics.outerSpacing)
         .padding(.vertical, PaddrStyle.Spacing.s2)
+        .frame(maxWidth: .infinity)
         .frame(minHeight: PaddrStyle.Metrics.commandBar)
-        .background(.thickMaterial)
+        .background(PaddrStyle.night0.opacity(0.96))
         .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Color(nsColor: .separatorColor).opacity(0.42))
-                .frame(height: 1)
+            PaddrAppearanceReader { appearance in
+                Rectangle()
+                    .fill(appearance.surfaceStroke)
+                    .frame(height: appearance.strokeWidth)
+            }
+        }
+        .paddrAccessibilityID("status-strip")
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in
+            guard width > 0 else { return }
+            availableWidth = width
         }
         .onChange(of: model.status) { _, status in
             guard status.messageState != nil else { return }
@@ -63,8 +83,18 @@ struct ApplyBarView: View {
             .accessibilityLabel(model.status.message)
             .help(Text(model.status.message))
         } else {
-            Color.clear
-                .accessibilityHidden(true)
+            Label(
+                model.readiness.nextAction.title,
+                systemImage: model.readiness.nextAction.systemImage
+            )
+            .paddrTypography(.caption)
+            .foregroundStyle(
+                model.readiness.nextAction == .none
+                    ? PaddrStyle.activeText
+                    : PaddrStyle.textSecondary
+            )
+            .help(Text(model.readiness.nextAction.title))
+            .paddrAccessibilityID("status", "next-action")
         }
     }
 
@@ -77,7 +107,8 @@ struct ApplyBarView: View {
             systemImage: model.receiverDescription != nil
                 ? "cable.connector"
                 : "cable.connector.slash",
-            state: model.receiverDescription != nil ? .ready : .problem
+            state: model.receiverDescription != nil ? .ready : .problem,
+            identifier: "puck"
         )
         StatusCell(
             title: LocalizedStringResource("Controller"),
@@ -85,14 +116,16 @@ struct ApplyBarView: View {
                 ? LocalizedStringResource("Connected")
                 : LocalizedStringResource("Not found"),
             systemImage: model.controllerConnected ? "gamecontroller.fill" : "gamecontroller",
-            state: model.controllerConnected ? .ready : .problem
+            state: model.controllerConnected ? .ready : .problem,
+            identifier: "controller"
         )
         StatusCell(
             title: LocalizedStringResource("Battery"),
             value: batteryPresentation.compactValue,
             systemImage: batteryPresentation.systemImage,
             state: .neutral,
-            accessibilityValue: batteryPresentation.accessibilityValue
+            accessibilityValue: batteryPresentation.accessibilityValue,
+            identifier: "battery"
         )
         StatusCell(
             title: LocalizedStringResource("Output"),
@@ -100,7 +133,8 @@ struct ApplyBarView: View {
             systemImage: model.isRunning
                 ? "wave.3.right.circle.fill"
                 : (model.isEnabled ? "hourglass.circle" : "pause.circle"),
-            state: model.isRunning ? .active : .neutral
+            state: model.isRunning ? .active : .neutral,
+            identifier: "output"
         )
         StatusCell(
             title: LocalizedStringResource("Access"),
@@ -108,7 +142,8 @@ struct ApplyBarView: View {
                 ? LocalizedStringResource("Ready")
                 : LocalizedStringResource("Needed"),
             systemImage: model.hasSystemAccess ? "checkmark.shield.fill" : "exclamationmark.shield",
-            state: model.hasSystemAccess ? .ready : .problem
+            state: model.hasSystemAccess ? .ready : .problem,
+            identifier: "access"
         )
     }
 

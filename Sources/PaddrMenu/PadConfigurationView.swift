@@ -5,16 +5,13 @@ import PaddrCore
 struct PadConfigurationView: View {
     let side: PadSide
     @Binding var configuration: PadConfiguration
-    @State private var isExpanded: Bool
 
     init(
         side: PadSide,
-        configuration: Binding<PadConfiguration>,
-        initiallyExpanded: Bool = true
+        configuration: Binding<PadConfiguration>
     ) {
         self.side = side
         _configuration = configuration
-        _isExpanded = State(initialValue: initiallyExpanded)
     }
 
     private var title: LocalizedStringResource { side == .left ? "Left trackpad" : "Right trackpad" }
@@ -46,49 +43,37 @@ struct PadConfigurationView: View {
     }
 
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
-                HStack(spacing: PaddrStyle.Spacing.s3) {
-                    PadModePicker(selection: $configuration.mode)
-                        .frame(width: PaddrStyle.behaviorPickerWidth)
-
-                    Spacer(minLength: PaddrStyle.Spacing.s2)
-                }
-                .frame(maxWidth: .infinity, minHeight: PaddrStyle.Metrics.row)
-                .padding(.horizontal, PaddrStyle.Spacing.s4)
-
-                PaddrSectionContainer {
-                    modeSettings
-                }
-            }
-            .padding(.top, PaddrStyle.Spacing.s3)
-        } label: {
+        VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
             HStack(spacing: PaddrStyle.Spacing.s2) {
-                Text(title).paddrTypography(.cardTitle)
+                Text(title)
+                    .paddrTypography(.cardTitle)
+                    .foregroundStyle(PaddrStyle.textPrimary)
                 Spacer()
-                Text(summary)
+                Label(summary, systemImage: configuration.mode == .disabled ? "pause.circle" : "checkmark.circle.fill")
                     .paddrTypography(.caption)
                     .foregroundStyle(
-                        configuration.mode == .disabled ? Color.secondary : PaddrStyle.accentText
-                    )
-                    .padding(.horizontal, PaddrStyle.Spacing.s2)
-                    .padding(.vertical, PaddrStyle.Spacing.s1)
-                    .background(
                         configuration.mode == .disabled
-                            ? Color.secondary.opacity(0.08)
-                            : PaddrStyle.accent.opacity(0.10),
-                        in: .capsule
+                            ? PaddrStyle.textTertiary
+                            : PaddrStyle.accentText
                     )
             }
-            .frame(minHeight: PaddrStyle.Metrics.row)
-            .contentShape(.rect)
+
+            HStack(spacing: PaddrStyle.Spacing.s2) {
+                Text("Behavior")
+                    .paddrTypography(.sectionLabel)
+                    .foregroundStyle(PaddrStyle.textSecondary)
+                Spacer()
+                PadModePicker(selection: $configuration.mode)
+                    .frame(width: PaddrStyle.behaviorPickerWidth)
+            }
+            .frame(maxWidth: .infinity, minHeight: PaddrStyle.Metrics.row)
+
+            PaddrSectionContainer {
+                modeSettings
+            }
         }
         .padding(PaddrStyle.Spacing.s3)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(
-            height: isExpanded ? PaddrStyle.padConfigurationCardHeight : nil,
-            alignment: .topLeading
-        )
         .paddrCard()
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
@@ -163,23 +148,12 @@ struct PadConfigurationView: View {
         previewTitle: LocalizedStringResource,
         @ViewBuilder settings: @escaping () -> some View
     ) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 0) {
-                previewSection(title: previewTitle)
-                    .frame(width: PaddrStyle.Metrics.zoneMapWidth)
-                PaddrInsetDivider(axis: .vertical)
-                    .padding(.horizontal, PaddrStyle.Spacing.s2)
-                settingsSection(settings)
-                    .frame(width: PaddrStyle.zoneInspectorWidth, alignment: .topLeading)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s4) {
-                previewSection(title: previewTitle)
-                settingsSection(settings)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        PaddrAdaptiveSplitView(
+            breakpoint: 680,
+            leadingWidth: PaddrStyle.Metrics.zoneMapWidth,
+            leading: { previewSection(title: previewTitle) },
+            trailing: { settingsSection(settings) }
+        )
     }
 
     private func settingsSection<Settings: View>(
@@ -267,6 +241,8 @@ private struct PadModePicker: NSViewRepresentable {
         )
         control.segmentDistribution = .fillEqually
         control.setAccessibilityLabel(String(localized: LocalizedStringResource("Behavior")))
+        control.setAccessibilityIdentifier(PaddrAccessibility.identifier("pad-mode"))
+        control.identifier = NSUserInterfaceItemIdentifier(PaddrAccessibility.identifier("pad-mode"))
         update(control, coordinator: context.coordinator)
         return control
     }

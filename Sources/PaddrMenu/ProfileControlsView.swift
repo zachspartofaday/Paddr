@@ -29,6 +29,7 @@ struct ProfileControlsView: View {
             .accessibilityLabel("Profile")
             .accessibilityValue(Text(verbatim: pickerPresentation.accessibilityValue))
             .help("Select the active profile")
+            .paddrAccessibilityID("profile", "selector")
 
             Menu {
                 if isDefaultProfile {
@@ -87,8 +88,10 @@ struct ProfileControlsView: View {
             .accessibilityLabel(profileActionsAccessibilityLabel)
             .accessibilityValue(profileActionsAccessibilityValue)
             .help(profileActionsHelp)
+            .paddrAccessibilityID("profile", "actions")
         }
         .disabled(!model.canManageProfiles)
+        .paddrAccessibilityID("profile", "controls")
         .alert("Discard unsaved changes?", isPresented: $showsDiscardConfirmation) {
             Button("Cancel", role: .cancel) {
                 if let id = confirmationSelectionID {

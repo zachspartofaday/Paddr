@@ -3,6 +3,35 @@ import PaddrAppSupport
 import SwiftUI
 import PaddrCore
 
+enum PaddrMenuBarPalette {
+    static func color(for role: MenuBarTintRole) -> NSColor? {
+        switch role {
+        case .active:
+            active
+        case .warning:
+            warning
+        case .none:
+            nil
+        }
+    }
+
+    private static let active = NSColor(name: nil) { appearance in
+        isDark(appearance)
+            ? NSColor(srgbRed: 70.0 / 255.0, green: 180.0 / 255.0, blue: 135.0 / 255.0, alpha: 1)
+            : NSColor(srgbRed: 35.0 / 255.0, green: 125.0 / 255.0, blue: 87.0 / 255.0, alpha: 1)
+    }
+
+    private static let warning = NSColor(name: nil) { appearance in
+        isDark(appearance)
+            ? NSColor(srgbRed: 1, green: 179.0 / 255.0, blue: 64.0 / 255.0, alpha: 1)
+            : NSColor(srgbRed: 168.0 / 255.0, green: 90.0 / 255.0, blue: 0, alpha: 1)
+    }
+
+    private static func isDark(_ appearance: NSAppearance) -> Bool {
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     private let model = PaddrMenuModel()
@@ -68,6 +97,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     @objc private func showGuideFromHelp() {
         showGuideWindow(trigger: .help)
+    }
+
+    @objc private func openSourceNotices() {
+        guard let url = Bundle.main.url(
+            forResource: "ThirdPartyNotices",
+            withExtension: "txt"
+        ) else {
+            NSSound.beep()
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 
     @objc private func selectProfile(_ sender: NSMenuItem) {
@@ -215,6 +255,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         )
         guideItem.target = self
         helpMenu.addItem(guideItem)
+        let noticesItem = NSMenuItem(
+            title: String(localized: "Open Source Notices…"),
+            action: #selector(openSourceNotices),
+            keyEquivalent: ""
+        )
+        noticesItem.target = self
+        noticesItem.identifier = NSUserInterfaceItemIdentifier(
+            PaddrAccessibility.identifier("menu", "open-source-notices")
+        )
+        helpMenu.addItem(noticesItem)
 
         NSApplication.shared.mainMenu = mainMenu
         NSApplication.shared.servicesMenu = servicesMenu
@@ -224,6 +274,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     private func rebuildStatusMenu() {
         statusMenu.removeAllItems()
+
+        let presentation = MenuBarPresentation(
+            isEnabled: model.isEnabled,
+            isRunning: model.isRunning,
+            isReleasingOutput: model.isReleasingOutput,
+            controllerConnected: model.controllerConnected,
+            puckConnected: model.receiverDescription != nil,
+            profileName: model.activeProfile.name
+        )
+
+        addStatusSummary(
+            presentation.outputSummary,
+            identifier: "output-summary"
+        )
+        addStatusSummary(
+            presentation.controllerSummary,
+            identifier: "controller-summary"
+        )
+        addStatusSummary(
+            presentation.transportSummary,
+            identifier: "transport-summary"
+        )
+        addStatusSummary(
+            presentation.profileSummary,
+            identifier: "profile-summary"
+        )
+        statusMenu.addItem(.separator())
 
         let outputItem = NSMenuItem(
             title: String(localized: "Trackpad Output"),
@@ -237,6 +314,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             systemSymbolName: model.isEnabled ? "wave.3.right.circle.fill" : "pause.circle",
             accessibilityDescription: String(localized: "Trackpad Output")
         )
+        outputItem.identifier = NSUserInterfaceItemIdentifier(
+            PaddrAccessibility.identifier("menu", "output-toggle")
+        )
+        if let reason = model.readiness.outputDisabledReason {
+            outputItem.toolTip = String(localized: reason.message)
+        }
         statusMenu.addItem(outputItem)
         statusMenu.addItem(.separator())
 
@@ -307,6 +390,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         )
         statusMenu.addItem(guideItem)
 
+        let noticesItem = NSMenuItem(
+            title: String(localized: "Open Source Notices…"),
+            action: #selector(openSourceNotices),
+            keyEquivalent: ""
+        )
+        noticesItem.target = self
+        noticesItem.image = NSImage(
+            systemSymbolName: "doc.text",
+            accessibilityDescription: String(localized: "Open Source Notices")
+        )
+        noticesItem.identifier = NSUserInterfaceItemIdentifier(
+            PaddrAccessibility.identifier("menu", "open-source-notices")
+        )
+        statusMenu.addItem(noticesItem)
+
         statusMenu.addItem(.separator())
         let quitItem = NSMenuItem(
             title: String(localized: "Quit Paddr"),
@@ -318,17 +416,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     private func updateStatusItem() {
-        let symbol = model.isEnabled ? "hand.point.up.left.fill" : "hand.point.up.left"
-        let image = NSImage(
-            systemSymbolName: symbol,
-            accessibilityDescription: String(localized: "Paddr")
+        let presentation = MenuBarPresentation(
+            isEnabled: model.isEnabled,
+            isRunning: model.isRunning,
+            isReleasingOutput: model.isReleasingOutput,
+            controllerConnected: model.controllerConnected,
+            puckConnected: model.receiverDescription != nil,
+            profileName: model.activeProfile.name
         )
-        image?.isTemplate = !model.isEnabled
+        let image = NSImage(
+            systemSymbolName: presentation.symbolName,
+            accessibilityDescription: presentation.accessibilityLabel
+        )
+        image?.isTemplate = presentation.usesTemplateImage
         statusItem?.button?.image = image
-        statusItem?.button?.contentTintColor = model.isEnabled
-            ? (model.controllerConnected ? .systemBlue : .systemOrange)
-            : nil
+        statusItem?.button?.contentTintColor = PaddrMenuBarPalette.color(
+            for: presentation.tintRole
+        )
+        statusItem?.button?.toolTip = presentation.accessibilityLabel
+        statusItem?.button?.setAccessibilityLabel(presentation.accessibilityLabel)
+        statusItem?.button?.setAccessibilityIdentifier(
+            PaddrAccessibility.identifier("status-item")
+        )
         rebuildStatusMenu()
+    }
+
+    private func addStatusSummary(_ title: String, identifier: String) {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        item.identifier = NSUserInterfaceItemIdentifier(
+            PaddrAccessibility.identifier("menu", identifier)
+        )
+        statusMenu.addItem(item)
     }
 
     private func showConfigurationWindow() {
@@ -347,6 +466,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             defer: false
         )
         window.title = String(localized: "Paddr")
+        window.appearance = NSAppearance(named: .darkAqua)
         window.titleVisibility = .visible
         window.toolbarStyle = .unifiedCompact
         window.contentMinSize = PaddrStyle.Metrics.minimumWindowSize
@@ -400,6 +520,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             defer: false
         )
         window.title = String(localized: "Paddr Guide")
+        window.appearance = NSAppearance(named: .darkAqua)
         window.contentMinSize = PaddrStyle.Metrics.minimumGuideWindowSize
         window.collectionBehavior.insert(.fullScreenNone)
         window.standardWindowButton(.zoomButton)?.isEnabled = false

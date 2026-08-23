@@ -12,15 +12,14 @@ struct PaddrSectionContainer<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     appearance.usesOpaqueFallback
-                        ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor))
-                        : AnyShapeStyle(Color.primary.opacity(0.032)),
+                        ? AnyShapeStyle(PaddrStyle.night1)
+                        : AnyShapeStyle(appearance.surface(elevated: false)),
                     in: .rect(cornerRadius: PaddrStyle.Radius.control)
                 )
                 .overlay {
                     RoundedRectangle(cornerRadius: PaddrStyle.Radius.control)
                         .strokeBorder(
-                            Color(nsColor: .separatorColor)
-                                .opacity(appearance.strokeOpacity(0.18)),
+                            appearance.surfaceStroke,
                             lineWidth: appearance.strokeWidth
                         )
                 }
@@ -39,10 +38,7 @@ struct PaddrInsetDivider: View {
     var body: some View {
         PaddrAppearanceReader { appearance in
             Rectangle()
-                .fill(
-                    Color(nsColor: .separatorColor)
-                        .opacity(appearance.strokeOpacity(0.34))
-                )
+                .fill(appearance.surfaceStroke)
                 .frame(
                     maxWidth: axis == .horizontal ? .infinity : 1,
                     maxHeight: axis == .vertical ? .infinity : 1
@@ -65,22 +61,13 @@ struct PaddrSettingsRow<Control: View>: View {
     @ViewBuilder let control: () -> Control
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: PaddrStyle.Spacing.s3) {
-                label
-                    .frame(width: labelWidth, alignment: .leading)
-                control()
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-
-            VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s2) {
-                label
-                control()
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-            }
+        HStack(spacing: PaddrStyle.Spacing.s3) {
+            label
+                .frame(width: labelWidth, alignment: .leading)
+            control()
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .frame(maxWidth: .infinity, minHeight: PaddrStyle.Metrics.row, alignment: .leading)
-        .padding(.vertical, PaddrStyle.Spacing.s1)
     }
 
     private var label: some View {

@@ -42,8 +42,8 @@ final class MenuViewPresentationTests: XCTestCase {
             onComplete: {},
             initialPager: pager
         )
-        XCTAssertEqual(PaddrStyle.Metrics.guideWindowSize, NSSize(width: 680, height: 430))
-        XCTAssertEqual(PaddrStyle.Metrics.minimumGuideWindowSize, NSSize(width: 560, height: 430))
+        XCTAssertEqual(PaddrStyle.Metrics.guideWindowSize, NSSize(width: 720, height: 480))
+        XCTAssertEqual(PaddrStyle.Metrics.minimumGuideWindowSize, NSSize(width: 640, height: 460))
 
         let hostingView = NSHostingView(rootView: view)
         hostingView.frame = NSRect(origin: .zero, size: PaddrStyle.Metrics.guideWindowSize)
@@ -60,16 +60,52 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertLessThanOrEqual(documentView.fittingSize.height, scrollView.contentSize.height + 0.5)
     }
 
-    func testPadConfigurationCardUsesFixedExpandedAndIntrinsicCollapsedHeights() {
-        let expandedHeight = hostedPadConfigurationHeight(initiallyExpanded: true)
-        let collapsedHeight = hostedPadConfigurationHeight(initiallyExpanded: false)
-
-        XCTAssertEqual(expandedHeight, PaddrStyle.padConfigurationCardHeight, accuracy: 0.5)
-        XCTAssertGreaterThanOrEqual(
-            collapsedHeight,
-            PaddrStyle.Metrics.row + (2 * PaddrStyle.Spacing.s3)
+    func testFocusedWorkflowMountsOneSelectorAndOnePadModeControl() {
+        let view = FocusedPadConfigurationView(
+            configuration: .constant(.default),
+            appearsEnabled: true,
+            isEditable: true
         )
-        XCTAssertLessThan(collapsedHeight, expandedHeight)
+        .frame(width: PaddrStyle.Metrics.contentMaxWidth)
+        let hostingView = NSHostingView(rootView: view)
+        hostingView.frame = NSRect(
+            origin: .zero,
+            size: NSSize(width: PaddrStyle.Metrics.contentMaxWidth, height: 620)
+        )
+        hostingView.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(
+            descendants(of: NSSegmentedControl.self, in: hostingView).count,
+            2,
+            "The focused workflow must mount one side selector and one pad-mode selector"
+        )
+    }
+
+    func testFamilyConsoleRendersAtDefaultWindowSize() async throws {
+        let store = BlockingProfileStore()
+        let model = PaddrMenuModel(dependencies: dependencies(store: store))
+        defer { store.releaseSave() }
+        let didInitialize = await waitUntil { model.isInitialized }
+        XCTAssertTrue(didInitialize)
+
+        let hostingView = NSHostingView(rootView: ConfigurationView(model: model))
+        hostingView.frame = NSRect(origin: .zero, size: PaddrStyle.Metrics.defaultWindowSize)
+        hostingView.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(hostingView.bounds.size, PaddrStyle.Metrics.defaultWindowSize)
+        XCTAssertGreaterThan(descendants(of: NSControl.self, in: hostingView).count, 2)
+        for control in descendants(of: NSControl.self, in: hostingView) {
+            assertControlFits(control, in: hostingView)
+        }
+
+        if let snapshotPath = ProcessInfo.processInfo.environment["PADDR_UI_SNAPSHOT_PATH"] {
+            let representation = try XCTUnwrap(
+                hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds)
+            )
+            hostingView.cacheDisplay(in: hostingView.bounds, to: representation)
+            let png = try XCTUnwrap(representation.representation(using: .png, properties: [:]))
+            try png.write(to: URL(fileURLWithPath: snapshotPath), options: .atomic)
+        }
     }
 
     func testPaddrAppearanceResolvesEveryAdaptiveCombination() {
@@ -107,8 +143,7 @@ final class MenuViewPresentationTests: XCTestCase {
                 let hostingView = NSHostingView(
                     rootView: PadConfigurationView(
                         side: .left,
-                        configuration: .constant(configuration),
-                        initiallyExpanded: true
+                        configuration: .constant(configuration)
                     )
                     .frame(width: PaddrStyle.padColumnWidth)
                 )
@@ -154,7 +189,7 @@ final class MenuViewPresentationTests: XCTestCase {
 
         XCTAssertEqual(
             hostingView.bounds.height,
-            PaddrStyle.Metrics.row + (2 * PaddrStyle.Spacing.s1),
+            PaddrStyle.Metrics.row,
             accuracy: 0.5
         )
         let toggle = try XCTUnwrap(firstDescendant(of: NSControl.self, in: hostingView))
@@ -183,10 +218,9 @@ final class MenuViewPresentationTests: XCTestCase {
         )
     }
 
-    /// The inspector column is the binding constraint on the width scale, and overrunning it
-    /// fails silently in two ways a bounds check cannot see: `ViewThatFits` drops the row
-    /// into its stacked fallback, and a starved label wraps mid-word. Both are asserted on
-    /// the geometry directly.
+    /// The inspector column is the binding constraint on the width scale. A starved label
+    /// can wrap mid-word even when every control remains within bounds, so both widths and
+    /// rendered row geometry are asserted directly.
     func testPickerRowFitsItsInlineBranchInsideTheInspectorColumn() {
         XCTAssertLessThanOrEqual(
             PaddrStyle.Width.labelColumn + PaddrStyle.Spacing.s3 + PaddrStyle.Width.control,
@@ -220,9 +254,9 @@ final class MenuViewPresentationTests: XCTestCase {
 
         XCTAssertEqual(
             hostingView.fittingSize.height,
-            PaddrStyle.Metrics.row + (2 * PaddrStyle.Spacing.s1),
+            PaddrStyle.Metrics.row,
             accuracy: 0.5,
-            "The row fell back to the stacked branch inside the inspector column"
+            "The inline row no longer fits the inspector column"
         )
     }
 
@@ -289,8 +323,7 @@ final class MenuViewPresentationTests: XCTestCase {
             )
             PadConfigurationView(
                 side: .left,
-                configuration: .constant(PaddrConfiguration.default.left),
-                initiallyExpanded: true
+                configuration: .constant(PaddrConfiguration.default.left)
             )
         }
         .frame(width: PaddrStyle.padColumnWidth)
@@ -300,8 +333,7 @@ final class MenuViewPresentationTests: XCTestCase {
     func testPointerTrackingToggleReflectsDefaultsAndLegacyBindingAtRadiusZero() throws {
         let defaultView = PadConfigurationView(
             side: .right,
-            configuration: .constant(PadConfiguration(mode: .mouse)),
-            initiallyExpanded: true
+            configuration: .constant(PadConfiguration(mode: .mouse))
         )
         .frame(width: PaddrStyle.Metrics.minimumWindowSize.width - (2 * PaddrStyle.Spacing.s4))
         let defaultHostingView = NSHostingView(rootView: defaultView)
@@ -309,7 +341,7 @@ final class MenuViewPresentationTests: XCTestCase {
             origin: .zero,
             size: NSSize(
                 width: PaddrStyle.Metrics.minimumWindowSize.width - (2 * PaddrStyle.Spacing.s4),
-                height: PaddrStyle.padConfigurationCardHeight
+                height: 640
             )
         )
         defaultHostingView.layoutSubtreeIfNeeded()
@@ -337,8 +369,7 @@ final class MenuViewPresentationTests: XCTestCase {
         )
         let legacyView = PadConfigurationView(
             side: .right,
-            configuration: legacyBinding,
-            initiallyExpanded: true
+            configuration: legacyBinding
         )
         .frame(width: PaddrStyle.padColumnWidth)
         let legacyHostingView = NSHostingView(rootView: legacyView)
@@ -434,18 +465,6 @@ final class MenuViewPresentationTests: XCTestCase {
             line: line
         )
         XCTAssertGreaterThan(fitted.height, 0, file: file, line: line)
-    }
-
-    private func hostedPadConfigurationHeight(initiallyExpanded: Bool) -> CGFloat {
-        let view = PadConfigurationView(
-            side: .left,
-            configuration: .constant(PaddrConfiguration.default.left),
-            initiallyExpanded: initiallyExpanded
-        )
-        .frame(width: 700)
-        let hostingView = NSHostingView(rootView: view)
-        hostingView.layoutSubtreeIfNeeded()
-        return hostingView.fittingSize.height
     }
 
     private func assertPendingProfilePicker(

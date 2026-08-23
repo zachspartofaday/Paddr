@@ -9,6 +9,7 @@ struct StatusCell: View {
     let title: LocalizedStringResource
     let systemImage: String
     let state: StatusBadgeState
+    private let identifier: String
     private let value: Value
     private let explicitAccessibilityValue: String?
 
@@ -16,12 +17,14 @@ struct StatusCell: View {
         title: LocalizedStringResource,
         value: LocalizedStringResource,
         systemImage: String,
-        state: StatusBadgeState
+        state: StatusBadgeState,
+        identifier: String = "status"
     ) {
         self.title = title
         self.value = .localized(value)
         self.systemImage = systemImage
         self.state = state
+        self.identifier = identifier
         explicitAccessibilityValue = nil
     }
 
@@ -30,12 +33,14 @@ struct StatusCell: View {
         value: String,
         systemImage: String,
         state: StatusBadgeState,
-        accessibilityValue: String? = nil
+        accessibilityValue: String? = nil,
+        identifier: String = "status"
     ) {
         self.title = title
         self.value = .verbatim(value)
         self.systemImage = systemImage
         self.state = state
+        self.identifier = identifier
         explicitAccessibilityValue = accessibilityValue
     }
 
@@ -62,16 +67,21 @@ struct StatusCell: View {
         }
         .padding(.horizontal, PaddrStyle.Spacing.s1)
         .frame(minHeight: PaddrStyle.Metrics.row)
-        .background(state.color.opacity(0.11), in: .capsule)
+        .background(
+            state.color.opacity(0.12),
+            in: .rect(cornerRadius: PaddrStyle.Radius.control)
+        )
         .overlay {
-            if appearance.hasIncreasedContrast {
-                Capsule().strokeBorder(state.color, lineWidth: appearance.strokeWidth)
+            if appearance.hasIncreasedContrast || appearance.usesShapeDifferentiation {
+                RoundedRectangle(cornerRadius: PaddrStyle.Radius.control)
+                    .strokeBorder(state.color, lineWidth: appearance.strokeWidth)
             }
         }
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
         .accessibilityValue(accessibilityValue)
+        .paddrAccessibilityID("status", identifier)
     }
 
     @ViewBuilder private var valueText: some View {

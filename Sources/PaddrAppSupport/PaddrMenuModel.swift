@@ -164,6 +164,22 @@ public final class PaddrMenuModel {
             && configurationTask == nil
             && !profileDocumentSaveInProgress
     }
+    public var readiness: PaddrReadinessResolution {
+        PaddrReadinessResolver.resolve(
+            PaddrReadinessInput(
+                isInitialized: isInitialized,
+                puckConnected: receiverDescription != nil,
+                controllerConnected: controllerConnected,
+                batteryAvailable: batteryStatus != nil,
+                inputMonitoringGranted: inputMonitoringGranted,
+                accessibilityTrusted: accessibilityTrusted,
+                isEnabled: isEnabled,
+                isRunning: isRunning,
+                isReleasingOutput: isReleasingOutput,
+                canToggleOutput: canToggleOutput
+            )
+        )
+    }
 
     public init(dependencies: MenuDependencies = .live) {
         self.dependencies = dependencies

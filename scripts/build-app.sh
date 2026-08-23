@@ -48,6 +48,7 @@ cp "$repo_dir/Packaging/Info.plist" "$contents_path/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :PaddrSourceRevision string $source_revision" "$contents_path/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :PaddrSourceDirty bool $source_dirty" "$contents_path/Info.plist"
 cp "$build_dir/Paddr" "$binary_path"
+cp "$repo_dir/THIRD_PARTY_NOTICES.md" "$contents_path/Resources/ThirdPartyNotices.txt"
 chmod 755 "$binary_path"
 
 xcrun xcstringstool compile \

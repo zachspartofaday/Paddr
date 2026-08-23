@@ -10,83 +10,105 @@ struct ZonePadMap: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        GeometryReader { proxy in
-            Canvas { context, size in
-                let bounds = CGRect(origin: .zero, size: size)
-                let padShape = Path(roundedRect: bounds, cornerRadius: PaddrStyle.Radius.pad)
-                context.fill(
-                    padShape,
-                    with: .linearGradient(
-                        Gradient(colors: [
-                            Color.primary.opacity(0.085),
-                            Color.primary.opacity(0.035)
-                        ]),
-                        startPoint: CGPoint(x: bounds.midX, y: bounds.minY),
-                        endPoint: CGPoint(x: bounds.midX, y: bounds.maxY)
+        PaddrAppearanceReader { appearance in
+            GeometryReader { proxy in
+                Canvas { context, size in
+                    let bounds = CGRect(origin: .zero, size: size)
+                    let padShape = Path(
+                        roundedRect: bounds,
+                        cornerRadius: PaddrStyle.Radius.pad
                     )
-                )
-
-                for zone in layout.zones {
-                    let path = path(for: zone, in: bounds)
-                    let isSelected = zone == selection
                     context.fill(
-                        path,
-                        with: isSelected
-                            ? .linearGradient(
-                                Gradient(colors: [
-                                    PaddrStyle.accent.opacity(0.34),
-                                    PaddrStyle.accent.opacity(0.18)
-                                ]),
-                                startPoint: CGPoint(x: bounds.midX, y: bounds.minY),
-                                endPoint: CGPoint(x: bounds.midX, y: bounds.maxY)
-                            )
-                            : .color(.primary.opacity(0.025))
-                    )
-                    context.stroke(
-                        path,
-                        with: .color(isSelected ? PaddrStyle.accent.opacity(0.95) : .primary.opacity(0.19)),
-                        lineWidth: isSelected ? 1.75 : 0.75
-                    )
-                    drawLabel(for: zone, selected: isSelected, in: bounds, context: &context)
-                }
-
-                if let neutral = neutralPath(in: bounds) {
-                    context.fill(neutral, with: .color(.black.opacity(0.16)))
-                    context.stroke(
-                        neutral,
-                        with: .color(.secondary.opacity(0.62)),
-                        style: StrokeStyle(lineWidth: 1, dash: [3, 3])
-                    )
-                    context.draw(
-                        Text(verbatim: "○")
-                            .font(.caption.bold())
-                            .foregroundStyle(.secondary),
-                        at: center(in: bounds)
-                    )
-                }
-            }
-            .clipShape(.rect(cornerRadius: PaddrStyle.Radius.pad))
-            .overlay {
-                ZStack {
-                    RoundedRectangle(cornerRadius: PaddrStyle.Radius.pad)
-                        .strokeBorder(.white.opacity(0.10), lineWidth: 1)
-                        .padding(1)
-                    RoundedRectangle(cornerRadius: PaddrStyle.Radius.pad)
-                        .strokeBorder(
-                            .primary.opacity(0.30),
-                            lineWidth: 1
+                        padShape,
+                        with: .linearGradient(
+                            Gradient(colors: [
+                                appearance.surface(elevated: true),
+                                appearance.surface(elevated: false)
+                            ]),
+                            startPoint: CGPoint(x: bounds.midX, y: bounds.minY),
+                            endPoint: CGPoint(x: bounds.midX, y: bounds.maxY)
                         )
-                }
-            }
-            .contentShape(.interaction, .rect(cornerRadius: PaddrStyle.Radius.pad))
-            .contentShape(.focusEffect, .rect(cornerRadius: PaddrStyle.Radius.pad))
-            .gesture(
-                SpatialTapGesture().onEnded { value in
-                    if let zone = hitZone(at: value.location, size: proxy.size) {
-                        selection = zone
+                    )
+
+                    for zone in layout.zones {
+                        let path = path(for: zone, in: bounds)
+                        let isSelected = zone == selection
+                        context.fill(
+                            path,
+                            with: isSelected
+                                ? .linearGradient(
+                                    Gradient(colors: [
+                                        PaddrStyle.selectedZoneFillTop,
+                                        PaddrStyle.selectedZoneFillBottom
+                                    ]),
+                                    startPoint: CGPoint(x: bounds.midX, y: bounds.minY),
+                                    endPoint: CGPoint(x: bounds.midX, y: bounds.maxY)
+                                )
+                                : .color(appearance.surface(elevated: false))
+                        )
+                        context.stroke(
+                            path,
+                            with: .color(
+                                isSelected
+                                    ? PaddrStyle.selectionBoundary
+                                    : appearance.surfaceStroke
+                            ),
+                            lineWidth: isSelected
+                                ? (appearance.hasIncreasedContrast ? 2.25 : 1.75)
+                                : appearance.strokeWidth
+                        )
+                        drawLabel(
+                            for: zone,
+                            selected: isSelected,
+                            in: bounds,
+                            appearance: appearance,
+                            context: &context
+                        )
+                    }
+
+                    if let neutral = neutralPath(in: bounds) {
+                        context.fill(neutral, with: .color(.black.opacity(0.16)))
+                        context.stroke(
+                            neutral,
+                            with: .color(.secondary.opacity(0.62)),
+                            style: StrokeStyle(lineWidth: 1, dash: [3, 3])
+                        )
+                        context.draw(
+                            Text(verbatim: "○")
+                                .font(.caption.bold())
+                                .foregroundStyle(.secondary),
+                            at: center(in: bounds)
+                        )
                     }
                 }
-            )
+                .clipShape(.rect(cornerRadius: PaddrStyle.Radius.pad))
+                .overlay {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: PaddrStyle.Radius.pad)
+                            .strokeBorder(
+                                appearance.surfaceStroke,
+                                lineWidth: appearance.strokeWidth
+                            )
+                            .padding(1)
+                        RoundedRectangle(cornerRadius: PaddrStyle.Radius.pad)
+                            .strokeBorder(
+                                PaddrStyle.textPrimary.opacity(
+                                    appearance.hasIncreasedContrast ? 0.56 : 0.30
+                                ),
+                                lineWidth: appearance.strokeWidth
+                            )
+                    }
+                }
+                .contentShape(.interaction, .rect(cornerRadius: PaddrStyle.Radius.pad))
+                .contentShape(.focusEffect, .rect(cornerRadius: PaddrStyle.Radius.pad))
+                .gesture(
+                    SpatialTapGesture().onEnded { value in
+                        if let zone = hitZone(at: value.location, size: proxy.size) {
+                            selection = zone
+                        }
+                    }
+                )
+            }
         }
         .focusable()
         .focused($isFocused)
@@ -212,6 +234,7 @@ struct ZonePadMap: View {
         for zone: ButtonZone,
         selected: Bool,
         in bounds: CGRect,
+        appearance: PaddrAppearance,
         context: inout GraphicsContext
     ) {
         let point = labelPoint(for: zone, in: bounds)
@@ -224,16 +247,24 @@ struct ZonePadMap: View {
         )
         let plate = Path(roundedRect: plateRect, cornerRadius: plateSize.height / 2)
         if selected {
-            context.fill(plate, with: .color(PaddrStyle.accentText.opacity(0.92)))
+            context.fill(plate, with: .color(PaddrStyle.selectedZoneCaptionFill))
             context.stroke(plate, with: .color(.white.opacity(0.42)), lineWidth: 0.75)
         } else {
-            context.fill(plate, with: .color(.primary.opacity(0.10)))
-            context.stroke(plate, with: .color(.primary.opacity(0.14)), lineWidth: 0.75)
+            context.fill(plate, with: .color(appearance.surface(elevated: true)))
+            context.stroke(
+                plate,
+                with: .color(appearance.surfaceStroke),
+                lineWidth: appearance.strokeWidth
+            )
         }
         context.draw(
             OutputBindingText.text(for: configuration[bindingFor: zone])
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(selected ? .white : .secondary),
+                .font(.caption.bold())
+                .foregroundStyle(
+                    selected
+                        ? PaddrStyle.selectedZoneCaptionForeground
+                        : PaddrStyle.textSecondary
+                ),
             at: point
         )
     }
