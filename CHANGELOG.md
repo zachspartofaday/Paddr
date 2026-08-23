@@ -4,9 +4,11 @@ User-visible changes to Paddr are recorded here. Release entries describe confir
 
 ## 0.11.0 — In development
 
-- Local and release app bundles now record their exact Git source revision and tracked-dirty state.
-- Release packaging requires a clean checkout at an annotated version tag and verifies that the
-  tag, source plist, staged app, archive, version, build, and source revision agree.
+- Local and release app bundles now record their exact Git source revision and tracked, staged,
+  or untracked checkout state (excluding designated root build artifacts).
+- Release packaging requires a checkout without tracked, staged, or untracked source changes at
+  an annotated version tag, and verifies that the tag, source plist, staged app, archive, version,
+  build, and source revision agree.
 
 ## Unreleased
 

@@ -6,6 +6,7 @@ if test "$#" -ne 2; then
     exit 2
 fi
 
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_dir=$1
 release_ref=$2
 
@@ -34,9 +35,11 @@ if test "$head_revision" != "$revision"; then
     exit 1
 fi
 
-if ! git -C "$repo_dir" diff --quiet --ignore-submodules -- ||
-   ! git -C "$repo_dir" diff --cached --quiet --ignore-submodules --; then
-    echo "Release source has tracked changes; package a clean annotated tag." >&2
+if ! source_dirty=$("$script_dir/source-dirty.sh" "$repo_dir"); then
+    source_dirty=true
+fi
+if test "$source_dirty" != false; then
+    echo "Release source has tracked, staged, or untracked changes; package a clean annotated tag." >&2
     exit 1
 fi
 

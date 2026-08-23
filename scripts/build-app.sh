@@ -9,11 +9,14 @@ sign_identity=${SIGN_IDENTITY:--}
 architectures=${ARCHITECTURES:-arm64}
 build_scratch_path=${BUILD_SCRATCH_PATH:-}
 source_revision=$(git -C "$repo_dir" rev-parse HEAD)
-source_dirty=false
-if ! git -C "$repo_dir" diff --quiet --ignore-submodules -- ||
-   ! git -C "$repo_dir" diff --cached --quiet --ignore-submodules --; then
-    source_dirty=true
+if ! source_dirty=$("$script_dir/source-dirty.sh" "$repo_dir"); then
+    echo "Unable to determine the source checkout state." >&2
+    exit 1
 fi
+case "$source_dirty" in
+    true|false) ;;
+    *) echo "Invalid source checkout state: $source_dirty" >&2; exit 1 ;;
+esac
 
 case "$app_path" in
     "$repo_dir"/dist/Paddr.app|"$output_dir"/Paddr.app) ;;
