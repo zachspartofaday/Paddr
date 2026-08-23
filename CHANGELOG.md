@@ -18,23 +18,29 @@ User-visible changes to Paddr are recorded here. Release entries describe confir
   attribution for the bounded source adaptation ([#76](https://github.com/zachspartofaday/Paddr/issues/76),
   [#78](https://github.com/zachspartofaday/Paddr/issues/78)).
 - Blended the configuration and guide titlebars into the dark family background with
-  full-size content, transparent titlebar backgrounds, and no separator. Window titles,
-  configuration-toolbar behavior, minimum usable sizes, saved window position, and lifecycle
-  remain unchanged; fresh configuration windows now open at a 1280×700-point usable size,
-  while existing v4 window frames migrate once without losing their usable size or top-edge position.
+  full-size content, transparent titlebar backgrounds, and no separator. The configuration
+  window now uses AppKit's regular unified 15-point title treatment instead of the 13-point
+  compact treatment, while retaining native window identity. Minimum usable sizes, saved window
+  position, and lifecycle remain unchanged; fresh configuration windows now open at a
+  1280×700-point usable size, while existing v4 and compact-titlebar v5 window frames migrate to
+  v6 without losing their usable size or top-edge position.
 - Kept the Left and Right trackpad editors visible together in equal columns at the
   wider default window size, with each pad preview and settings inspector also visible in
   columns and separated by whitespace instead of a rule. Pointer tracking, zone mode, and
   selected-area rows now carry icons and consistent trailing alignment; region headings have
   a deliberate native type ladder; every primary card and inset panel shares a 16-point content
-  margin and 16-point sibling rhythm; compact tiles share a 12-point horizontal inset; and status
-  pills use larger uniform type, stronger side padding, and whole-pill wrapping at narrow widths
-  and Accessibility text sizes.
+  margin and 16-point sibling rhythm; compact tiles share a 12-point horizontal inset; redundant
+  mode summaries have been removed from the pad-card headers; and status pills use uniform type,
+  stronger side padding, and whole-pill wrapping at narrow widths and Accessibility text sizes.
+  The status sequence is Access, Puck, Controller, Output, then Battery. Completed non-battery
+  steps collapse to compact green icon pills, while incomplete states retain their text. Battery
+  always retains its percentage and uses green at 60% or higher, amber from 20–59%, red below 20%,
+  and a neutral unavailable state.
   The same mounted editor subtrees stack at genuinely narrow widths and Accessibility text sizes.
   Both configurations remain independent and every mapping behavior is unchanged. Wider restored
-  windows use their available width, fixed trackpad maps are centered, and inset controls remain inside their card
-  boundaries; document overflow scrolls without taking over the saved window height
-  ([#77](https://github.com/zachspartofaday/Paddr/issues/77)).
+  windows use their available width, fixed trackpad maps are centered, and inset controls remain
+  inside their card boundaries; document overflow scrolls without taking over the saved window
+  height ([#77](https://github.com/zachspartofaday/Paddr/issues/77)).
 - Added a pure readiness resolver with deterministic next-action guidance and output
   disabled reasons. The menu-bar item now announces output, controller, puck transport,
   and active-profile semantics.

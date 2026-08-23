@@ -50,7 +50,7 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertEqual(window.titlebarSeparatorStyle, .none)
     }
 
-    func testConfigurationWindowMetricsDescribeUsableLayoutWithUnifiedCompactToolbar() {
+    func testConfigurationWindowMetricsDescribeUsableLayoutWithUnifiedToolbar() {
         let window = makeWindow(hasToolbar: true, usesFullSizeContent: true)
         let delegate = WindowDelegateProbe()
         window.delegate = delegate
@@ -68,7 +68,7 @@ final class MenuViewPresentationTests: XCTestCase {
 
         XCTAssertNotNil(window.toolbar)
         XCTAssertEqual(window.titleVisibility, .visible)
-        XCTAssertEqual(window.toolbarStyle, .unifiedCompact)
+        XCTAssertEqual(window.toolbarStyle, .unified)
         assertSize(window.contentLayoutRect.size, equals: PaddrStyle.Metrics.defaultWindowSize)
 
         window.setContentSize(window.contentMinSize)
@@ -135,6 +135,42 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertTrue(familyWindow.frame.isApproximatelyEqual(to: legacyFrame))
         assertSize(familyWindow.contentLayoutRect.size, equals: legacyLayoutSize)
         assertSize(familyWindow.contentLayoutRect.size, equals: legacyUsableSize)
+    }
+
+    func testCompactAutosavedFrameMigratesToUnifiedWithoutChangingUsableSizeOrTopEdge() {
+        let autosaveName = "PaddrConfigurationWindow.v5.Tests.\(UUID().uuidString)"
+        let expectedUsableSize = NSSize(width: 868, height: 680)
+        defer { NSWindow.removeFrame(usingName: autosaveName) }
+
+        let compactWindow = makeWindow(hasToolbar: true, usesFullSizeContent: true)
+        compactWindow.toolbarStyle = .unifiedCompact
+        PaddrFamilyWindowChrome.apply(to: compactWindow)
+        PaddrFamilyWindowChrome.setUsableLayoutSize(expectedUsableSize, for: compactWindow)
+        compactWindow.center()
+        compactWindow.contentView?.layoutSubtreeIfNeeded()
+        let expectedTopLeft = NSPoint(
+            x: compactWindow.frame.minX,
+            y: compactWindow.frame.maxY
+        )
+        compactWindow.saveFrame(usingName: autosaveName)
+
+        let unifiedWindow = makeWindow(hasToolbar: true, usesFullSizeContent: true)
+        PaddrFamilyWindowChrome.apply(to: unifiedWindow)
+
+        XCTAssertTrue(
+            PaddrFamilyWindowChrome.migrateAutosavedFrame(
+                usingName: autosaveName,
+                from: .unifiedCompact,
+                to: .unified,
+                for: unifiedWindow
+            )
+        )
+        unifiedWindow.contentView?.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(unifiedWindow.toolbarStyle, .unified)
+        assertSize(unifiedWindow.contentLayoutRect.size, equals: expectedUsableSize)
+        XCTAssertEqual(unifiedWindow.frame.minX, expectedTopLeft.x, accuracy: 0.5)
+        XCTAssertEqual(unifiedWindow.frame.maxY, expectedTopLeft.y, accuracy: 0.5)
     }
 
     func testAccessibilityOnboardingPageFitsCompactWindowWithoutScrolling() throws {
@@ -641,6 +677,27 @@ final class MenuViewPresentationTests: XCTestCase {
         .background { PanelBackgroundView() }
     }
 
+    func testPadCardHeaderDoesNotRepeatTheSelectedBehavior() async {
+        let hostingView = NSHostingView(
+            rootView: PadConfigurationView(
+                side: .right,
+                configuration: .constant(PadConfiguration(mode: .mouse))
+            )
+            .frame(width: PaddrStyle.padColumnWidth)
+        )
+        hostingView.frame = NSRect(
+            origin: .zero,
+            size: NSSize(width: PaddrStyle.padColumnWidth, height: 640)
+        )
+        await settle(hostingView)
+
+        let renderedText = descendants(of: NSTextField.self, in: hostingView).map(\.stringValue)
+        XCTAssertFalse(
+            renderedText.contains("Pointer"),
+            "The Behavior selector already communicates the selected mode"
+        )
+    }
+
     func testPointerTrackingToggleReflectsDefaultsAndLegacyBindingAtRadiusZero() async throws {
         let defaultView = PadConfigurationView(
             side: .right,
@@ -760,6 +817,63 @@ final class MenuViewPresentationTests: XCTestCase {
         _ = await session.stop()
     }
 
+    func testResolvedStatusCompactsButRetainsAccessibleIdentityAndValue() {
+        let compactCell = StatusCell(
+            title: "Access",
+            value: LocalizedStringResource("Ready"),
+            systemImage: "checkmark.shield.fill",
+            state: .ready,
+            isCompact: true,
+            identifier: "access"
+        )
+        let compact = NSHostingView(rootView: compactCell)
+        compact.frame = NSRect(origin: .zero, size: compact.fittingSize)
+        compact.layoutSubtreeIfNeeded()
+
+        let detailed = NSHostingView(
+            rootView: StatusCell(
+                title: "Access",
+                value: LocalizedStringResource("Needed"),
+                systemImage: "exclamationmark.shield",
+                state: .problem,
+                identifier: "access-detailed"
+            )
+        )
+        detailed.frame = NSRect(origin: .zero, size: detailed.fittingSize)
+        detailed.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(compact.fittingSize.height, PaddrStyle.Metrics.statusPill, accuracy: 0.5)
+        XCTAssertGreaterThanOrEqual(compact.fittingSize.width, PaddrStyle.Metrics.statusPill)
+        XCTAssertLessThan(compact.fittingSize.width, detailed.fittingSize.width)
+
+        XCTAssertEqual(compactCell.accessibilityLabelText, "Access")
+        XCTAssertEqual(compactCell.accessibilityValueText, "Ready")
+    }
+
+    func testBatteryStatusNeverCompactsItsPercentage() {
+        let compactSuccess = NSHostingView(
+            rootView: StatusCell(
+                title: "Controller",
+                value: LocalizedStringResource("Connected"),
+                systemImage: "gamecontroller.fill",
+                state: .ready,
+                isCompact: true
+            )
+        )
+        let battery = NSHostingView(
+            rootView: StatusCell(
+                title: "Battery",
+                value: String("60%"),
+                systemImage: "battery.50percent",
+                state: .ready,
+                accessibilityValue: "Level 60%, Discharging"
+            )
+        )
+
+        XCTAssertGreaterThan(battery.fittingSize.width, compactSuccess.fittingSize.width)
+        XCTAssertEqual(battery.fittingSize.height, PaddrStyle.Metrics.statusPill, accuracy: 0.5)
+    }
+
     func testWidestStatusPayloadsWrapInsideMinimumBarContentWidth() {
         let contentWidth = PaddrStyle.Metrics.minimumWindowSize.width
             - (2 * PaddrStyle.Metrics.outerSpacing)
@@ -808,7 +922,7 @@ final class MenuViewPresentationTests: XCTestCase {
         )
         XCTAssertGreaterThanOrEqual(
             hostingView.fittingSize.height,
-            (2 * PaddrStyle.Metrics.row) + PaddrStyle.Spacing.s2,
+            (2 * PaddrStyle.Metrics.statusPill) + PaddrStyle.Spacing.s2,
             "Larger status pills should wrap as whole controls at the minimum width"
         )
     }
@@ -932,7 +1046,7 @@ final class MenuViewPresentationTests: XCTestCase {
         )
         window.title = "Paddr"
         window.titleVisibility = .visible
-        window.toolbarStyle = .unifiedCompact
+        window.toolbarStyle = .unified
         window.collectionBehavior.insert(.fullScreenNone)
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false

@@ -26,15 +26,6 @@ struct PadConfigurationView: View {
         )
     }
 
-    private var summary: LocalizedStringResource {
-        switch configuration.mode {
-        case .disabled: "Off"
-        case .mouse: "Pointer"
-        case .scroll: "Scroll"
-        case .dpad: configuration.zoneLayout.displayName
-        }
-    }
-
     private var settingsTitle: LocalizedStringResource {
         switch configuration.mode {
         case .disabled: "Trackpad off"
@@ -46,19 +37,9 @@ struct PadConfigurationView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
-            HStack(spacing: PaddrStyle.Spacing.s2) {
-                Text(title)
-                    .paddrTypography(.cardTitle)
-                    .foregroundStyle(PaddrStyle.textPrimary)
-                Spacer()
-                Label(summary, systemImage: configuration.mode == .disabled ? "pause.circle" : "checkmark.circle.fill")
-                    .paddrTypography(.caption)
-                    .foregroundStyle(
-                        configuration.mode == .disabled
-                            ? PaddrStyle.textTertiary
-                            : PaddrStyle.accentText
-                    )
-            }
+            Text(title)
+                .paddrTypography(.cardTitle)
+                .foregroundStyle(PaddrStyle.textPrimary)
 
             HStack(spacing: PaddrStyle.Spacing.s2) {
                 Text("Behavior")

@@ -9,6 +9,7 @@ struct StatusCell: View {
     let title: LocalizedStringResource
     let systemImage: String
     let state: StatusBadgeState
+    let isCompact: Bool
     private let identifier: String
     private let value: Value
     private let explicitAccessibilityValue: String?
@@ -18,12 +19,14 @@ struct StatusCell: View {
         value: LocalizedStringResource,
         systemImage: String,
         state: StatusBadgeState,
+        isCompact: Bool = false,
         identifier: String = "status"
     ) {
         self.title = title
         self.value = .localized(value)
         self.systemImage = systemImage
         self.state = state
+        self.isCompact = isCompact
         self.identifier = identifier
         explicitAccessibilityValue = nil
     }
@@ -34,12 +37,14 @@ struct StatusCell: View {
         systemImage: String,
         state: StatusBadgeState,
         accessibilityValue: String? = nil,
+        isCompact: Bool = false,
         identifier: String = "status"
     ) {
         self.title = title
         self.value = .verbatim(value)
         self.systemImage = systemImage
         self.state = state
+        self.isCompact = isCompact
         self.identifier = identifier
         explicitAccessibilityValue = accessibilityValue
     }
@@ -57,19 +62,27 @@ struct StatusCell: View {
                 .symbolRenderingMode(.hierarchical)
                 .accessibilityHidden(true)
 
-            HStack(spacing: PaddrStyle.Spacing.s2) {
-                Text(title)
-                    .paddrTypography(.rowLabel)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                valueText
-                    .paddrTypography(.value)
-                    .foregroundStyle(state.textColor)
-                    .lineLimit(1)
+            if !isCompact {
+                HStack(spacing: PaddrStyle.Spacing.s2) {
+                    Text(title)
+                        .paddrTypography(.rowLabel)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    valueText
+                        .paddrTypography(.value)
+                        .foregroundStyle(state.textColor)
+                        .lineLimit(1)
+                }
             }
         }
-        .padding(.horizontal, PaddrStyle.Inset.control)
-        .frame(minHeight: PaddrStyle.Metrics.row)
+        .padding(
+            .horizontal,
+            isCompact ? PaddrStyle.Spacing.s2 : PaddrStyle.Inset.control
+        )
+        .frame(
+            minWidth: isCompact ? PaddrStyle.Metrics.statusPill : nil,
+            minHeight: PaddrStyle.Metrics.statusPill
+        )
         .background(
             state.color.opacity(0.12),
             in: .rect(cornerRadius: PaddrStyle.Radius.control)
@@ -84,6 +97,7 @@ struct StatusCell: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
         .accessibilityValue(accessibilityValue)
+        .help(helpText)
         .paddrAccessibilityID("status", identifier)
     }
 
@@ -101,6 +115,23 @@ struct StatusCell: View {
         switch value {
         case let .localized(resource): return Text(resource)
         case let .verbatim(string): return Text(verbatim: string)
+        }
+    }
+
+    private var helpText: Text {
+        Text("\(accessibilityLabelText): \(accessibilityValueText)")
+    }
+
+    var accessibilityLabelText: String { String(localized: title) }
+
+    var accessibilityValueText: String {
+        if let explicitAccessibilityValue {
+            explicitAccessibilityValue
+        } else {
+            switch self.value {
+            case let .localized(resource): String(localized: resource)
+            case let .verbatim(string): string
+            }
         }
     }
 }

@@ -11,6 +11,7 @@ final class BatteryStatusPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.accessibilityValue, "Status unavailable")
         XCTAssertEqual(presentation.menuLevel, "Battery level: —")
         XCTAssertEqual(presentation.menuChargeState, "Charge state: —")
+        XCTAssertEqual(presentation.levelBand, .unavailable)
     }
 
     func testChargingPresentationIncludesCompactPercentAndAccessibleChargeState() {
@@ -23,6 +24,26 @@ final class BatteryStatusPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.accessibilityValue, "Level 82%, Charging")
         XCTAssertEqual(presentation.menuLevel, "Battery level: 82%")
         XCTAssertEqual(presentation.menuChargeState, "Charge state: Charging")
+        XCTAssertEqual(presentation.levelBand, .healthy)
+    }
+
+    func testLevelBandsUseExactStatusStripBoundaries() {
+        let cases: [(UInt8, BatteryLevelBand)] = [
+            (0, .critical),
+            (19, .critical),
+            (20, .low),
+            (59, .low),
+            (60, .healthy),
+            (100, .healthy)
+        ]
+
+        for (percentage, expectedBand) in cases {
+            let presentation = BatteryStatusPresentation(
+                status: .init(chargeState: .discharging, percentage: percentage)
+            )
+            XCTAssertEqual(presentation.levelBand, expectedBand, "Unexpected band at \(percentage)%")
+            XCTAssertEqual(presentation.compactValue, "\(percentage)%")
+        }
     }
 
     func testLevelGlyphsAndKnownAndUnknownMenuStates() {

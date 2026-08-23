@@ -4,6 +4,7 @@ enum StatusBadgeState {
     case active
     case ready
     case problem
+    case critical
     case neutral
 
     /// Icon and background-tint color.
@@ -12,6 +13,7 @@ enum StatusBadgeState {
         case .active: PaddrStyle.active
         case .ready: PaddrStyle.successGreen
         case .problem: PaddrStyle.cautionAmber
+        case .critical: PaddrStyle.errorText
         case .neutral: PaddrStyle.textTertiary
         }
     }
@@ -22,6 +24,7 @@ enum StatusBadgeState {
         case .active: PaddrStyle.activeText
         case .ready: PaddrStyle.activeText
         case .problem: PaddrStyle.warningText
+        case .critical: PaddrStyle.errorText
         case .neutral: PaddrStyle.textTertiary
         }
     }

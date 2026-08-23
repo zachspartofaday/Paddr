@@ -1,20 +1,50 @@
 import PaddrAppSupport
 import SwiftUI
 
+enum PaddrStatusKind: String, CaseIterable, Identifiable {
+    case access
+    case puck
+    case controller
+    case output
+    case battery
+
+    var id: Self { self }
+}
+
 struct ApplyBarView: View {
     @Bindable var model: PaddrMenuModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var availableWidth: CGFloat = 0
 
     private var outputValue: LocalizedStringResource {
-        if model.isRunning { return "Active" }
-        if model.isReleasingOutput { return "Releasing" }
-        if model.isEnabled { return "Waiting" }
-        return "Idle"
+        switch model.readiness.output {
+        case .active: "Active"
+        case .releasing: "Releasing"
+        case .waiting: "Waiting"
+        case .idle: "Idle"
+        }
+    }
+
+    private var outputSystemImage: String {
+        switch model.readiness.output {
+        case .active: "wave.3.right.circle.fill"
+        case .releasing: "arrow.down.circle"
+        case .waiting: "hourglass.circle"
+        case .idle: "pause.circle"
+        }
     }
 
     private var batteryPresentation: BatteryStatusPresentation {
         BatteryStatusPresentation(status: model.batteryStatus)
+    }
+
+    private var batteryState: StatusBadgeState {
+        switch batteryPresentation.levelBand {
+        case .unavailable: .neutral
+        case .critical: .critical
+        case .low: .problem
+        case .healthy: .ready
+        }
     }
 
     var body: some View {
@@ -114,52 +144,71 @@ struct ApplyBarView: View {
     }
 
     @ViewBuilder private var statusCells: some View {
-        StatusCell(
-            title: LocalizedStringResource("Puck"),
-            value: model.receiverDescription != nil
-                ? LocalizedStringResource("Connected")
-                : LocalizedStringResource("Not found"),
-            systemImage: model.receiverDescription != nil
-                ? "cable.connector"
-                : "cable.connector.slash",
-            state: model.receiverDescription != nil ? .ready : .problem,
-            identifier: "puck"
-        )
-        StatusCell(
-            title: LocalizedStringResource("Controller"),
-            value: model.controllerConnected
-                ? LocalizedStringResource("Connected")
-                : LocalizedStringResource("Not found"),
-            systemImage: model.controllerConnected ? "gamecontroller.fill" : "gamecontroller",
-            state: model.controllerConnected ? .ready : .problem,
-            identifier: "controller"
-        )
-        StatusCell(
-            title: LocalizedStringResource("Battery"),
-            value: batteryPresentation.compactValue,
-            systemImage: batteryPresentation.systemImage,
-            state: .neutral,
-            accessibilityValue: batteryPresentation.accessibilityValue,
-            identifier: "battery"
-        )
-        StatusCell(
-            title: LocalizedStringResource("Output"),
-            value: outputValue,
-            systemImage: model.isRunning
-                ? "wave.3.right.circle.fill"
-                : (model.isEnabled ? "hourglass.circle" : "pause.circle"),
-            state: model.isRunning ? .active : .neutral,
-            identifier: "output"
-        )
-        StatusCell(
-            title: LocalizedStringResource("Access"),
-            value: model.hasSystemAccess
-                ? LocalizedStringResource("Ready")
-                : LocalizedStringResource("Needed"),
-            systemImage: model.hasSystemAccess ? "checkmark.shield.fill" : "exclamationmark.shield",
-            state: model.hasSystemAccess ? .ready : .problem,
-            identifier: "access"
-        )
+        ForEach(PaddrStatusKind.allCases) { statusCell(for: $0) }
+    }
+
+    @ViewBuilder private func statusCell(for kind: PaddrStatusKind) -> some View {
+        switch kind {
+        case .access:
+            let isReady = model.readiness.access == .ready
+            StatusCell(
+                title: LocalizedStringResource("Access"),
+                value: isReady
+                    ? LocalizedStringResource("Ready")
+                    : LocalizedStringResource("Needed"),
+                systemImage: isReady
+                    ? "checkmark.shield.fill"
+                    : "exclamationmark.shield",
+                state: isReady ? .ready : .problem,
+                isCompact: isReady,
+                identifier: "access"
+            )
+        case .puck:
+            let isReady = model.readiness.puck == .connected
+            StatusCell(
+                title: LocalizedStringResource("Puck"),
+                value: isReady
+                    ? LocalizedStringResource("Connected")
+                    : LocalizedStringResource("Not found"),
+                systemImage: isReady
+                    ? "cable.connector"
+                    : "cable.connector.slash",
+                state: isReady ? .ready : .problem,
+                isCompact: isReady,
+                identifier: "puck"
+            )
+        case .controller:
+            let isReady = model.readiness.controller == .connected
+            StatusCell(
+                title: LocalizedStringResource("Controller"),
+                value: isReady
+                    ? LocalizedStringResource("Connected")
+                    : LocalizedStringResource("Not found"),
+                systemImage: isReady ? "gamecontroller.fill" : "gamecontroller",
+                state: isReady ? .ready : .problem,
+                isCompact: isReady,
+                identifier: "controller"
+            )
+        case .output:
+            let isReady = model.readiness.output == .active
+            StatusCell(
+                title: LocalizedStringResource("Output"),
+                value: outputValue,
+                systemImage: outputSystemImage,
+                state: isReady ? .active : .neutral,
+                isCompact: isReady,
+                identifier: "output"
+            )
+        case .battery:
+            StatusCell(
+                title: LocalizedStringResource("Battery"),
+                value: batteryPresentation.compactValue,
+                systemImage: batteryPresentation.systemImage,
+                state: batteryState,
+                accessibilityValue: batteryPresentation.accessibilityValue,
+                identifier: "battery"
+            )
+        }
     }
 
 }

@@ -67,6 +67,8 @@ enum PaddrStyle {
     enum Metrics {
         static let controlHeight: CGFloat = 38
         static let row = controlHeight
+        /// Compact status feedback stays subordinate to the editor controls.
+        static let statusPill: CGFloat = 32
         /// `row` plus a `Spacing.s2` inset above and below.
         static let commandBar: CGFloat = 54
 

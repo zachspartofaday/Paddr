@@ -153,6 +153,17 @@ final class FamilyConsoleContrastTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(readyText.contrastRatio(with: background), 4.5)
     }
 
+    func testCriticalStatusUsesErrorSemantic() throws {
+        let critical = try resolved(StatusBadgeState.critical.color)
+        let criticalText = try resolved(StatusBadgeState.critical.textColor)
+        let errorTone = try resolved(PaddrStyle.errorText)
+        let background = try resolved(PaddrStyle.night1)
+
+        assertEqual(critical, errorTone)
+        assertEqual(criticalText, errorTone)
+        XCTAssertGreaterThanOrEqual(criticalText.contrastRatio(with: background), 4.5)
+    }
+
     private func resolved(
         _ color: Color,
         file: StaticString = #filePath,

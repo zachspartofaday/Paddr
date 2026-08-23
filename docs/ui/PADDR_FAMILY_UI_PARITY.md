@@ -71,7 +71,7 @@ means the authority expressly withholds it from the MIT grant.
 | `SCMenuSelector` | **Adapted only as menu chrome:** native Paddr `Picker` and `Menu` controls use `paddrMenuSelector()`. |
 | `SCPanelSection` | **Adapted:** `PaddrSectionContainer` and `PaddrSettingsGroup`; Paddr does not adopt the reference persistence behavior. |
 | `SCContextHelpCard` | **Adapted as tone/surface presentation:** `PermissionTile`; permission state and actions remain Paddr-owned. |
-| `SCWindowConfigurator` | **Adapted only as the window geometry contract:** `PaddrStyle.Metrics`. Paddr's `AppDelegate` adds product-local full-size, transparent, separatorless family chrome while retaining visible titles, its unified-compact configuration toolbar, usable-layout sizing, activation, and window lifecycle behavior. Legacy v4 autosaved geometry migrates once to the full-size v5 contract without losing its usable size or top-edge position; content scrolls within the user-managed window instead of resizing it to the document. |
+| `SCWindowConfigurator` | **Adapted only as the window geometry contract:** `PaddrStyle.Metrics`. Paddr's `AppDelegate` adds product-local full-size, transparent, separatorless family chrome while retaining visible titles, its regular unified configuration toolbar, usable-layout sizing, activation, and window lifecycle behavior. Legacy v4 and compact-titlebar v5 autosaved geometry migrates to the full-size v6 contract without losing usable size or top-edge position; content scrolls within the user-managed window instead of resizing it to the document. |
 
 ### `SCMapprAccessibility.swift`
 
@@ -127,9 +127,11 @@ editor subtrees during reflow.
 | control height / radius | `38` / `7` points |
 | reference content width / outer spacing | `820` / `24` points; Paddr retains the outer spacing |
 | Paddr default usable window / content width | `1280 × 700` / `1232` points; product-local width keeps both nested pad editors in columns |
+| configuration titlebar | native regular unified style; 15-point AppKit title, transparent background, no separator; compact v5 frames migrate to v6 without losing usable height or their top edge |
 | card / inset-panel content margin | `16` / `16` points; the card modifier and section container own these insets |
 | sibling-card / row / inline-control gap | `16` / `12` / `8` points |
 | preview–inspector gutter | `24` points |
+| status-pill minimum height / horizontal inset | `32` / `12` points; resolved icon-only pills use an 8-point inset |
 
 Paddr keeps the canonical palette, control sizing, and outer spacing intact. Its Paddr-local
 native type ladder is 22-point page title, 17-point card title, 15-point section title,
@@ -168,8 +170,12 @@ claims of BottleRocket token parity:
   no stateful editor or control closure is duplicated under `ViewThatFits`. Accessibility
   text sizes stack both editor and preview/inspector splits even at wide regular-text widths,
   so fixed native controls never compete with scaled labels.
-- Every status uses text and an SF Symbol as well as color. Labels and values share the native
-  callout size, with distinct title-to-value spacing and 12-point side padding. Status pills
+- Statuses are ordered Access, Puck, Controller, Output, and Battery. Resolved non-battery
+  statuses compact to a green symbol-only pill while preserving their full accessibility label,
+  value, and help text; unresolved statuses retain visible text. Battery always retains its
+  percentage and uses healthy green at 60% or higher, caution amber from 20–59%, critical red
+  below 20%, and neutral styling when unavailable. Detailed labels and values share the native
+  callout size, with distinct title-to-value spacing and 12-point side padding. The 32-point pills
   wrap as whole controls rather than shrinking at narrow widths or Accessibility text sizes. Increased Contrast,
   Differentiate Without Color, Reduce Transparency, and Reduce Motion are resolved by
   `PaddrAppearance`.

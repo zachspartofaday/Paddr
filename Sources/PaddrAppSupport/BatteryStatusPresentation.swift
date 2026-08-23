@@ -1,12 +1,20 @@
 import Foundation
 import PaddrCore
 
+public enum BatteryLevelBand: Equatable, Sendable {
+    case unavailable
+    case critical
+    case low
+    case healthy
+}
+
 public struct BatteryStatusPresentation: Equatable, Sendable {
     public let compactValue: String
     public let systemImage: String
     public let accessibilityValue: String
     public let menuLevel: String
     public let menuChargeState: String
+    public let levelBand: BatteryLevelBand
 
     public init(status: ControllerBatteryStatus?) {
         guard let status else {
@@ -15,6 +23,7 @@ public struct BatteryStatusPresentation: Equatable, Sendable {
             accessibilityValue = String(localized: "Status unavailable")
             menuLevel = String(localized: "Battery level: —")
             menuChargeState = String(localized: "Charge state: —")
+            levelBand = .unavailable
             return
         }
 
@@ -30,6 +39,11 @@ public struct BatteryStatusPresentation: Equatable, Sendable {
         accessibilityValue = String(localized: "Level \(percentageText), \(chargeStateText)")
         menuLevel = String(localized: "Battery level: \(percentageText)")
         menuChargeState = String(localized: "Charge state: \(chargeStateText)")
+        levelBand = switch percentage {
+        case ..<20: .critical
+        case ..<60: .low
+        default: .healthy
+        }
     }
 
     private static func chargeStateText(_ state: ControllerBatteryChargeState) -> String {

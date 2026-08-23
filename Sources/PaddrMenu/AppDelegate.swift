@@ -59,6 +59,30 @@ enum PaddrFamilyWindowChrome {
         }
     }
 
+    /// Restores a physical frame written under a different toolbar style without silently
+    /// changing the usable layout size or the saved top edge.
+    @discardableResult
+    static func migrateAutosavedFrame(
+        usingName name: String,
+        from sourceStyle: NSWindow.ToolbarStyle,
+        to targetStyle: NSWindow.ToolbarStyle,
+        for window: NSWindow
+    ) -> Bool {
+        window.toolbarStyle = sourceStyle
+        guard window.setFrameUsingName(name) else {
+            window.toolbarStyle = targetStyle
+            return false
+        }
+
+        window.contentView?.layoutSubtreeIfNeeded()
+        let usableSize = window.contentLayoutRect.size
+        let topLeft = NSPoint(x: window.frame.minX, y: window.frame.maxY)
+        window.toolbarStyle = targetStyle
+        setUsableLayoutSize(usableSize, for: window)
+        window.setFrameTopLeftPoint(topLeft)
+        return true
+    }
+
     private static func contentSize(
         forUsableLayoutSize size: NSSize,
         in window: NSWindow
@@ -515,7 +539,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         window.title = String(localized: "Paddr")
         window.appearance = NSAppearance(named: .darkAqua)
         window.titleVisibility = .visible
-        window.toolbarStyle = .unifiedCompact
+        // The regular unified titlebar keeps native window semantics and uses AppKit's
+        // 15-point title treatment instead of the compact style's 13-point treatment.
+        window.toolbarStyle = .unified
         window.collectionBehavior.insert(.fullScreenNone)
         window.standardWindowButton(.zoomButton)?.isEnabled = false
         window.tabbingMode = .disallowed
@@ -525,10 +551,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             rootView: ConfigurationView(model: model)
         )
         PaddrFamilyWindowChrome.apply(to: window)
-        let autosaveName = "PaddrConfigurationWindow.v5"
+        let autosaveName = "PaddrConfigurationWindow.v6"
+        let compactAutosaveName = "PaddrConfigurationWindow.v5"
         let legacyAutosaveName = "PaddrConfigurationWindow.v4"
         if !window.setFrameUsingName(autosaveName) {
-            if window.setFrameUsingName(legacyAutosaveName) {
+            if PaddrFamilyWindowChrome.migrateAutosavedFrame(
+                usingName: compactAutosaveName,
+                from: .unifiedCompact,
+                to: .unified,
+                for: window
+            ) {
+                // Migrated under its original compact titlebar geometry.
+            } else if window.setFrameUsingName(legacyAutosaveName) {
                 let legacyUsableSize = window.contentRect(forFrameRect: window.frame).size
                 PaddrFamilyWindowChrome.setUsableLayoutSize(legacyUsableSize, for: window)
             } else {
