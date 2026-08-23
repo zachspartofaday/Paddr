@@ -7,8 +7,11 @@ output_dir=${OUTPUT_DIR:-"$repo_dir/dist"}
 app_path="$output_dir/Paddr.app"
 zip_path="$output_dir/Paddr.zip"
 digest_path="$zip_path.sha256"
-: "${EXPECTED_VERSION:?Set EXPECTED_VERSION to the intended release version.}"
-: "${EXPECTED_BUILD:?Set EXPECTED_BUILD to the intended release build.}"
+: "${RELEASE_REF:?Set RELEASE_REF to the annotated vX.Y.Z tag being packaged.}"
+release_identity=$("$script_dir/release-identity.sh" "$repo_dir" "$RELEASE_REF")
+expected_version=$(printf '%s\n' "$release_identity" | sed -n '1p')
+expected_build=$(printf '%s\n' "$release_identity" | sed -n '2p')
+expected_revision=$(printf '%s\n' "$release_identity" | sed -n '3p')
 architectures=${ARCHITECTURES:-arm64}
 if test "$architectures" != "arm64"; then
     echo "Release packages must be arm64-only; got ARCHITECTURES=$architectures" >&2
@@ -49,10 +52,12 @@ printf '%s\n' "$archive_listing" | grep -qx 'Paddr.app/Contents/MacOS/Paddr'
 )
 
 "$script_dir/verify-release.sh" \
-    "$app_path" "$zip_path" "$digest_path" "$EXPECTED_VERSION" "$EXPECTED_BUILD"
-"$script_dir/test-release-package.sh" "$output_dir" "$EXPECTED_VERSION" "$EXPECTED_BUILD"
+    "$app_path" "$zip_path" "$digest_path" \
+    "$expected_version" "$expected_build" "$expected_revision"
+"$script_dir/test-release-package.sh" \
+    "$output_dir" "$expected_version" "$expected_build" "$expected_revision"
 
 actual_digest=$(awk '{print $1}' "$digest_path")
 
-echo "Packaged Paddr $EXPECTED_VERSION ($EXPECTED_BUILD): $zip_path"
+echo "Packaged Paddr $expected_version ($expected_build), revision $expected_revision: $zip_path"
 echo "SHA-256: $actual_digest"

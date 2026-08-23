@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-if test "$#" -ne 5; then
-    echo "Usage: $0 APP_PATH ZIP_PATH DIGEST_PATH EXPECTED_VERSION EXPECTED_BUILD" >&2
+if test "$#" -ne 6; then
+    echo "Usage: $0 APP_PATH ZIP_PATH DIGEST_PATH EXPECTED_VERSION EXPECTED_BUILD EXPECTED_REVISION" >&2
     exit 2
 fi
 
@@ -11,6 +11,7 @@ zip_path=$2
 digest_path=$3
 expected_version=$4
 expected_build=$5
+expected_revision=$6
 expected_architectures=arm64
 temporary_root=${TMPDIR:-/tmp}
 extract_dir=$(mktemp -d "$temporary_root/paddr-verify.XXXXXX")
@@ -39,6 +40,8 @@ verify_app() {
     fi
     test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$expected_version"
     test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")" = "$expected_build"
+    test "$(/usr/libexec/PlistBuddy -c 'Print :PaddrSourceRevision' "$plist")" = "$expected_revision"
+    test "$(/usr/libexec/PlistBuddy -c 'Print :PaddrSourceDirty' "$plist")" = "false"
     test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")" = "com.partofaday.Paddr"
     test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$plist")" = "26.0"
 
@@ -107,4 +110,4 @@ if ! diff -qr "$app_path" "$extracted_app" >/dev/null; then
     exit 1
 fi
 
-echo "Verified Paddr $expected_version ($expected_build)."
+echo "Verified Paddr $expected_version ($expected_build), revision $expected_revision."

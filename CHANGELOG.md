@@ -2,6 +2,12 @@
 
 User-visible changes to Paddr are recorded here. Release entries describe confirmed behavior at the time of each release; later entries may supersede earlier limitations.
 
+## 0.11.0 — In development
+
+- Local and release app bundles now record their exact Git source revision and tracked-dirty state.
+- Release packaging requires a clean checkout at an annotated version tag and verifies that the
+  tag, source plist, staged app, archive, version, build, and source revision agree.
+
 ## Unreleased
 
 - Superseded the 0.9.11 **Center tap radius** known issue ([#50](https://github.com/zachspartofaday/Paddr/issues/50)): Pointer mode can now track across the full pad while the radius continues to define the tap area. Each pad has a **Track pointer inside tap radius** switch for choosing full-pad tracking or the former coupled tracking dead zone. Fresh profile stores and newly created configurations use full-pad tracking; existing canonical and raw configurations preserve coupled behavior until changed, including the built-in Default synthesized for an existing canonical document. Duplicating Default preserves that source document’s behavior.

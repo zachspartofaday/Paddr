@@ -8,6 +8,12 @@ app_path="$output_dir/Paddr.app"
 sign_identity=${SIGN_IDENTITY:--}
 architectures=${ARCHITECTURES:-arm64}
 build_scratch_path=${BUILD_SCRATCH_PATH:-}
+source_revision=$(git -C "$repo_dir" rev-parse HEAD)
+source_dirty=false
+if ! git -C "$repo_dir" diff --quiet --ignore-submodules -- ||
+   ! git -C "$repo_dir" diff --cached --quiet --ignore-submodules --; then
+    source_dirty=true
+fi
 
 case "$app_path" in
     "$repo_dir"/dist/Paddr.app|"$output_dir"/Paddr.app) ;;
@@ -39,6 +45,8 @@ build_dir=$(swift build "$@" --show-bin-path)
 
 mkdir -p "$contents_path/MacOS" "$contents_path/Resources"
 cp "$repo_dir/Packaging/Info.plist" "$contents_path/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :PaddrSourceRevision string $source_revision" "$contents_path/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :PaddrSourceDirty bool $source_dirty" "$contents_path/Info.plist"
 cp "$build_dir/Paddr" "$binary_path"
 chmod 755 "$binary_path"
 
@@ -77,8 +85,10 @@ else
     exit 1
 fi
 
+if test "$source_dirty" = true; then source_state=dirty; else source_state=clean; fi
 echo "Built $app_path"
 echo "Architectures: $(lipo -archs "$app_path/Contents/MacOS/Paddr")"
+echo "Source: $source_revision ($source_state)"
 if [ "$sign_identity" = "-" ]; then
     echo "Signing: ad hoc (local testing only)"
 else

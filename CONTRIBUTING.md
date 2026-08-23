@@ -14,7 +14,8 @@ For controller or compatibility bugs, include:
 
 - the macOS version and build;
 - whether the controller is connected through the puck, Bluetooth, or USB;
-- the Paddr version and whether it is ad-hoc signed, Developer ID signed, or locally built;
+- the Paddr version, build, source revision, and whether it is ad-hoc signed, Developer ID signed,
+  or locally built;
 - the trackpad mode and relevant bindings; and
 - concise steps that reproduce the problem.
 
@@ -39,6 +40,7 @@ scripts/check-localization.sh
 swift build -c release -Xswiftc -warnings-as-errors --arch arm64
 swift build -c release -Xswiftc -warnings-as-errors --arch arm64 --product PaddrCLI
 scripts/test-cli.sh "$(swift build -c release --arch arm64 --show-bin-path)/PaddrCLI"
+scripts/test-release-identity.sh
 ```
 
 To assemble a local ad-hoc app without touching the repository's `dist` directory:

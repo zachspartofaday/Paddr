@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-if test "$#" -ne 3; then
-    echo "Usage: $0 OUTPUT_DIR EXPECTED_VERSION EXPECTED_BUILD" >&2
+if test "$#" -ne 4; then
+    echo "Usage: $0 OUTPUT_DIR EXPECTED_VERSION EXPECTED_BUILD EXPECTED_REVISION" >&2
     exit 2
 fi
 
@@ -10,6 +10,7 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 output_dir=$1
 expected_version=$2
 expected_build=$3
+expected_revision=$4
 app_path="$output_dir/Paddr.app"
 zip_path="$output_dir/Paddr.zip"
 digest_path="$output_dir/Paddr.zip.sha256"
@@ -25,19 +26,26 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 "$script_dir/verify-release.sh" \
-    "$app_path" "$zip_path" "$digest_path" "$expected_version" "$expected_build"
+    "$app_path" "$zip_path" "$digest_path" "$expected_version" "$expected_build" "$expected_revision"
 
 if "$script_dir/verify-release.sh" \
-    "$app_path" "$zip_path" "$digest_path" "wrong-$expected_version" "$expected_build" \
+    "$app_path" "$zip_path" "$digest_path" "wrong-$expected_version" "$expected_build" "$expected_revision" \
     >/dev/null 2>&1; then
     echo "Release verification accepted an incorrect version." >&2
     exit 1
 fi
 
 if "$script_dir/verify-release.sh" \
-    "$app_path" "$zip_path" "$digest_path" "$expected_version" "wrong-$expected_build" \
+    "$app_path" "$zip_path" "$digest_path" "$expected_version" "wrong-$expected_build" "$expected_revision" \
     >/dev/null 2>&1; then
     echo "Release verification accepted an incorrect build." >&2
+    exit 1
+fi
+
+if "$script_dir/verify-release.sh" \
+    "$app_path" "$zip_path" "$digest_path" "$expected_version" "$expected_build" \
+    "0000000000000000000000000000000000000000" >/dev/null 2>&1; then
+    echo "Release verification accepted an incorrect source revision." >&2
     exit 1
 fi
 
@@ -49,7 +57,7 @@ cp "$zip_path" "$digest_path" "$recipient_dir/"
 
 "$script_dir/verify-release.sh" \
     "$app_path" "$recipient_dir/Paddr.zip" "$recipient_dir/Paddr.zip.sha256" \
-    "$expected_version" "$expected_build"
+    "$expected_version" "$expected_build" "$expected_revision"
 
 tampered_dir="$recipient_dir/tampered"
 tampered_stage="$recipient_dir/tampered-stage/Paddr.app/Contents/MacOS"
@@ -62,7 +70,7 @@ ditto -c -k --keepParent --norsrc "$recipient_dir/tampered-stage/Paddr.app" "$ta
 )
 if "$script_dir/verify-release.sh" \
     "$app_path" "$tampered_dir/Paddr.zip" "$tampered_dir/Paddr.zip.sha256" \
-    "$expected_version" "$expected_build" >/dev/null 2>&1; then
+    "$expected_version" "$expected_build" "$expected_revision" >/dev/null 2>&1; then
     echo "Release verification accepted a tampered archive." >&2
     exit 1
 fi
@@ -78,7 +86,7 @@ cp "$tampered_dir/Paddr.zip" "$cross_directory_digest/Paddr.zip"
 )
 if "$script_dir/verify-release.sh" \
     "$app_path" "$cross_directory_supplied/Paddr.zip" "$cross_directory_digest/Paddr.zip.sha256" \
-    "$expected_version" "$expected_build" >/dev/null 2>&1; then
+    "$expected_version" "$expected_build" "$expected_revision" >/dev/null 2>&1; then
     echo "Release verification accepted an archive with a mismatched digest." >&2
     exit 1
 fi
@@ -94,7 +102,7 @@ cp "$zip_path" "$cross_directory_match_digest/Paddr.zip"
 )
 "$script_dir/verify-release.sh" \
     "$app_path" "$cross_directory_match_supplied/Paddr.zip" "$cross_directory_match_digest/Paddr.zip.sha256" \
-    "$expected_version" "$expected_build"
+    "$expected_version" "$expected_build" "$expected_revision"
 
 uppercase_digest_dir="$recipient_dir/uppercase-digest"
 mkdir -p "$uppercase_digest_dir"
@@ -106,7 +114,7 @@ cp "$zip_path" "$uppercase_digest_dir/Paddr.zip"
 )
 "$script_dir/verify-release.sh" \
     "$app_path" "$uppercase_digest_dir/Paddr.zip" "$uppercase_digest_dir/Paddr.zip.sha256" \
-    "$expected_version" "$expected_build"
+    "$expected_version" "$expected_build" "$expected_revision"
 
 nonexecutable_dir="$recipient_dir/nonexecutable"
 nonexecutable_stage="$recipient_dir/nonexecutable-stage"
@@ -121,7 +129,7 @@ ditto -c -k --keepParent --norsrc \
 )
 if "$script_dir/verify-release.sh" \
     "$app_path" "$nonexecutable_dir/Paddr.zip" "$nonexecutable_dir/Paddr.zip.sha256" \
-    "$expected_version" "$expected_build" >/dev/null 2>&1; then
+    "$expected_version" "$expected_build" "$expected_revision" >/dev/null 2>&1; then
     echo "Release verification accepted a non-executable app binary." >&2
     exit 1
 fi
