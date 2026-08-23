@@ -20,33 +20,38 @@ git -C "$fixture" config user.name "Paddr release identity test"
 git -C "$fixture" config user.email "paddr-release-test@example.invalid"
 git -C "$fixture" add Packaging/Info.plist
 git -C "$fixture" commit -qm "Release fixture"
-git -C "$fixture" tag -a v0.11.0 -m "Release fixture"
+fixture_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+    "$fixture/Packaging/Info.plist")
+fixture_build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' \
+    "$fixture/Packaging/Info.plist")
+release_ref="v$fixture_version"
+git -C "$fixture" tag -a "$release_ref" -m "Release fixture"
 
-identity=$("$script_dir/release-identity.sh" "$fixture" v0.11.0)
-test "$(printf '%s\n' "$identity" | sed -n '1p')" = "0.11.0"
-test "$(printf '%s\n' "$identity" | sed -n '2p')" = "16"
+identity=$("$script_dir/release-identity.sh" "$fixture" "$release_ref")
+test "$(printf '%s\n' "$identity" | sed -n '1p')" = "$fixture_version"
+test "$(printf '%s\n' "$identity" | sed -n '2p')" = "$fixture_build"
 test "$(printf '%s\n' "$identity" | sed -n '3p')" = "$(git -C "$fixture" rev-parse HEAD)"
 
 printf '%s\n' "tracked change" >> "$fixture/Packaging/Info.plist"
-if "$script_dir/release-identity.sh" "$fixture" v0.11.0 >/dev/null 2>&1; then
+if "$script_dir/release-identity.sh" "$fixture" "$release_ref" >/dev/null 2>&1; then
     echo "Release identity accepted tracked dirty source." >&2
     exit 1
 fi
 git -C "$fixture" restore Packaging/Info.plist
 
-git -C "$fixture" tag v0.11.1
-if "$script_dir/release-identity.sh" "$fixture" v0.11.1 >/dev/null 2>&1; then
+git -C "$fixture" tag v999.999.997
+if "$script_dir/release-identity.sh" "$fixture" v999.999.997 >/dev/null 2>&1; then
     echo "Release identity accepted a lightweight tag." >&2
     exit 1
 fi
 
-git -C "$fixture" tag -a v0.11.2 -m "Mismatched release fixture"
-if "$script_dir/release-identity.sh" "$fixture" v0.11.2 >/dev/null 2>&1; then
+git -C "$fixture" tag -a v999.999.998 -m "Mismatched release fixture"
+if "$script_dir/release-identity.sh" "$fixture" v999.999.998 >/dev/null 2>&1; then
     echo "Release identity accepted a tag/source version mismatch." >&2
     exit 1
 fi
 
-if "$script_dir/release-identity.sh" "$fixture" v9.9.9 >/dev/null 2>&1; then
+if "$script_dir/release-identity.sh" "$fixture" v999.999.999 >/dev/null 2>&1; then
     echo "Release identity accepted a missing release tag." >&2
     exit 1
 fi
@@ -54,7 +59,7 @@ fi
 printf '%s\n' "next" > "$fixture/next.txt"
 git -C "$fixture" add next.txt
 git -C "$fixture" commit -qm "Move past release"
-if "$script_dir/release-identity.sh" "$fixture" v0.11.0 >/dev/null 2>&1; then
+if "$script_dir/release-identity.sh" "$fixture" "$release_ref" >/dev/null 2>&1; then
     echo "Release identity accepted HEAD away from the release tag." >&2
     exit 1
 fi
