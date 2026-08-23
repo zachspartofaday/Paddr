@@ -617,7 +617,10 @@ final class MenuModelTests: XCTestCase {
     func testReconnectStartsSessionAndBecomesActive() async {
         let state = readyState(receiver: nil)
         let sleeper = ManualSleeper()
-        let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
+        let session = ScriptedSession(
+            events: [.controllerConnected, .outputArmed],
+            keepsStreamOpen: true
+        )
         let model = PaddrMenuModel(
             dependencies: dependencies(
                 state: state,
@@ -632,12 +635,15 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.status == .waitingForController }
         state.receiver = "Fake puck"
         sleeper.wake()
-        await waitUntil(model: model) { model.isRunning }
+        await waitUntil(model: model) { model.isRunning && model.controllerConnected }
 
         XCTAssertTrue(model.isEnabled)
         XCTAssertTrue(model.controllerConnected)
         let startCount = await session.startCount
         XCTAssertEqual(startCount, 1)
+        model.isEnabled = false
+        await session.stop()
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
     }
 
     func testDisconnectedDraftEditKeepsReconnectLifecycleStatusAuthoritative() async {
