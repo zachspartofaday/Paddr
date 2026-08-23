@@ -2851,7 +2851,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(receiver: "Fake puck")
         let (document, _, _) = try twoProfileDocument()
         state.loadedProfileDocument = document
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
         let session = ManualEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
