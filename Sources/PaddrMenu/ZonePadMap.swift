@@ -48,14 +48,8 @@ struct ZonePadMap: View {
                         )
                         context.stroke(
                             path,
-                            with: .color(
-                                isSelected
-                                    ? PaddrStyle.selectionBoundary
-                                    : appearance.surfaceStroke
-                            ),
-                            lineWidth: isSelected
-                                ? (appearance.hasIncreasedContrast ? 2.25 : 1.75)
-                                : appearance.strokeWidth
+                            with: .color(appearance.surfaceStroke),
+                            lineWidth: appearance.strokeWidth
                         )
                         drawLabel(
                             for: zone,
@@ -63,21 +57,6 @@ struct ZonePadMap: View {
                             in: bounds,
                             appearance: appearance,
                             context: &context
-                        )
-                    }
-
-                    if let neutral = neutralPath(in: bounds) {
-                        context.fill(neutral, with: .color(.black.opacity(0.16)))
-                        context.stroke(
-                            neutral,
-                            with: .color(.secondary.opacity(0.62)),
-                            style: StrokeStyle(lineWidth: 1, dash: [3, 3])
-                        )
-                        context.draw(
-                            Text(verbatim: "○")
-                                .font(.caption.bold())
-                                .foregroundStyle(.secondary),
-                            at: center(in: bounds)
                         )
                     }
                 }
@@ -97,7 +76,40 @@ struct ZonePadMap: View {
                                 ),
                                 lineWidth: appearance.strokeWidth
                             )
+                        Canvas { context, size in
+                            let bounds = CGRect(origin: .zero, size: size)
+                            if layout.zones.contains(selection) {
+                                let lineWidth: CGFloat = appearance.hasIncreasedContrast ? 2.25 : 1.75
+                                let zoneRegion = path(for: selection, in: bounds)
+                                let outlineRegion = ZoneMapGeometry.selectedOutlineRegion(
+                                    for: zoneRegion.cgPath,
+                                    in: bounds,
+                                    cornerRadius: PaddrStyle.Radius.pad,
+                                    lineWidth: lineWidth
+                                )
+                                context.stroke(
+                                    Path(outlineRegion),
+                                    with: .color(PaddrStyle.selectionBoundary),
+                                    lineWidth: lineWidth
+                                )
+                            }
+                            if let neutral = neutralPath(in: bounds) {
+                                context.fill(neutral, with: .color(.black.opacity(0.16)))
+                                context.stroke(
+                                    neutral,
+                                    with: .color(.secondary.opacity(0.62)),
+                                    style: StrokeStyle(lineWidth: 1, dash: [3, 3])
+                                )
+                                context.draw(
+                                    Text(verbatim: "○")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(.secondary),
+                                    at: center(in: bounds)
+                                )
+                            }
+                        }
                     }
+                    .allowsHitTesting(false)
                 }
                 .contentShape(.interaction, .rect(cornerRadius: PaddrStyle.Radius.pad))
                 .contentShape(.focusEffect, .rect(cornerRadius: PaddrStyle.Radius.pad))

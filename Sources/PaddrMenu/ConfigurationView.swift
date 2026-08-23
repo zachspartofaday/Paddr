@@ -36,6 +36,8 @@ struct ConfigurationView: View {
         .tint(PaddrStyle.controlTint)
         .preferredColorScheme(.dark)
         .toolbar {
+            ToolbarSpacer(.flexible)
+
             ToolbarItemGroup(placement: .primaryAction) {
                 Button("Refresh", systemImage: "arrow.clockwise", action: model.refreshStatus)
                     .labelStyle(.iconOnly)

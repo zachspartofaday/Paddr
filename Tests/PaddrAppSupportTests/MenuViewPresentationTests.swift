@@ -50,7 +50,7 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertEqual(window.titlebarSeparatorStyle, .none)
     }
 
-    func testConfigurationWindowMetricsDescribeUsableLayoutWithUnifiedToolbar() {
+    func testConfigurationWindowMetricsDescribeUsableLayoutWithCompactToolbar() {
         let window = makeWindow(hasToolbar: true, usesFullSizeContent: true)
         let delegate = WindowDelegateProbe()
         window.delegate = delegate
@@ -67,8 +67,8 @@ final class MenuViewPresentationTests: XCTestCase {
         window.contentView?.layoutSubtreeIfNeeded()
 
         XCTAssertNotNil(window.toolbar)
-        XCTAssertEqual(window.titleVisibility, .visible)
-        XCTAssertEqual(window.toolbarStyle, .unified)
+        XCTAssertEqual(window.titleVisibility, .hidden)
+        XCTAssertEqual(window.toolbarStyle, .unifiedCompact)
         assertSize(window.contentLayoutRect.size, equals: PaddrStyle.Metrics.defaultWindowSize)
 
         window.setContentSize(window.contentMinSize)
@@ -77,6 +77,46 @@ final class MenuViewPresentationTests: XCTestCase {
         assertSize(window.contentLayoutRect.size, equals: PaddrStyle.Metrics.minimumWindowSize)
         XCTAssertFalse(window.isReleasedWhenClosed)
         XCTAssertTrue(window.delegate === delegate)
+    }
+
+    func testConfigurationTitleIsPlainLeadingAndLargerThanTheNativeCompactTitle() throws {
+        let window = makeWindow(hasToolbar: true, usesFullSizeContent: true)
+        let accessory = try XCTUnwrap(window.titlebarAccessoryViewControllers.first)
+        let label = try XCTUnwrap(
+            descendants(of: NSTextField.self, in: accessory.view).first
+        )
+
+        XCTAssertEqual(window.title, "Paddr")
+        XCTAssertEqual(window.titleVisibility, .hidden)
+        XCTAssertEqual(accessory.layoutAttribute, .leading)
+        XCTAssertEqual(label.stringValue, "Paddr")
+        XCTAssertEqual(label.font?.pointSize, PaddrFamilyWindowChrome.configurationTitlePointSize)
+        XCTAssertFalse(label.isBezeled)
+        XCTAssertFalse(label.drawsBackground)
+        XCTAssertFalse(label.isEditable)
+        XCTAssertFalse(label.isSelectable)
+    }
+
+    func testConfigurationToolbarRetainsFlexibleSpaceBesideTheCustomTitle() async throws {
+        let store = BlockingProfileStore()
+        let model = PaddrMenuModel(dependencies: dependencies(store: store))
+        defer { store.releaseSave() }
+
+        let window = makeWindow(hasToolbar: false, usesFullSizeContent: true)
+        window.contentViewController = NSHostingController(
+            rootView: ConfigurationView(model: model)
+        )
+        PaddrFamilyWindowChrome.installConfigurationTitle(window.title, in: window)
+        for _ in 0..<6 {
+            window.contentView?.layoutSubtreeIfNeeded()
+            await Task.yield()
+        }
+
+        let toolbar = try XCTUnwrap(window.toolbar)
+        XCTAssertTrue(
+            toolbar.items.contains { $0.itemIdentifier == .flexibleSpace },
+            "The flexible spacer keeps Refresh and Trackpad Output at the trailing edge"
+        )
     }
 
     func testGuideWindowMetricsDescribeUsableLayoutWithoutToolbar() {
@@ -137,40 +177,40 @@ final class MenuViewPresentationTests: XCTestCase {
         assertSize(familyWindow.contentLayoutRect.size, equals: legacyUsableSize)
     }
 
-    func testCompactAutosavedFrameMigratesToUnifiedWithoutChangingUsableSizeOrTopEdge() {
-        let autosaveName = "PaddrConfigurationWindow.v5.Tests.\(UUID().uuidString)"
+    func testExpandedAutosavedFrameMigratesToCompactWithoutChangingUsableSizeOrTopEdge() {
+        let autosaveName = "PaddrConfigurationWindow.v6.Tests.\(UUID().uuidString)"
         let expectedUsableSize = NSSize(width: 868, height: 680)
         defer { NSWindow.removeFrame(usingName: autosaveName) }
 
-        let compactWindow = makeWindow(hasToolbar: true, usesFullSizeContent: true)
-        compactWindow.toolbarStyle = .unifiedCompact
-        PaddrFamilyWindowChrome.apply(to: compactWindow)
-        PaddrFamilyWindowChrome.setUsableLayoutSize(expectedUsableSize, for: compactWindow)
-        compactWindow.center()
-        compactWindow.contentView?.layoutSubtreeIfNeeded()
+        let expandedWindow = makeWindow(hasToolbar: true, usesFullSizeContent: true)
+        expandedWindow.toolbarStyle = .unified
+        PaddrFamilyWindowChrome.apply(to: expandedWindow)
+        PaddrFamilyWindowChrome.setUsableLayoutSize(expectedUsableSize, for: expandedWindow)
+        expandedWindow.center()
+        expandedWindow.contentView?.layoutSubtreeIfNeeded()
         let expectedTopLeft = NSPoint(
-            x: compactWindow.frame.minX,
-            y: compactWindow.frame.maxY
+            x: expandedWindow.frame.minX,
+            y: expandedWindow.frame.maxY
         )
-        compactWindow.saveFrame(usingName: autosaveName)
+        expandedWindow.saveFrame(usingName: autosaveName)
 
-        let unifiedWindow = makeWindow(hasToolbar: true, usesFullSizeContent: true)
-        PaddrFamilyWindowChrome.apply(to: unifiedWindow)
+        let compactWindow = makeWindow(hasToolbar: true, usesFullSizeContent: true)
+        PaddrFamilyWindowChrome.apply(to: compactWindow)
 
         XCTAssertTrue(
             PaddrFamilyWindowChrome.migrateAutosavedFrame(
                 usingName: autosaveName,
-                from: .unifiedCompact,
-                to: .unified,
-                for: unifiedWindow
+                from: .unified,
+                to: .unifiedCompact,
+                for: compactWindow
             )
         )
-        unifiedWindow.contentView?.layoutSubtreeIfNeeded()
+        compactWindow.contentView?.layoutSubtreeIfNeeded()
 
-        XCTAssertEqual(unifiedWindow.toolbarStyle, .unified)
-        assertSize(unifiedWindow.contentLayoutRect.size, equals: expectedUsableSize)
-        XCTAssertEqual(unifiedWindow.frame.minX, expectedTopLeft.x, accuracy: 0.5)
-        XCTAssertEqual(unifiedWindow.frame.maxY, expectedTopLeft.y, accuracy: 0.5)
+        XCTAssertEqual(compactWindow.toolbarStyle, .unifiedCompact)
+        assertSize(compactWindow.contentLayoutRect.size, equals: expectedUsableSize)
+        XCTAssertEqual(compactWindow.frame.minX, expectedTopLeft.x, accuracy: 0.5)
+        XCTAssertEqual(compactWindow.frame.maxY, expectedTopLeft.y, accuracy: 0.5)
     }
 
     func testAccessibilityOnboardingPageFitsCompactWindowWithoutScrolling() throws {
@@ -1045,13 +1085,13 @@ final class MenuViewPresentationTests: XCTestCase {
             defer: false
         )
         window.title = "Paddr"
-        window.titleVisibility = .visible
-        window.toolbarStyle = .unified
+        window.toolbarStyle = .unifiedCompact
         window.collectionBehavior.insert(.fullScreenNone)
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
         if hasToolbar {
             window.contentViewController = NSHostingController(rootView: WindowToolbarProbe())
+            PaddrFamilyWindowChrome.installConfigurationTitle(window.title, in: window)
         } else {
             window.contentViewController = NSHostingController(rootView: Color.clear)
         }

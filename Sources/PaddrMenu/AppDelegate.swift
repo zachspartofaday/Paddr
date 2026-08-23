@@ -34,6 +34,8 @@ enum PaddrMenuBarPalette {
 
 @MainActor
 enum PaddrFamilyWindowChrome {
+    static let configurationTitlePointSize: CGFloat = 16
+
     static let styleMask: NSWindow.StyleMask = [
         .titled,
         .closable,
@@ -45,6 +47,45 @@ enum PaddrFamilyWindowChrome {
     static func apply(to window: NSWindow) {
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
+    }
+
+    /// Keeps the compact blended titlebar while giving the product name a deliberate,
+    /// non-interactive treatment instead of turning it into a toolbar control.
+    static func installConfigurationTitle(_ title: String, in window: NSWindow) {
+        let label = NSTextField(labelWithString: title)
+        label.font = .systemFont(ofSize: configurationTitlePointSize, weight: .semibold)
+        label.textColor = .labelColor
+        label.lineBreakMode = .byTruncatingTail
+        label.usesSingleLineMode = true
+        label.setAccessibilityIdentifier(PaddrAccessibility.identifier("window", "title"))
+        label.setAccessibilityLabel(title)
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        let horizontalInset: CGFloat = 10
+        let container = NSView(
+            frame: NSRect(
+                origin: .zero,
+                size: NSSize(
+                    width: ceil(label.intrinsicContentSize.width) + (2 * horizontalInset),
+                    height: 32
+                )
+            )
+        )
+        container.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: horizontalInset),
+            label.trailingAnchor.constraint(
+                lessThanOrEqualTo: container.trailingAnchor,
+                constant: -horizontalInset
+            ),
+            label.centerYAnchor.constraint(equalTo: container.centerYAnchor)
+        ])
+
+        let accessory = NSTitlebarAccessoryViewController()
+        accessory.layoutAttribute = .leading
+        accessory.view = container
+        window.addTitlebarAccessoryViewController(accessory)
+        window.titleVisibility = .hidden
     }
 
     static func setMinimumUsableLayoutSize(_ size: NSSize, for window: NSWindow) {
@@ -538,10 +579,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         )
         window.title = String(localized: "Paddr")
         window.appearance = NSAppearance(named: .darkAqua)
-        window.titleVisibility = .visible
-        // The regular unified titlebar keeps native window semantics and uses AppKit's
-        // 15-point title treatment instead of the compact style's 13-point treatment.
-        window.toolbarStyle = .unified
+        window.toolbarStyle = .unifiedCompact
         window.collectionBehavior.insert(.fullScreenNone)
         window.standardWindowButton(.zoomButton)?.isEnabled = false
         window.tabbingMode = .disallowed
@@ -551,17 +589,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             rootView: ConfigurationView(model: model)
         )
         PaddrFamilyWindowChrome.apply(to: window)
-        let autosaveName = "PaddrConfigurationWindow.v6"
+        PaddrFamilyWindowChrome.installConfigurationTitle(window.title, in: window)
+        let autosaveName = "PaddrConfigurationWindow.v7"
+        let expandedAutosaveName = "PaddrConfigurationWindow.v6"
         let compactAutosaveName = "PaddrConfigurationWindow.v5"
         let legacyAutosaveName = "PaddrConfigurationWindow.v4"
         if !window.setFrameUsingName(autosaveName) {
             if PaddrFamilyWindowChrome.migrateAutosavedFrame(
-                usingName: compactAutosaveName,
-                from: .unifiedCompact,
-                to: .unified,
+                usingName: expandedAutosaveName,
+                from: .unified,
+                to: .unifiedCompact,
                 for: window
             ) {
-                // Migrated under its original compact titlebar geometry.
+                // Migrated under the short-lived regular unified titlebar geometry.
+            } else if window.setFrameUsingName(compactAutosaveName) {
+                // This frame already uses compact titlebar geometry.
             } else if window.setFrameUsingName(legacyAutosaveName) {
                 let legacyUsableSize = window.contentRect(forFrameRect: window.frame).size
                 PaddrFamilyWindowChrome.setUsableLayoutSize(legacyUsableSize, for: window)
