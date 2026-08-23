@@ -104,10 +104,11 @@ final class MenuViewPresentationTests: XCTestCase {
 
     func testLegacyAutosavedPhysicalFrameRetainsUsableSizeAndPositionWithFamilyChrome() {
         let autosaveName = "PaddrConfigurationWindow.v4.Tests.\(UUID().uuidString)"
+        let legacyUsableSize = NSSize(width: 868, height: 680)
         defer { NSWindow.removeFrame(usingName: autosaveName) }
 
         let legacyWindow = makeWindow(hasToolbar: true, usesFullSizeContent: false)
-        legacyWindow.setContentSize(PaddrStyle.Metrics.defaultWindowSize)
+        legacyWindow.setContentSize(legacyUsableSize)
         legacyWindow.center()
         legacyWindow.contentView?.layoutSubtreeIfNeeded()
         let legacyLayoutSize = legacyWindow.contentLayoutRect.size
@@ -133,7 +134,7 @@ final class MenuViewPresentationTests: XCTestCase {
 
         XCTAssertTrue(familyWindow.frame.isApproximatelyEqual(to: legacyFrame))
         assertSize(familyWindow.contentLayoutRect.size, equals: legacyLayoutSize)
-        assertSize(familyWindow.contentLayoutRect.size, equals: PaddrStyle.Metrics.defaultWindowSize)
+        assertSize(familyWindow.contentLayoutRect.size, equals: legacyUsableSize)
     }
 
     func testAccessibilityOnboardingPageFitsCompactWindowWithoutScrolling() throws {

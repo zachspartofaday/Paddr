@@ -65,7 +65,7 @@ struct PaddrSettingsRow<Control: View>: View {
         HStack(spacing: PaddrStyle.Spacing.s3) {
             label
                 .frame(width: labelWidth, alignment: .leading)
-                .fixedSize(horizontal: labelWidth == nil, vertical: false)
+                .layoutPriority(labelWidth == nil ? 1 : 0)
             control()
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
