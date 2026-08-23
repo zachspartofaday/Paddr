@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ApplyBarView: View {
     @Bindable var model: PaddrMenuModel
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var availableWidth: CGFloat = 0
 
     private var outputValue: LocalizedStringResource {
@@ -18,15 +19,32 @@ struct ApplyBarView: View {
 
     var body: some View {
         let usesInlineLayout = availableWidth >= PaddrStyle.Metrics.statusBarInlineBreakpoint
+            && !dynamicTypeSize.isAccessibilitySize
+        let minimumContentWidth = PaddrStyle.Metrics.minimumWindowSize.width
+            - (2 * PaddrStyle.Metrics.outerSpacing)
         let contentLayout = usesInlineLayout
-            ? AnyLayout(HStackLayout(alignment: .center, spacing: PaddrStyle.Spacing.s1))
-            : AnyLayout(VStackLayout(alignment: .leading, spacing: PaddrStyle.Spacing.s1))
+            ? AnyLayout(HStackLayout(alignment: .center, spacing: PaddrStyle.Spacing.s3))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: PaddrStyle.Spacing.s2))
+        let cellsLayout = usesInlineLayout
+            ? AnyLayout(HStackLayout(alignment: .center, spacing: PaddrStyle.Spacing.s2))
+            : AnyLayout(
+                PaddrWrappingHStack(
+                    horizontalSpacing: PaddrStyle.Spacing.s2,
+                    verticalSpacing: PaddrStyle.Spacing.s2
+                )
+            )
 
         contentLayout {
-            HStack(spacing: PaddrStyle.Spacing.s1) {
+            cellsLayout {
                 statusCells
             }
-            .fixedSize(horizontal: true, vertical: false)
+            .fixedSize(horizontal: usesInlineLayout, vertical: false)
+            .frame(
+                minWidth: usesInlineLayout ? nil : 0,
+                idealWidth: usesInlineLayout ? nil : minimumContentWidth,
+                maxWidth: usesInlineLayout ? nil : .infinity,
+                alignment: .leading
+            )
 
             statusMessage
                 .fixedSize(horizontal: false, vertical: true)

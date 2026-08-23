@@ -24,7 +24,8 @@ User-visible changes to Paddr are recorded here. Release entries describe confir
   wider default window size, with each pad preview and settings inspector also visible in
   columns and separated by whitespace instead of a rule. Pointer tracking, zone mode, and
   selected-area rows now carry icons and consistent trailing alignment; region headings have
-  clearer hierarchy; and status pills use uniform type, title-to-value spacing, and padding.
+  clearer hierarchy; and status pills use larger uniform type, stronger side padding, and
+  whole-pill wrapping at narrow widths and Accessibility text sizes.
   The same mounted editor subtrees stack only at genuinely narrow widths. Both configurations
   remain independent and every mapping behavior is unchanged. Wider restored windows use their
   available width, fixed trackpad maps are centered, and inset controls remain inside their card

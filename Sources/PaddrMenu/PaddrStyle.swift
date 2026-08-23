@@ -16,8 +16,6 @@ enum PaddrTextRole {
     case rowLabel
     /// Status values and numeric readouts.
     case value
-    /// Compact status values; matches status-label size while stabilizing digits.
-    case statusValue
     /// Detail and secondary text.
     case caption
 
@@ -29,7 +27,6 @@ enum PaddrTextRole {
         case .sectionLabel: .subheadline.weight(.semibold)
         case .rowLabel: .callout
         case .value: .callout.monospacedDigit()
-        case .statusValue: .caption.monospacedDigit()
         case .caption: .caption
         }
     }
@@ -71,9 +68,8 @@ enum PaddrStyle {
         /// Below this content width, two complete pad editors no longer have
         /// enough room for their native mode controls and stack vertically.
         static let padEditorColumnsBreakpoint: CGFloat = 760
-        /// The status row has its own content budget and can remain inline well below
-        /// the wider editor default.
-        static let statusBarInlineBreakpoint: CGFloat = 868
+        /// The status row has its own content budget for enlarged, padded pills and guidance.
+        static let statusBarInlineBreakpoint: CGFloat = 1_120
         static let minimumWindowSize = NSSize(width: 680, height: 520)
         static let guideWindowSize = NSSize(width: 720, height: 480)
         static let minimumGuideWindowSize = NSSize(width: 640, height: 460)
@@ -167,9 +163,10 @@ enum PaddrStyle {
         Metrics.padEditorColumnsBreakpoint - Spacing.s3
     ) / 2
     static let minimumPadSectionWidth = minimumPadColumnWidth - (4 * Spacing.s3)
+    static let previewInspectorSpacing = Spacing.s5
     static let previewInspectorColumnsBreakpoint = Metrics.zoneMapWidth
         + minimumPadSectionWidth
-        + Spacing.s3
+        + previewInspectorSpacing
     static let behaviorPickerWidth: CGFloat = 272
     static let sliderMinimumWidth = minimumPadSectionWidth
         - Width.labelColumnWide

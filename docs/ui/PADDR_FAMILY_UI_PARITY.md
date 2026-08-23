@@ -153,11 +153,12 @@ claims of BottleRocket token parity:
   document height remains user-controlled, and the configuration surface scrolls within it.
 - The fixed 190×182 pad maps center inside compact sections, and settings-row width budgets
   include both card and section insets before selecting a horizontal nested split. Preview
-  and settings columns use whitespace rather than a vertical divider.
+  and settings columns use a 24-point whitespace gutter rather than a vertical divider.
 - Responsive pad and zone layouts use `AnyLayout` to move one mounted child tree;
   no stateful editor or control closure is duplicated under `ViewThatFits`.
-- Every status uses text and an SF Symbol as well as color. Compact labels and values share
-  one text size, with distinct title-to-value spacing and consistent inset padding. Increased Contrast,
+- Every status uses text and an SF Symbol as well as color. Labels and values share the native
+  callout size, with distinct title-to-value spacing and 12-point side padding. Status pills
+  wrap as whole controls rather than shrinking at narrow widths or Accessibility text sizes. Increased Contrast,
   Differentiate Without Color, Reduce Transparency, and Reduce Motion are resolved by
   `PaddrAppearance`.
 - Status and menu semantics are ordered and deterministic. The pure readiness resolver

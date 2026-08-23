@@ -14,7 +14,7 @@ final class FamilyConsolePresentationTests: XCTestCase {
         XCTAssertEqual(PaddrStyle.Metrics.defaultWindowSize, NSSize(width: 1_280, height: 700))
         XCTAssertEqual(PaddrStyle.Metrics.defaultContentWidth, 1_232)
         XCTAssertEqual(PaddrStyle.Metrics.outerSpacing, 24)
-        XCTAssertEqual(PaddrStyle.Metrics.statusBarInlineBreakpoint, 868)
+        XCTAssertEqual(PaddrStyle.Metrics.statusBarInlineBreakpoint, 1_120)
     }
 
     func testFamilyConsolePaletteMatchesApprovedValues() throws {

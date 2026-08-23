@@ -14,6 +14,7 @@ struct PaddrAdaptiveSplitView<Leading: View, Trailing: View>: View {
     let leadingWidth: CGFloat?
     let showsDivider: Bool
     let equalizesColumnHeights: Bool
+    let columnSpacing: CGFloat
     @ViewBuilder let leading: () -> Leading
     @ViewBuilder let trailing: () -> Trailing
 
@@ -30,6 +31,7 @@ struct PaddrAdaptiveSplitView<Leading: View, Trailing: View>: View {
         self.leadingWidth = leadingWidth
         self.showsDivider = showsDivider
         equalizesColumnHeights = false
+        columnSpacing = PaddrStyle.previewInspectorSpacing
         self.leading = leading
         self.trailing = trailing
     }
@@ -46,6 +48,7 @@ struct PaddrAdaptiveSplitView<Leading: View, Trailing: View>: View {
         leadingWidth = nil
         showsDivider = false
         equalizesColumnHeights = true
+        columnSpacing = PaddrStyle.Spacing.s3
         self.leading = leading
         self.trailing = trailing
     }
@@ -56,7 +59,7 @@ struct PaddrAdaptiveSplitView<Leading: View, Trailing: View>: View {
         let layout = usesEqualHeightColumns
             ? AnyLayout(PaddrEqualHeightColumnsLayout(spacing: PaddrStyle.Spacing.s3))
             : usesColumns
-                ? AnyLayout(HStackLayout(alignment: .top, spacing: PaddrStyle.Spacing.s3))
+                ? AnyLayout(HStackLayout(alignment: .top, spacing: columnSpacing))
                 : AnyLayout(VStackLayout(alignment: .leading, spacing: PaddrStyle.Spacing.s4))
 
         layout {

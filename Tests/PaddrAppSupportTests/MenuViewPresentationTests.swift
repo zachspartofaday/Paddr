@@ -484,7 +484,7 @@ final class MenuViewPresentationTests: XCTestCase {
             PaddrStyle.previewInspectorColumnsBreakpoint,
             PaddrStyle.Metrics.zoneMapWidth
                 + PaddrStyle.minimumPadSectionWidth
-                + PaddrStyle.Spacing.s3,
+                + PaddrStyle.previewInspectorSpacing,
             "The nested split must derive its breakpoint from the complete rendered row"
         )
     }
@@ -678,8 +678,13 @@ final class MenuViewPresentationTests: XCTestCase {
         _ = await session.stop()
     }
 
-    func testWidestStatusPayloadsFitMinimumBarContentWidth() {
-        let row = HStack(spacing: PaddrStyle.Spacing.s1) {
+    func testWidestStatusPayloadsWrapInsideMinimumBarContentWidth() {
+        let contentWidth = PaddrStyle.Metrics.minimumWindowSize.width
+            - (2 * PaddrStyle.Metrics.outerSpacing)
+        let row = PaddrWrappingHStack(
+            horizontalSpacing: PaddrStyle.Spacing.s2,
+            verticalSpacing: PaddrStyle.Spacing.s2
+        ) {
             StatusCell(
                 title: "Puck",
                 value: LocalizedStringResource("Not found"),
@@ -711,16 +716,19 @@ final class MenuViewPresentationTests: XCTestCase {
                 state: .problem
             )
         }
-        .fixedSize(horizontal: true, vertical: false)
+        .frame(width: contentWidth, alignment: .leading)
         let hostingView = NSHostingView(rootView: row)
         hostingView.layoutSubtreeIfNeeded()
 
         XCTAssertLessThanOrEqual(
             hostingView.fittingSize.width,
-            PaddrStyle.Metrics.minimumWindowSize.width
-                - (2 * PaddrStyle.Metrics.outerSpacing)
+            contentWidth
         )
-        XCTAssertEqual(hostingView.fittingSize.height, PaddrStyle.Metrics.row, accuracy: 0.5)
+        XCTAssertGreaterThanOrEqual(
+            hostingView.fittingSize.height,
+            (2 * PaddrStyle.Metrics.row) + PaddrStyle.Spacing.s2,
+            "Larger status pills should wrap as whole controls at the minimum width"
+        )
     }
 
     private func assertApplyBarFitsMinimumWindow(

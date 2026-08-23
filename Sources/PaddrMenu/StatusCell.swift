@@ -51,7 +51,7 @@ struct StatusCell: View {
     }
 
     private func cell(appearance: PaddrAppearance) -> some View {
-        HStack(spacing: PaddrStyle.Spacing.s1) {
+        HStack(spacing: PaddrStyle.Spacing.s2) {
             Image(systemName: systemImage)
                 .foregroundStyle(state.color)
                 .symbolRenderingMode(.hierarchical)
@@ -59,15 +59,16 @@ struct StatusCell: View {
 
             HStack(spacing: PaddrStyle.Spacing.s2) {
                 Text(title)
-                    .paddrTypography(.caption)
+                    .paddrTypography(.rowLabel)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 valueText
-                    .paddrTypography(.statusValue)
+                    .paddrTypography(.value)
                     .foregroundStyle(state.textColor)
                     .lineLimit(1)
             }
         }
-        .padding(.horizontal, PaddrStyle.Spacing.s2)
+        .padding(.horizontal, PaddrStyle.Spacing.s3)
         .frame(minHeight: PaddrStyle.Metrics.row)
         .background(
             state.color.opacity(0.12),

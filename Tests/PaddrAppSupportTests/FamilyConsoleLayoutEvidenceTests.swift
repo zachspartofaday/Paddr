@@ -83,6 +83,35 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         )
     }
 
+    func testApplyBarWrapsInsideDefaultWidthAtAccessibilityTextSizes() async {
+        let model = makeMenuModel(receiver: "Test puck")
+        let didInitialize = await waitUntil { model.isInitialized && model.hasSystemAccess }
+        XCTAssertTrue(didInitialize)
+
+        let hostingView = NSHostingView(
+            rootView: ApplyBarView(model: model)
+                .environment(\.dynamicTypeSize, .accessibility1)
+        )
+        hostingView.frame = NSRect(
+            origin: .zero,
+            size: NSSize(width: PaddrStyle.Metrics.defaultWindowSize.width, height: 240)
+        )
+        await settle(hostingView)
+        hostingView.frame.size.height = hostingView.fittingSize.height
+        await settle(hostingView)
+
+        XCTAssertGreaterThan(
+            hostingView.fittingSize.height,
+            PaddrStyle.Metrics.commandBar,
+            "Accessibility text sizes should wrap whole status pills instead of forcing one row"
+        )
+        XCTAssertLessThanOrEqual(
+            hostingView.fittingSize.width,
+            PaddrStyle.Metrics.defaultWindowSize.width + 0.5,
+            "The wrapped status bar must remain inside the default window width"
+        )
+    }
+
     func testConfigurationControlsStayHorizontallyContainedAtMinimumWindowWidth() async {
         let model = makeMenuModel()
         let didInitialize = await waitUntil { model.isInitialized && model.hasSystemAccess }
@@ -387,6 +416,13 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
             frame(of: initialTrailing, in: hostingView).midY,
             accuracy: 1
         )
+        XCTAssertEqual(
+            frame(of: initialTrailing, in: hostingView).minX
+                - frame(of: initialLeading, in: hostingView).maxX,
+            PaddrStyle.previewInspectorSpacing,
+            accuracy: 0.5,
+            "Dividerless preview and settings columns must retain their 24-point gutter"
+        )
         initialLeading.performClick(nil)
         initialTrailing.performClick(nil)
         await settle(hostingView)
@@ -614,6 +650,7 @@ private struct AdaptiveSplitEvidenceHarness: View {
         PaddrAdaptiveSplitView(
             breakpoint: 680,
             leadingWidth: PaddrStyle.Metrics.zoneMapWidth,
+            showsDivider: false,
             leading: {
                 AdaptiveSplitStateSentinel(identifier: "leading", recorder: recorder)
             },
