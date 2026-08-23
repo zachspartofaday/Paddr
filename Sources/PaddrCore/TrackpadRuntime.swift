@@ -410,9 +410,6 @@ public actor TrackpadSession: TrackpadSessionControlling {
     private let eventGate = SessionEventGate()
     private var activeWorker: WorkerRecord?
     private var requestEpoch: UInt64 = 0
-    #if DEBUG
-    private var epochWaiters: [(epoch: UInt64, continuation: CheckedContinuation<Void, Never>)] = []
-    #endif
 
     public init(runtime: @escaping Runtime = TrackpadSession.liveRuntime) {
         self.runtime = runtime
@@ -516,21 +513,13 @@ public actor TrackpadSession: TrackpadSessionControlling {
     }
 
     #if DEBUG
-    func waitForRequestEpochForTesting(_ expectedEpoch: UInt64) async {
-        guard requestEpoch < expectedEpoch else { return }
-        await withCheckedContinuation { continuation in
-            epochWaiters.append((expectedEpoch, continuation))
-        }
+    func requestEpochForTesting() -> UInt64 {
+        requestEpoch
     }
     #endif
 
     private func advanceRequestEpoch() {
         requestEpoch &+= 1
-        #if DEBUG
-        let ready = epochWaiters.filter { $0.epoch <= requestEpoch }
-        epochWaiters.removeAll { $0.epoch <= requestEpoch }
-        for waiter in ready { waiter.continuation.resume() }
-        #endif
     }
 
     public static func liveRuntime(

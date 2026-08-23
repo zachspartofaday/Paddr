@@ -179,6 +179,19 @@ public final class PaddrMenuModel {
         }
     }
 
+    isolated deinit {
+        // The lifecycle owns the session stream, so cancel it before the tasks that can
+        // schedule or replace lifecycle work. Deinitialization is intentionally synchronous:
+        // normal application termination remains the await-and-drain path.
+        lifecycleTask?.cancel()
+        reconnectTask?.cancel()
+        initializationTask?.cancel()
+        configurationTask?.cancel()
+        statusRefreshTask?.cancel()
+        permissionRefreshTask?.cancel()
+        terminationTask?.cancel()
+    }
+
     public func refreshStatus() {
         let initiatingStatusGeneration = currentStatusGeneration
         statusRefreshEpoch &+= 1
@@ -450,10 +463,15 @@ public final class PaddrMenuModel {
 
     @discardableResult
     public func renameActiveProfile(to name: String) -> Bool {
+        renameProfile(id: activeProfileID, to: name)
+    }
+
+    @discardableResult
+    public func renameProfile(id: ConfigurationProfileID, to name: String) -> Bool {
         guard canBeginProfileMutation(discardingDraft: false) else { return false }
         do {
             var document = profileDocument
-            try document.renameProfile(id: activeProfileID, to: name)
+            try document.renameProfile(id: id, to: name)
             beginProfileDocumentSave(document)
             return true
         } catch {

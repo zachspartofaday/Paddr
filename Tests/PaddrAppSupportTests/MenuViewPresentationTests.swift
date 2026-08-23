@@ -1,5 +1,4 @@
 import AppKit
-import Dispatch
 import SwiftUI
 import XCTest
 
@@ -9,6 +8,29 @@ import PaddrCore
 
 @MainActor
 final class MenuViewPresentationTests: XCTestCase {
+    func testPendingProfileActionsCaptureKindIDAndDisplayedName() {
+        let id = ConfigurationProfileID(
+            rawValue: "00000000-0000-0000-0000-000000000501"
+        )
+
+        XCTAssertEqual(
+            PendingProfileAction.rename(id: id, name: "Original"),
+            PendingProfileAction(kind: .rename, profileID: id, profileName: "Original")
+        )
+        XCTAssertEqual(
+            PendingProfileAction.delete(id: id, name: "Original"),
+            PendingProfileAction(kind: .delete, profileID: id, profileName: "Original")
+        )
+        XCTAssertEqual(
+            PendingProfileAction.create(suggestedName: "New Profile"),
+            PendingProfileAction(
+                kind: .create,
+                profileID: nil,
+                profileName: "New Profile"
+            )
+        )
+    }
+
     func testAccessibilityOnboardingPageFitsCompactWindowWithoutScrolling() throws {
         var pager = OnboardingPager()
         pager.advance()
@@ -506,17 +528,6 @@ final class MenuViewPresentationTests: XCTestCase {
         )
     }
 
-    private func waitUntil(
-        _ condition: @escaping @MainActor () async -> Bool
-    ) async -> Bool {
-        for _ in 0..<200 {
-            if await condition() {
-                return true
-            }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        return false
-    }
 }
 
 private struct InertSession: TrackpadSessionControlling {
@@ -562,7 +573,7 @@ private actor PresentationSession: TrackpadSessionControlling {
 }
 
 private final class BlockingProfileStore: @unchecked Sendable {
-    private let gate = DispatchSemaphore(value: 0)
+    private let gate = BoundedTestGate()
     private let lock = NSLock()
     private var saveStarted = false
     private var saveReleased = false

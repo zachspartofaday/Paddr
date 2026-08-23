@@ -476,6 +476,8 @@
         }
       }
     },
+    "Create": {},
+    "Create Profile": {},
     "Create, duplicate, rename, or delete profiles": {},
     "Cut": {
       "localizations": {
@@ -1231,6 +1233,7 @@
         }
       }
     },
+    "Rename": {},
     "Rename Profile": {},
     "Request": {
       "comment": "Button that requests a macOS privacy permission.",
