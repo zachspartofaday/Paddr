@@ -425,7 +425,7 @@ final class RuntimeTests: XCTestCase {
             XCTAssertTrue(String(describing: error).contains("release held outputs"))
         }
         XCTAssertFalse(events.events.contains { if case .controllerLost = $0 { true } else { false } })
-        XCTAssertEqual(output.releaseAttempts.count, 1)
+        XCTAssertEqual(output.releaseAttempts.count, 5)
     }
 
     func testCleanupAttemptsEveryReleaseAndSurfacesAggregateFailure() throws {
@@ -461,8 +461,198 @@ final class RuntimeTests: XCTestCase {
         let returnKey = try KeyCatalog.resolve("return")
         XCTAssertEqual(output.releaseAttempts, [
             .key(space, isPressed: false),
-            .key(returnKey, isPressed: false)
+            .key(returnKey, isPressed: false),
+            .key(returnKey, isPressed: false),
+            .key(space, isPressed: false),
+            .key(returnKey, isPressed: false),
+            .key(space, isPressed: false)
         ])
+    }
+
+    func testFailOnceReleaseRetriesBeforePublishingControllerLost() throws {
+        let clock = ManualUptimeClock()
+        let output = FailOnceReleaseOutput()
+        let events = EventRecorder()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .report(heldLeftReport(), at: 10),
+            .wake(at: 1_000_000_010),
+            .stop
+        ])
+        var configuration = PaddrConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+
+        let result = try run(
+            configuration: configuration,
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: events
+        )
+
+        let space = try KeyCatalog.resolve("space")
+        XCTAssertEqual(result.termination, .stopped)
+        XCTAssertEqual(output.attempts, [
+            .key(space, isPressed: true),
+            .key(space, isPressed: false),
+            .key(space, isPressed: false)
+        ])
+        XCTAssertEqual(output.committed, [
+            .key(space, isPressed: true),
+            .key(space, isPressed: false)
+        ])
+        XCTAssertEqual(
+            events.events.filter { if case .controllerLost = $0 { true } else { false } }.count,
+            1
+        )
+    }
+
+    func testFailOnceGateReleaseRetriesBeforePublishingAcknowledgement() throws {
+        let clock = ManualUptimeClock()
+        let output = FailOnceReleaseOutput()
+        let events = EventRecorder()
+        let gate = OutputGate(enabled: true)
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .report(heldLeftReport(), at: 10),
+            .perform { gate.setEnabled(false) },
+            .wake(at: 20),
+            .stop
+        ])
+        var configuration = PaddrConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+
+        _ = try run(
+            configuration: configuration,
+            outputGate: gate,
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: events
+        )
+
+        XCTAssertEqual(outputReleasedEvents(in: events.events), [.outputReleased(revision: 1)])
+    }
+
+    func testFailOnceDeviceRemovalReleasePreservesDeviceTermination() throws {
+        let clock = ManualUptimeClock()
+        let output = FailOnceReleaseOutput()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .report(heldLeftReport(), at: 10),
+            .remove
+        ])
+        var configuration = PaddrConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+
+        let result = try run(
+            configuration: configuration,
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: EventRecorder()
+        )
+
+        XCTAssertEqual(result.termination, .deviceRemoved)
+    }
+
+    func testFailOnceStopReleasePreservesStoppedTermination() throws {
+        let clock = ManualUptimeClock()
+        let output = FailOnceReleaseOutput()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .report(heldLeftReport(), at: 10),
+            .stop
+        ])
+        var configuration = PaddrConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+
+        let result = try run(
+            configuration: configuration,
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: EventRecorder()
+        )
+
+        XCTAssertEqual(result.termination, .stopped)
+    }
+
+    func testPersistentGateReleaseDoesNotPublishAcknowledgement() throws {
+        let clock = ManualUptimeClock()
+        let output = FailingReleaseOutput()
+        let events = EventRecorder()
+        let gate = OutputGate(enabled: true)
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .report(heldLeftReport(), at: 10),
+            .perform { gate.setEnabled(false) },
+            .wake(at: 20),
+            .stop
+        ])
+        var configuration = PaddrConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+
+        XCTAssertThrowsError(try run(
+            configuration: configuration,
+            outputGate: gate,
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: events
+        ))
+
+        XCTAssertEqual(outputReleasedEvents(in: events.events), [])
+    }
+
+    func testPartialNormalBatchPublishesNothingAndReleasesSuccessfulPrefix() throws {
+        let clock = ManualUptimeClock()
+        let output = FailingCallOutput(failingCalls: [2])
+        let events = EventRecorder()
+        let publishedActions = StringRecorder()
+        let token = TrackpadStopToken()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .report(report(leftTouched: true, rightTouched: true), at: 10),
+            .stop
+        ])
+        var configuration = PaddrConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+        configuration.right.mode = .dpad
+        configuration.right.dpadKeys.up = "return"
+
+        XCTAssertThrowsError(try TrackpadRuntime.run(
+            configuration: configuration,
+            observeOnly: false,
+            stopToken: token,
+            dependencies: TrackpadRuntimeDependencies(
+                openHID: { hid },
+                makeOutput: { output },
+                uptimeNanoseconds: { clock.now }
+            ),
+            onEvent: events.record,
+            onAction: publishedActions.append
+        ))
+
+        let space = try KeyCatalog.resolve("space")
+        let returnKey = try KeyCatalog.resolve("return")
+        XCTAssertEqual(output.attempts, [
+            .key(space, isPressed: true),
+            .key(returnKey, isPressed: true),
+            .key(space, isPressed: false)
+        ])
+        XCTAssertEqual(output.committed, [
+            .key(space, isPressed: true),
+            .key(space, isPressed: false)
+        ])
+        XCTAssertEqual(publishedActions.values, [])
+        XCTAssertFalse(token.hasPendingOutputs)
     }
 
     func testObserveOnlyLossResetsEpochWithoutDispatching() throws {
@@ -1262,6 +1452,68 @@ private final class TimelineRecorder: Sendable {
     private let storage = Mutex<[String]>([])
     var entries: [String] { storage.withLock { $0 } }
     func append(_ entry: String) { storage.withLock { $0.append(entry) } }
+}
+
+private final class StringRecorder: Sendable {
+    private let storage = Mutex<[String]>([])
+    var values: [String] { storage.withLock { $0 } }
+    func append(_ value: String) { storage.withLock { $0.append(value) } }
+}
+
+private final class FailingCallOutput: TrackpadOutputDispatching, Sendable {
+    private struct State: ~Copyable {
+        var callCount = 0
+        var failingCalls: Set<Int>
+        var attempts: [TrackpadOutputAction] = []
+        var committed: [TrackpadOutputAction] = []
+    }
+
+    private let state: Mutex<State>
+
+    init(failingCalls: Set<Int>) {
+        state = Mutex(State(failingCalls: failingCalls))
+    }
+
+    var attempts: [TrackpadOutputAction] { state.withLock { $0.attempts } }
+    var committed: [TrackpadOutputAction] { state.withLock { $0.committed } }
+
+    func dispatch(_ actions: [TrackpadOutputAction]) throws {
+        for action in actions {
+            try state.withLock { state in
+                state.callCount += 1
+                state.attempts.append(action)
+                if state.failingCalls.remove(state.callCount) != nil {
+                    throw PaddrError.output("Injected output failure.")
+                }
+                state.committed.append(action)
+            }
+        }
+    }
+}
+
+private final class FailOnceReleaseOutput: TrackpadOutputDispatching, Sendable {
+    private struct State: ~Copyable {
+        var failedRelease = false
+        var attempts: [TrackpadOutputAction] = []
+        var committed: [TrackpadOutputAction] = []
+    }
+
+    private let state = Mutex(State())
+    var attempts: [TrackpadOutputAction] { state.withLock { $0.attempts } }
+    var committed: [TrackpadOutputAction] { state.withLock { $0.committed } }
+
+    func dispatch(_ actions: [TrackpadOutputAction]) throws {
+        for action in actions {
+            try state.withLock { state in
+                state.attempts.append(action)
+                if action.isReleaseForTesting, !state.failedRelease {
+                    state.failedRelease = true
+                    throw PaddrError.output("Injected one-time release failure.")
+                }
+                state.committed.append(action)
+            }
+        }
+    }
 }
 
 private final class FailingReleaseOutput: TrackpadOutputDispatching, Sendable {

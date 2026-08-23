@@ -2,16 +2,40 @@ import Dispatch
 import Synchronization
 
 public final class TrackpadStopToken: Sendable {
-    private let stopped = Mutex(false)
+    private struct State: ~Copyable {
+        var isStopped = false
+        var outputLedger: HeldOutputLedger?
+    }
+
+    private let state = Mutex(State())
 
     public init() {}
 
     public func requestStop() {
-        stopped.withLock { $0 = true }
+        state.withLock { $0.isStopped = true }
     }
 
     public var shouldContinue: Bool {
-        stopped.withLock { !$0 }
+        state.withLock { !$0.isStopped }
+    }
+
+    func retainOutputLedger(_ ledger: HeldOutputLedger) {
+        state.withLock { state in
+            precondition(state.outputLedger == nil, "A stop token can retain only one output ledger.")
+            state.outputLedger = ledger
+        }
+    }
+
+    var hasPendingOutputs: Bool {
+        retainedOutputLedger?.pendingOutputs.isEmpty == false
+    }
+
+    func releasePendingOutputs(maxPasses: Int) -> OutputReleaseAttempt? {
+        retainedOutputLedger?.releasePending(maxPasses: maxPasses)
+    }
+
+    private var retainedOutputLedger: HeldOutputLedger? {
+        state.withLock { $0.outputLedger }
     }
 }
 
@@ -181,7 +205,8 @@ public enum TrackpadRuntime {
             )
         }
         let device = try dependencies.openHID()
-        let output = dependencies.makeOutput()
+        let output = HeldOutputLedger(output: dependencies.makeOutput())
+        stopToken.retainOutputLedger(output)
         var controllerEpoch: ControllerEpoch?
         var controllerLive = false
         var lastAcceptedReportUptime: UInt64?
@@ -197,37 +222,46 @@ public enum TrackpadRuntime {
         }
 
         func releaseEpochOutputs() throws {
-            guard var epoch = controllerEpoch else { return }
+            let epochToRelease = controllerEpoch
             controllerEpoch = nil
 
-            var cleanupFailures: [String] = []
-            let leftReleases: [TrackpadOutputAction]
-            do {
-                leftReleases = try epoch.leftMapper.releaseAll()
-            } catch {
-                leftReleases = []
-                cleanupFailures.append("left-pad release mapping failed: \(error)")
-            }
-            let rightReleases: [TrackpadOutputAction]
-            do {
-                rightReleases = try epoch.rightMapper.releaseAll()
-            } catch {
-                rightReleases = []
-                cleanupFailures.append("right-pad release mapping failed: \(error)")
-            }
-            let releases = epoch.arbiter.process(leftReleases, from: .leftPad)
-                + epoch.arbiter.process(rightReleases, from: .rightPad)
-                + epoch.arbiter.releaseAll()
-            if !observeOnly {
+            var mappingFailures: [String] = []
+            var dispatchFailures: [String] = []
+            if var epoch = epochToRelease {
+                let leftReleases: [TrackpadOutputAction]
+                do {
+                    leftReleases = try epoch.leftMapper.releaseAll()
+                } catch {
+                    leftReleases = []
+                    mappingFailures.append("left-pad release mapping failed: \(error)")
+                }
+                let rightReleases: [TrackpadOutputAction]
+                do {
+                    rightReleases = try epoch.rightMapper.releaseAll()
+                } catch {
+                    rightReleases = []
+                    mappingFailures.append("right-pad release mapping failed: \(error)")
+                }
+                let releases = epoch.arbiter.process(leftReleases, from: .leftPad)
+                    + epoch.arbiter.process(rightReleases, from: .rightPad)
+                    + epoch.arbiter.releaseAll()
                 for release in releases {
+                    guard !observeOnly else { continue }
                     do {
                         try output.dispatch([release])
                     } catch {
-                        cleanupFailures.append("\(release.description): \(error)")
+                        dispatchFailures.append("\(release.description): \(error)")
                     }
                 }
             }
-            if !cleanupFailures.isEmpty {
+
+            let releaseAttempt = output.releasePending(maxPasses: 2)
+            guard releaseAttempt.isDrained, mappingFailures.isEmpty else {
+                var cleanupFailures = mappingFailures
+                if !releaseAttempt.isDrained {
+                    cleanupFailures.append(contentsOf: dispatchFailures)
+                    cleanupFailures.append(releaseAttempt.diagnostic)
+                }
                 throw PaddrError.output(
                     "Could not release held outputs: \(cleanupFailures.joined(separator: "; "))."
                 )
@@ -342,10 +376,10 @@ public enum TrackpadRuntime {
                     let right = try epoch.rightMapper.process(pads.right)
                     let actions = epoch.arbiter.process(left, from: .leftPad)
                         + epoch.arbiter.process(right, from: .rightPad)
+                    if !observeOnly { try output.dispatch(actions) }
                     controllerEpoch = epoch
                     actionCount += actions.count
                     for action in actions { onAction?(action.description) }
-                    if !observeOnly { try output.dispatch(actions) }
                     if reportCount.isMultiple(of: 100) { onEvent?(.progress(summary())) }
                 }
             ))
@@ -423,10 +457,20 @@ public actor TrackpadSession: TrackpadSessionControlling {
         advanceRequestEpoch()
         let request = requestEpoch
         eventGate.activate(request)
-        await teardownActiveWorker()
+        let teardownOutcome = await teardownActiveWorker()
 
         guard request == requestEpoch, !Task.isCancelled else {
             return Self.finishedEventStream()
+        }
+        if activeWorker != nil {
+            let diagnostic: String
+            switch teardownOutcome {
+            case .clean:
+                diagnostic = "Could not start output while prior held outputs remain pending."
+            case let .failed(message):
+                diagnostic = message
+            }
+            return Self.failedEventStream(diagnostic)
         }
 
         let token = TrackpadStopToken()
@@ -499,15 +543,27 @@ public actor TrackpadSession: TrackpadSessionControlling {
     private func teardownActiveWorker() async -> TrackpadSessionStopOutcome {
         guard let worker = activeWorker else { return .clean }
         worker.stopToken.requestStop()
-        let outcome = await worker.task.value
+        let runtimeOutcome = await worker.task.value
+        let hadPendingOutputs = worker.stopToken.hasPendingOutputs
+        if let releaseAttempt = worker.stopToken.releasePendingOutputs(maxPasses: 2),
+           !releaseAttempt.isDrained {
+            return .failed("Could not release held outputs: \(releaseAttempt.diagnostic).")
+        }
         if activeWorker?.id == worker.id {
             activeWorker = nil
         }
-        return outcome
+        return hadPendingOutputs ? .clean : runtimeOutcome
     }
 
     private static func finishedEventStream() -> AsyncStream<TrackpadSessionEvent> {
         let (stream, continuation) = AsyncStream<TrackpadSessionEvent>.makeStream()
+        continuation.finish()
+        return stream
+    }
+
+    private static func failedEventStream(_ diagnostic: String) -> AsyncStream<TrackpadSessionEvent> {
+        let (stream, continuation) = AsyncStream<TrackpadSessionEvent>.makeStream()
+        continuation.yield(.failed(diagnostic))
         continuation.finish()
         return stream
     }
