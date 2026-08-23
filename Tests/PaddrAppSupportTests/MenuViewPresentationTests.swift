@@ -115,7 +115,12 @@ final class MenuViewPresentationTests: XCTestCase {
         let toolbar = try XCTUnwrap(window.toolbar)
         XCTAssertTrue(
             toolbar.items.contains { $0.itemIdentifier == .flexibleSpace },
-            "The flexible spacer keeps Refresh and Trackpad Output at the trailing edge"
+            "The flexible spacer keeps Refresh at the trailing edge"
+        )
+        XCTAssertEqual(
+            toolbar.items.filter { $0.itemIdentifier != .flexibleSpace }.count,
+            1,
+            "Trackpad Output belongs to the bottom status bar, leaving Refresh as the only action"
         )
     }
 
@@ -855,6 +860,61 @@ final class MenuViewPresentationTests: XCTestCase {
 
         assertApplyBarFitsMinimumWindow(model: model)
         _ = await session.stop()
+    }
+
+    func testBottomStatusBarOwnsTrailingOutputToggleWithPreservedSemantics() async throws {
+        let store = BlockingProfileStore()
+        let model = PaddrMenuModel(dependencies: dependencies(store: store))
+        defer { store.releaseSave() }
+        let didInitialize = await waitUntil { model.isInitialized }
+        XCTAssertTrue(didInitialize)
+
+        let applyBar = ApplyBarView(model: model)
+        let hostingView = NSHostingView(rootView: applyBar)
+        hostingView.frame = NSRect(
+            origin: .zero,
+            size: NSSize(
+                width: PaddrStyle.Metrics.defaultWindowSize.width,
+                height: PaddrStyle.Metrics.commandBar
+            )
+        )
+        await settle(hostingView)
+
+        let switches = descendants(of: NSSwitch.self, in: hostingView)
+        let outputToggle = try XCTUnwrap(switches.first)
+        XCTAssertEqual(switches.count, 1)
+        XCTAssertEqual(
+            applyBar.outputToggleAccessibilityIdentifier,
+            PaddrAccessibility.identifier("toolbar", "output")
+        )
+        XCTAssertEqual(
+            String(localized: applyBar.outputToggleAccessibilityLabel),
+            "Trackpad output"
+        )
+        XCTAssertEqual(String(localized: applyBar.outputToggleAccessibilityValue), "Off")
+        XCTAssertEqual(
+            String(localized: applyBar.outputToggleHelp),
+            "Enable or disable mapped trackpad output"
+        )
+        XCTAssertEqual(outputToggle.accessibilityRoleDescription(), "switch")
+        XCTAssertEqual(accessibilityIntegerValue(of: outputToggle), 0)
+        XCTAssertEqual(outputToggle.isEnabled, model.canToggleOutput)
+        XCTAssertEqual(
+            outputToggle.convert(outputToggle.bounds, to: hostingView).maxX,
+            hostingView.bounds.maxX - PaddrStyle.Metrics.outerSpacing,
+            accuracy: 1
+        )
+
+        outputToggle.performClick(nil)
+        await settle(hostingView)
+
+        XCTAssertTrue(model.isEnabled)
+        XCTAssertEqual(accessibilityIntegerValue(of: outputToggle), 1)
+        XCTAssertEqual(
+            String(localized: ApplyBarView(model: model).outputToggleAccessibilityValue),
+            "On"
+        )
+        XCTAssertEqual(hostingView.fittingSize.height, PaddrStyle.Metrics.commandBar, accuracy: 0.5)
     }
 
     func testResolvedStatusCompactsButRetainsAccessibleIdentityAndValue() {

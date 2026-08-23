@@ -103,7 +103,7 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var isRejectingEnabledChange = false
     private var profileOperationInProgress = false
     private var pendingProfileActivation: ConfigurationProfile?
-    @ObservationIgnored private var profileDocumentSaveInProgress = false
+    private var profileDocumentSaveInProgress = false
     private var replacesActiveConfiguration = false
     @ObservationIgnored private var activationCommitPending = false
     @ObservationIgnored private var statusRefreshTask: Task<Void, Never>?

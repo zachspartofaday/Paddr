@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Synchronization
 import XCTest
 @testable import PaddrAppSupport
@@ -2860,10 +2861,19 @@ final class MenuModelTests: XCTestCase {
         await session.send(.controllerConnected)
         await waitUntil(model: model) { model.controllerConnected }
 
+        let observationInvalidationCount = Mutex(0)
+        withObservationTracking {
+            _ = model.canToggleOutput
+            _ = model.readiness.nextAction
+        } onChange: {
+            observationInvalidationCount.withLock { $0 += 1 }
+        }
+
         XCTAssertEqual(model.readiness.nextAction, .enableOutput)
         XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
         await waitUntil { state.saveCallCount == 1 }
 
+        XCTAssertEqual(observationInvalidationCount.withLock { $0 }, 1)
         XCTAssertFalse(model.isEnabled)
         XCTAssertFalse(model.canToggleOutput)
         XCTAssertEqual(model.readiness.outputDisabledReason, .profileOperation)
@@ -2873,10 +2883,18 @@ final class MenuModelTests: XCTestCase {
             "Wait for the profile operation to finish"
         )
 
+        withObservationTracking {
+            _ = model.canToggleOutput
+            _ = model.readiness.nextAction
+        } onChange: {
+            observationInvalidationCount.withLock { $0 += 1 }
+        }
+
         state.saveGate = nil
         saveGate.signal()
         await waitUntil(model: model) { model.canToggleOutput }
 
+        XCTAssertEqual(observationInvalidationCount.withLock { $0 }, 2)
         XCTAssertEqual(model.readiness.nextAction, .enableOutput)
     }
 

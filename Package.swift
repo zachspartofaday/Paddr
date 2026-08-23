@@ -20,10 +20,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "PaddrMenu",
-            dependencies: ["PaddrCore", "PaddrAppSupport"],
-            resources: [
-                .copy("Resources/ThirdPartyNotices.txt")
-            ]
+            dependencies: ["PaddrCore", "PaddrAppSupport"]
         ),
         .testTarget(name: "PaddrTests", dependencies: ["PaddrCore"]),
         .testTarget(name: "PaddrCLITests", dependencies: ["PaddrCLIKit", "PaddrCore"]),

@@ -4,49 +4,88 @@ import XCTest
 @testable import PaddrMenu
 
 final class OpenSourceNoticesTests: XCTestCase {
-    func testPackagedAndSwiftPackageLookupPathsResolveTheNotice() throws {
-        let emptyBundle = Bundle(for: Self.self)
-        let packageBundle = PaddrOpenSourceNotices.packageBundle
-        XCTAssertNil(PaddrOpenSourceNotices.resourceURL(in: emptyBundle))
+    func testPackagedNoticeIsPreferred() {
+        let appURL = URL(fileURLWithPath: "/Applications/Paddr.app", isDirectory: true)
+        let packagedNoticeURL = appURL
+            .appendingPathComponent("Contents/Resources", isDirectory: true)
+            .appendingPathComponent("ThirdPartyNotices.txt")
+        var checkoutWasInspected = false
 
-        var packagedFallbackWasRequested = false
-        let packagedURL = try XCTUnwrap(
-            PaddrOpenSourceNotices.url(
-                mainBundle: packageBundle
-            ) {
-                packagedFallbackWasRequested = true
-                return emptyBundle
-            }
-        )
-        var developmentFallbackWasRequested = false
-        let developmentURL = try XCTUnwrap(
-            PaddrOpenSourceNotices.url(
-                mainBundle: emptyBundle
-            ) {
-                developmentFallbackWasRequested = true
-                return packageBundle
-            }
-        )
+        let resolvedURL = PaddrOpenSourceNotices.url(
+            bundledNoticeURL: packagedNoticeURL,
+            mainBundleURL: appURL,
+            currentDirectoryPath: repositoryRoot.path
+        ) { _ in
+            checkoutWasInspected = true
+            return true
+        }
 
-        XCTAssertFalse(packagedFallbackWasRequested)
-        XCTAssertTrue(developmentFallbackWasRequested)
-        XCTAssertEqual(packagedURL, developmentURL)
+        XCTAssertEqual(resolvedURL, packagedNoticeURL)
+        XCTAssertFalse(checkoutWasInspected)
     }
 
-    func testSwiftPackageNoticeMatchesCanonicalReleaseNoticeExactly() throws {
-        let packageURL = try XCTUnwrap(
-            PaddrOpenSourceNotices.resourceURL(in: PaddrOpenSourceNotices.packageBundle)
-        )
-        let repositoryURL = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appending(path: "THIRD_PARTY_NOTICES.md")
+    func testValidSourceCheckoutFallsBackToCanonicalNotice() {
+        let expectedURL = repositoryRoot.appendingPathComponent("THIRD_PARTY_NOTICES.md")
 
-        XCTAssertEqual(
-            try Data(contentsOf: packageURL),
-            try Data(contentsOf: repositoryURL),
-            "Keep the SwiftPM development resource synchronized with the canonical release notice"
+        let resolvedURL = PaddrOpenSourceNotices.url(
+            bundledNoticeURL: nil,
+            mainBundleURL: developmentBundleURL,
+            currentDirectoryPath: repositoryRoot.path,
+            isRegularFile: isRegularFile(at:)
         )
+
+        XCTAssertEqual(resolvedURL, expectedURL)
+    }
+
+    func testInvalidSourceCheckoutReturnsNil() {
+        let invalidRoot = repositoryRoot.appendingPathComponent(
+            "Tests/PaddrAppSupportTests",
+            isDirectory: true
+        )
+
+        let resolvedURL = PaddrOpenSourceNotices.url(
+            bundledNoticeURL: nil,
+            mainBundleURL: developmentBundleURL,
+            currentDirectoryPath: invalidRoot.path,
+            isRegularFile: isRegularFile(at:)
+        )
+
+        XCTAssertNil(resolvedURL)
+    }
+
+    func testPackagedMissingNoticeReturnsNilWithoutSourceFallback() {
+        let appURL = URL(fileURLWithPath: "/Applications/Paddr.app", isDirectory: true)
+        var checkoutWasInspected = false
+
+        let resolvedURL = PaddrOpenSourceNotices.url(
+            bundledNoticeURL: nil,
+            mainBundleURL: appURL,
+            currentDirectoryPath: repositoryRoot.path
+        ) { _ in
+            checkoutWasInspected = true
+            return true
+        }
+
+        XCTAssertNil(resolvedURL)
+        XCTAssertFalse(checkoutWasInspected)
+    }
+
+    private var repositoryRoot: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .standardizedFileURL
+    }
+
+    private var developmentBundleURL: URL {
+        repositoryRoot.appendingPathComponent(
+            ".build/debug",
+            isDirectory: true
+        )
+    }
+
+    private func isRegularFile(at url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
     }
 }

@@ -43,23 +43,6 @@ struct ConfigurationView: View {
                     .labelStyle(.iconOnly)
                     .help("Refresh controller and permission status")
                     .paddrAccessibilityID("toolbar", "refresh")
-
-                Toggle("Trackpad output", isOn: $model.isEnabled)
-                    .labelsHidden()
-                    .disabled(!model.canToggleOutput)
-                    .toggleStyle(.switch)
-                    .accessibilityValue(
-                        model.isEnabled
-                            ? LocalizedStringResource("On")
-                            : LocalizedStringResource("Off")
-                    )
-                    .help(
-                        Text(
-                            model.readiness.outputDisabledReason?.message
-                                ?? LocalizedStringResource("Enable or disable mapped trackpad output")
-                        )
-                    )
-                    .paddrAccessibilityID("toolbar", "output")
             }
         }
     }

@@ -47,6 +47,21 @@ struct ApplyBarView: View {
         }
     }
 
+    var outputToggleAccessibilityLabel: LocalizedStringResource { "Trackpad output" }
+
+    var outputToggleAccessibilityValue: LocalizedStringResource {
+        model.isEnabled ? "On" : "Off"
+    }
+
+    var outputToggleHelp: LocalizedStringResource {
+        model.readiness.outputDisabledReason?.message
+            ?? LocalizedStringResource("Enable or disable mapped trackpad output")
+    }
+
+    var outputToggleAccessibilityIdentifier: String {
+        PaddrAccessibility.identifier("toolbar", "output")
+    }
+
     var body: some View {
         let usesInlineLayout = availableWidth >= PaddrStyle.Metrics.statusBarInlineBreakpoint
             && !dynamicTypeSize.isAccessibilitySize
@@ -76,13 +91,7 @@ struct ApplyBarView: View {
                 alignment: .leading
             )
 
-            statusMessage
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(
-                    maxWidth: .infinity,
-                    minHeight: PaddrStyle.Metrics.row,
-                    alignment: .leading
-                )
+            statusGuidanceAndOutputControl
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, PaddrStyle.Metrics.outerSpacing)
@@ -104,6 +113,29 @@ struct ApplyBarView: View {
             guard status.messageState != nil else { return }
             AccessibilityNotification.Announcement(String(localized: status.message)).post()
         }
+    }
+
+    private var statusGuidanceAndOutputControl: some View {
+        HStack(alignment: .center, spacing: PaddrStyle.Spacing.s3) {
+            statusMessage
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: PaddrStyle.Metrics.row,
+                    alignment: .leading
+                )
+
+            Toggle("Trackpad output", isOn: $model.isEnabled)
+                .labelsHidden()
+                .disabled(!model.canToggleOutput)
+                .toggleStyle(.switch)
+                .accessibilityLabel(Text(outputToggleAccessibilityLabel))
+                .accessibilityValue(Text(outputToggleAccessibilityValue))
+                .help(Text(outputToggleHelp))
+                .accessibilityIdentifier(outputToggleAccessibilityIdentifier)
+                .fixedSize()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder private var statusMessage: some View {
