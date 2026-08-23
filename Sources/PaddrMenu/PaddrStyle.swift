@@ -21,10 +21,10 @@ enum PaddrTextRole {
 
     var font: Font {
         switch self {
-        case .pageTitle: .title2.bold()
-        case .cardTitle: .headline
-        case .sectionTitle: .headline
-        case .sectionLabel: .subheadline.weight(.semibold)
+        case .pageTitle: .title.bold()
+        case .cardTitle: .title2.bold()
+        case .sectionTitle: .title3.weight(.semibold)
+        case .sectionLabel: .headline.weight(.semibold)
         case .rowLabel: .callout
         case .value: .callout.monospacedDigit()
         case .caption: .caption
@@ -51,8 +51,18 @@ enum PaddrStyle {
         static let s5: CGFloat = 24
     }
 
-    /// Heights and fixed surface sizes. `row` is the single control-row family
-    /// (card header, settings row, status cell, permission row, inspector header);
+    /// Semantic insets establish one surface hierarchy across the app: the window gets
+    /// the widest margin, cards and inset panels share one interior margin, and compact
+    /// controls use the next smaller step.
+    enum Inset {
+        static let window = Spacing.s5
+        static let card = Spacing.s4
+        static let section = Spacing.s4
+        static let control = Spacing.s3
+    }
+
+    /// Heights and fixed surface sizes. `row` is the single interactive-row family
+    /// (settings row, status cell, and permission row); headings keep their natural height.
     /// control heights themselves stay native and are never hand-set.
     enum Metrics {
         static let controlHeight: CGFloat = 38
@@ -60,14 +70,14 @@ enum PaddrStyle {
         /// `row` plus a `Spacing.s2` inset above and below.
         static let commandBar: CGFloat = 54
 
-        static let outerSpacing: CGFloat = 24
+        static let outerSpacing = Inset.window
         /// Fresh windows match the approved side-by-side preview-and-settings composition.
         /// Restored and user-sized windows remain fluid around this default.
         static let defaultWindowSize = NSSize(width: 1_280, height: 700)
         static let defaultContentWidth = defaultWindowSize.width - (2 * outerSpacing)
         /// Below this content width, two complete pad editors no longer have
         /// enough room for their native mode controls and stack vertically.
-        static let padEditorColumnsBreakpoint: CGFloat = 760
+        static let padEditorColumnsBreakpoint: CGFloat = 792
         /// The status row has its own content budget for enlarged, padded pills and guidance.
         static let statusBarInlineBreakpoint: CGFloat = 1_120
         static let minimumWindowSize = NSSize(width: 680, height: 520)
@@ -158,21 +168,23 @@ enum PaddrStyle {
     static let permissionFillOpacity = 0.07
     static let permissionStrokeOpacity = 0.75
 
-    static let padColumnWidth = (Metrics.defaultContentWidth - Spacing.s3) / 2
-    static let minimumPadColumnWidth = (
-        Metrics.padEditorColumnsBreakpoint - Spacing.s3
-    ) / 2
-    static let minimumPadSectionWidth = minimumPadColumnWidth - (4 * Spacing.s3)
+    /// Sibling cards use the same rhythm horizontally and vertically.
+    static let cardSpacing = Spacing.s4
+    static let padColumnWidth = (Metrics.defaultContentWidth - cardSpacing) / 2
+    static let sliderMinimumWidth: CGFloat = 120
+    static let minimumPadSectionWidth = Width.labelColumnWide
+        + Spacing.s3
+        + sliderMinimumWidth
+        + Spacing.s2
+        + Width.readout
+    static let minimumPadColumnWidth = minimumPadSectionWidth
+        + (2 * Inset.card)
+        + (2 * Inset.section)
     static let previewInspectorSpacing = Spacing.s5
     static let previewInspectorColumnsBreakpoint = Metrics.zoneMapWidth
         + minimumPadSectionWidth
         + previewInspectorSpacing
     static let behaviorPickerWidth: CGFloat = 272
-    static let sliderMinimumWidth = minimumPadSectionWidth
-        - Width.labelColumnWide
-        - Spacing.s3
-        - Spacing.s2
-        - Width.readout
 }
 
 private struct PaddrTypographyModifier: ViewModifier {
@@ -185,6 +197,8 @@ private struct PaddrCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         PaddrAppearanceReader { appearance in
             content
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(PaddrStyle.Inset.card)
                 .background(
                     appearance.usesOpaqueFallback
                         ? PaddrStyle.night1

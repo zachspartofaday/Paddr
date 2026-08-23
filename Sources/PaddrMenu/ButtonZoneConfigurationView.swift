@@ -37,10 +37,7 @@ struct ButtonZoneConfigurationView: View {
 
     private var mapSection: some View {
         VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
-            Text("Area map")
-                .paddrTypography(.sectionTitle)
-                .frame(minHeight: PaddrStyle.Metrics.row)
-                .accessibilityAddTraits(.isHeader)
+            PaddrSectionHeader("Area map")
             padMap
                 .frame(
                     width: PaddrStyle.Metrics.zoneMapWidth,
@@ -53,10 +50,7 @@ struct ButtonZoneConfigurationView: View {
 
     private var inspector: some View {
         VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
-            Text(LocalizedStringResource("Zone settings"))
-                .paddrTypography(.sectionTitle)
-                .frame(minHeight: PaddrStyle.Metrics.row)
-                .accessibilityAddTraits(.isHeader)
+            PaddrSectionHeader("Zone settings")
 
             PaddrSettingsRow(title: "Mode", systemImage: "square.grid.2x2") {
                 areaLayoutPicker
@@ -94,7 +88,6 @@ struct ButtonZoneConfigurationView: View {
                             .frame(width: PaddrStyle.Width.readout, alignment: .trailing)
                     }
                 }
-                .padding(.top, PaddrStyle.Spacing.s3)
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)

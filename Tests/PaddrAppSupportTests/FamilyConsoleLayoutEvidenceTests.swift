@@ -165,12 +165,12 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         let right = try XCTUnwrap(modeSelector(side: .right, in: hostingView))
         let availableContentWidth = restoredWidth - (2 * PaddrStyle.Metrics.outerSpacing)
         let expectedColumnWidth = (
-            availableContentWidth - PaddrStyle.Spacing.s3
+            availableContentWidth - PaddrStyle.cardSpacing
         ) / 2
 
         XCTAssertEqual(
             abs(frame(of: left, in: hostingView).midX - frame(of: right, in: hostingView).midX),
-            expectedColumnWidth + PaddrStyle.Spacing.s3,
+            expectedColumnWidth + PaddrStyle.cardSpacing,
             accuracy: 1,
             "A restored wide window must expand both pad columns instead of centering a default-width island"
         )
@@ -195,16 +195,18 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         )
         XCTAssertEqual(
             abs(frame(of: left, in: hostingView).midX - frame(of: right, in: hostingView).midX),
-            PaddrStyle.padColumnWidth + PaddrStyle.Spacing.s3,
+            PaddrStyle.padColumnWidth + PaddrStyle.cardSpacing,
             accuracy: 1,
             "The two rendered editors should occupy equal columns at the default width"
         )
         XCTAssertEqual(
             PaddrStyle.padColumnWidth,
-            (PaddrStyle.Metrics.defaultContentWidth - PaddrStyle.Spacing.s3) / 2
+            (PaddrStyle.Metrics.defaultContentWidth - PaddrStyle.cardSpacing) / 2
         )
         XCTAssertGreaterThanOrEqual(
-            PaddrStyle.padColumnWidth - (4 * PaddrStyle.Spacing.s3),
+            PaddrStyle.padColumnWidth
+                - (2 * PaddrStyle.Inset.card)
+                - (2 * PaddrStyle.Inset.section),
             PaddrStyle.previewInspectorColumnsBreakpoint,
             "Each default pad card must keep its preview and inspector in columns"
         )
@@ -214,7 +216,7 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         )
         let rightCard = try XCTUnwrap(
             renderedCardRuns(
-                atX: PaddrStyle.padColumnWidth + PaddrStyle.Spacing.s3 + 20,
+                atX: PaddrStyle.padColumnWidth + PaddrStyle.cardSpacing + 20,
                 in: hostingView
             ).first
         )
@@ -344,6 +346,34 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         )
     }
 
+    func testAccessibilityTextStacksWidePadEditorsAndContainsEveryControl() async throws {
+        let state = DualPadEvidenceState(configuration: .default)
+        let hostingView = NSHostingView(
+            rootView: DualPadEvidenceHarness(state: state)
+                .environment(\.dynamicTypeSize, .accessibility1)
+        )
+        hostingView.frame = NSRect(
+            x: 0,
+            y: 0,
+            width: PaddrStyle.Metrics.defaultContentWidth,
+            height: 2_000
+        )
+        await settle(hostingView)
+
+        let left = try XCTUnwrap(modeSelector(side: .left, in: hostingView))
+        let right = try XCTUnwrap(modeSelector(side: .right, in: hostingView))
+        XCTAssertGreaterThan(
+            abs(frame(of: left, in: hostingView).midY - frame(of: right, in: hostingView).midY),
+            PaddrStyle.Metrics.row,
+            "Accessibility text must stack editors even when regular-size text uses columns"
+        )
+        for control in descendants(of: NSControl.self, in: hostingView) {
+            let controlFrame = frame(of: control, in: hostingView)
+            XCTAssertGreaterThanOrEqual(controlFrame.minX, hostingView.bounds.minX - 0.5)
+            XCTAssertLessThanOrEqual(controlFrame.maxX, hostingView.bounds.maxX + 0.5)
+        }
+    }
+
     func testEqualHeightColumnsReturnToNaturalIndependentStackedHeights() async throws {
         let recorder = AdaptiveSplitSentinelRecorder()
         let hostingView = NSHostingView(
@@ -364,7 +394,11 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
             frame(of: initialTall, in: hostingView).height,
             accuracy: 0.5
         )
-        XCTAssertEqual(frame(of: initialTall, in: hostingView).height, 420, accuracy: 0.5)
+        XCTAssertEqual(
+            frame(of: initialTall, in: hostingView).height,
+            420 + (2 * PaddrStyle.Inset.card),
+            accuracy: 0.5
+        )
         XCTAssertLessThan(
             frame(of: initialTall, in: hostingView).height,
             hostingView.bounds.height / 2,
@@ -378,8 +412,16 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         let stackedTall = try XCTUnwrap(boundsProbe("tall", in: hostingView))
         XCTAssertTrue(initialShort === stackedShort)
         XCTAssertTrue(initialTall === stackedTall)
-        XCTAssertEqual(frame(of: stackedShort, in: hostingView).height, 260, accuracy: 0.5)
-        XCTAssertEqual(frame(of: stackedTall, in: hostingView).height, 420, accuracy: 0.5)
+        XCTAssertEqual(
+            frame(of: stackedShort, in: hostingView).height,
+            260 + (2 * PaddrStyle.Inset.card),
+            accuracy: 0.5
+        )
+        XCTAssertEqual(
+            frame(of: stackedTall, in: hostingView).height,
+            420 + (2 * PaddrStyle.Inset.card),
+            accuracy: 0.5
+        )
         XCTAssertGreaterThan(
             abs(
                 frame(of: stackedShort, in: hostingView).midY
@@ -429,18 +471,24 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         XCTAssertEqual(recorder.value(for: "leading"), 1)
         XCTAssertEqual(recorder.value(for: "trailing"), 1)
 
-        hostingView.frame.size.width = 640
-        await settle(hostingView)
         environment.dynamicTypeSize = .accessibility1
+        await settle(hostingView)
+
+        let accessibilityLeading = try XCTUnwrap(sentinelButton("leading", in: hostingView))
+        let accessibilityTrailing = try XCTUnwrap(sentinelButton("trailing", in: hostingView))
+        XCTAssertGreaterThan(
+            abs(frame(of: accessibilityLeading, in: hostingView).midY
+                - frame(of: accessibilityTrailing, in: hostingView).midY),
+            PaddrStyle.Metrics.row / 2
+        )
+        XCTAssertTrue(initialLeading === accessibilityLeading)
+        XCTAssertTrue(initialTrailing === accessibilityTrailing)
+
+        hostingView.frame.size.width = 640
         await settle(hostingView)
 
         let reflowedLeading = try XCTUnwrap(sentinelButton("leading", in: hostingView))
         let reflowedTrailing = try XCTUnwrap(sentinelButton("trailing", in: hostingView))
-        XCTAssertGreaterThan(
-            abs(frame(of: reflowedLeading, in: hostingView).midY
-                - frame(of: reflowedTrailing, in: hostingView).midY),
-            PaddrStyle.Metrics.row / 2
-        )
         XCTAssertTrue(initialLeading === reflowedLeading)
         XCTAssertTrue(initialTrailing === reflowedTrailing)
         XCTAssertEqual(recorder.mountCount(for: "leading"), 1)

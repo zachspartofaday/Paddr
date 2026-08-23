@@ -398,6 +398,86 @@ final class MenuViewPresentationTests: XCTestCase {
         )
     }
 
+    func testCardsAndInsetSectionsOwnTheSharedSurfaceMargin() throws {
+        let width: CGFloat = 300
+        let contentHeight: CGFloat = 44
+
+        let cardView = SettingsControlEdgeProbe(identifier: "card-content")
+            .frame(maxWidth: .infinity)
+            .frame(height: contentHeight)
+            .paddrCard()
+            .frame(width: width)
+        let cardHost = NSHostingView(rootView: cardView)
+        cardHost.frame = NSRect(origin: .zero, size: cardHost.fittingSize)
+        cardHost.layoutSubtreeIfNeeded()
+        let cardContent = try XCTUnwrap(
+            descendants(of: NSView.self, in: cardHost).first {
+                $0.identifier?.rawValue == "card-content"
+            }
+        )
+        let cardFrame = cardContent.convert(cardContent.bounds, to: cardHost)
+        XCTAssertEqual(cardHost.bounds.width, width, accuracy: 0.5)
+        XCTAssertEqual(
+            cardHost.bounds.height,
+            contentHeight + (2 * PaddrStyle.Inset.card),
+            accuracy: 0.5
+        )
+        XCTAssertEqual(cardFrame.minX, PaddrStyle.Inset.card, accuracy: 0.5)
+        XCTAssertEqual(
+            cardHost.bounds.maxX - cardFrame.maxX,
+            PaddrStyle.Inset.card,
+            accuracy: 0.5
+        )
+        XCTAssertEqual(cardFrame.minY, PaddrStyle.Inset.card, accuracy: 0.5)
+        XCTAssertEqual(
+            cardHost.bounds.maxY - cardFrame.maxY,
+            PaddrStyle.Inset.card,
+            accuracy: 0.5
+        )
+
+        let sectionView = PaddrSectionContainer {
+            SettingsControlEdgeProbe(identifier: "section-content")
+                .frame(maxWidth: .infinity)
+                .frame(height: contentHeight)
+        }
+        .frame(width: width)
+        let sectionHost = NSHostingView(rootView: sectionView)
+        sectionHost.frame = NSRect(origin: .zero, size: sectionHost.fittingSize)
+        sectionHost.layoutSubtreeIfNeeded()
+        let sectionContent = try XCTUnwrap(
+            descendants(of: NSView.self, in: sectionHost).first {
+                $0.identifier?.rawValue == "section-content"
+            }
+        )
+        let sectionFrame = sectionContent.convert(sectionContent.bounds, to: sectionHost)
+        XCTAssertEqual(sectionHost.bounds.width, width, accuracy: 0.5)
+        XCTAssertEqual(
+            sectionHost.bounds.height,
+            contentHeight + (2 * PaddrStyle.Inset.section),
+            accuracy: 0.5
+        )
+        XCTAssertEqual(sectionFrame.minX, PaddrStyle.Inset.section, accuracy: 0.5)
+        XCTAssertEqual(
+            sectionHost.bounds.maxX - sectionFrame.maxX,
+            PaddrStyle.Inset.section,
+            accuracy: 0.5
+        )
+        XCTAssertEqual(sectionFrame.minY, PaddrStyle.Inset.section, accuracy: 0.5)
+        XCTAssertEqual(
+            sectionHost.bounds.maxY - sectionFrame.maxY,
+            PaddrStyle.Inset.section,
+            accuracy: 0.5
+        )
+    }
+
+    func testSectionHeadingKeepsNaturalHeightOutsideTheControlRowFamily() {
+        let hostingView = NSHostingView(rootView: PaddrSectionHeader("Pointer settings"))
+        hostingView.layoutSubtreeIfNeeded()
+
+        XCTAssertGreaterThan(hostingView.fittingSize.height, 0)
+        XCTAssertLessThan(hostingView.fittingSize.height, PaddrStyle.Metrics.row)
+    }
+
     /// The inset section inside one dual-pad column is the binding constraint on the width
     /// scale. A starved label can wrap mid-word and a slider can push every peer row beyond
     /// the section border, so the complete row budgets are asserted directly.
@@ -477,7 +557,9 @@ final class MenuViewPresentationTests: XCTestCase {
         )
         XCTAssertEqual(
             PaddrStyle.minimumPadSectionWidth,
-            PaddrStyle.minimumPadColumnWidth - (4 * PaddrStyle.Spacing.s3),
+            PaddrStyle.minimumPadColumnWidth
+                - (2 * PaddrStyle.Inset.card)
+                - (2 * PaddrStyle.Inset.section),
             "The width budget must include both card and section horizontal padding"
         )
         XCTAssertEqual(

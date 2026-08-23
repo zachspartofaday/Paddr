@@ -7,8 +7,7 @@ struct PaddrSectionContainer<Content: View>: View {
     var body: some View {
         PaddrAppearanceReader { appearance in
             content()
-                .padding(.horizontal, PaddrStyle.Spacing.s3)
-                .padding(.vertical, PaddrStyle.Spacing.s3)
+                .padding(PaddrStyle.Inset.section)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     appearance.usesOpaqueFallback
@@ -24,6 +23,22 @@ struct PaddrSectionContainer<Content: View>: View {
                         )
                 }
         }
+    }
+}
+
+/// A natural-height, noninteractive heading for regions inside a card. Keeping headings
+/// out of the control-row height family makes the declared surface inset visually exact.
+struct PaddrSectionHeader: View {
+    let title: LocalizedStringResource
+
+    init(_ title: LocalizedStringResource) {
+        self.title = title
+    }
+
+    var body: some View {
+        Text(title)
+            .paddrTypography(.sectionTitle)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 

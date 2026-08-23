@@ -127,8 +127,15 @@ editor subtrees during reflow.
 | control height / radius | `38` / `7` points |
 | reference content width / outer spacing | `820` / `24` points; Paddr retains the outer spacing |
 | Paddr default usable window / content width | `1280 × 700` / `1232` points; product-local width keeps both nested pad editors in columns |
+| card / inset-panel content margin | `16` / `16` points; the card modifier and section container own these insets |
+| sibling-card / row / inline-control gap | `16` / `12` / `8` points |
+| preview–inspector gutter | `24` points |
 
-Paddr keeps the canonical palette, text hierarchy, control sizing, and outer spacing intact.
+Paddr keeps the canonical palette, control sizing, and outer spacing intact. Its Paddr-local
+native type ladder is 22-point page title, 17-point card title, 15-point section title,
+13-point band label, 12-point row/value, and 10-point metadata. Each role carries its weight:
+page and card titles are bold, section and band titles are semibold, and values retain
+monospaced digits.
 Its wider default window is the product-local layout decision described below. The following
 Paddr-local semantic derivatives pair the shared tokens accessibly and are not additional
 claims of BottleRocket token parity:
@@ -147,15 +154,20 @@ claims of BottleRocket token parity:
 - Left and Right configurations remain independent and keep their existing encoded form.
 - Both Left and Right editors stay mounted and independently bound to their existing
   configuration values. There is no selected-side state or persistence seam.
-- Fresh default geometry uses a 1280×700-point usable window and two equal 610-point pad
+- Fresh default geometry uses a 1280×700-point usable window and two equal 608-point pad
   columns, keeping each pad preview and its settings visible side-by-side. Wider user or
   restored windows expand those columns fluidly; existing autosaved sizes remain respected,
   document height remains user-controlled, and the configuration surface scrolls within it.
-- The fixed 190×182 pad maps center inside compact sections, and settings-row width budgets
-  include both card and section insets before selecting a horizontal nested split. Preview
-  and settings columns use a 24-point whitespace gutter rather than a vertical divider.
+- The 24-point canvas margin, 16-point primary-card and inset-panel margins, 16-point sibling-card
+  gap, 12-point row rhythm, 8-point inline-control gap, and 4-point icon gap form one declared
+  spacing hierarchy. Fixed 190×182 pad maps center inside compact sections, and settings-row
+  width budgets include both 16-point card and section insets before selecting a horizontal
+  nested split. Preview and settings columns use a protected 24-point whitespace gutter rather
+  than a vertical divider.
 - Responsive pad and zone layouts use `AnyLayout` to move one mounted child tree;
-  no stateful editor or control closure is duplicated under `ViewThatFits`.
+  no stateful editor or control closure is duplicated under `ViewThatFits`. Accessibility
+  text sizes stack both editor and preview/inspector splits even at wide regular-text widths,
+  so fixed native controls never compete with scaled labels.
 - Every status uses text and an SF Symbol as well as color. Labels and values share the native
   callout size, with distinct title-to-value spacing and 12-point side padding. Status pills
   wrap as whole controls rather than shrinking at narrow widths or Accessibility text sizes. Increased Contrast,

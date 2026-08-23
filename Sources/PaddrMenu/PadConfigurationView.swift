@@ -80,7 +80,6 @@ struct PadConfigurationView: View {
                 modeSettings
             }
         }
-        .padding(PaddrStyle.Spacing.s3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(
             maxHeight: fillsEqualHeightColumn ? .infinity : nil,
@@ -181,10 +180,7 @@ struct PadConfigurationView: View {
         @ViewBuilder _ settings: () -> Settings
     ) -> some View {
         VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
-            Text(settingsTitle)
-                .paddrTypography(.sectionTitle)
-                .frame(minHeight: PaddrStyle.Metrics.row)
-                .accessibilityAddTraits(.isHeader)
+            PaddrSectionHeader(settingsTitle)
             settings()
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -193,10 +189,7 @@ struct PadConfigurationView: View {
 
     private func previewSection(title: LocalizedStringResource) -> some View {
         VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
-            Text(title)
-                .paddrTypography(.sectionTitle)
-                .frame(minHeight: PaddrStyle.Metrics.row)
-                .accessibilityAddTraits(.isHeader)
+            PaddrSectionHeader(title)
             PadModePreview(mode: configuration.mode, deadzone: configuration.mouseDeadzone)
                 .frame(
                     width: PaddrStyle.Metrics.zoneMapWidth,

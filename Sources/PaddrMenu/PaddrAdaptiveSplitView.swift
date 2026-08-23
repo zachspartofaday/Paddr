@@ -10,6 +10,8 @@ extension EnvironmentValues {
 /// `AnyLayout` keeps one mounted subtree while moving the same children between
 /// horizontal and vertical arrangements.
 struct PaddrAdaptiveSplitView<Leading: View, Trailing: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let breakpoint: CGFloat
     let leadingWidth: CGFloat?
     let showsDivider: Bool
@@ -48,16 +50,16 @@ struct PaddrAdaptiveSplitView<Leading: View, Trailing: View>: View {
         leadingWidth = nil
         showsDivider = false
         equalizesColumnHeights = true
-        columnSpacing = PaddrStyle.Spacing.s3
+        columnSpacing = PaddrStyle.cardSpacing
         self.leading = leading
         self.trailing = trailing
     }
 
     var body: some View {
-        let usesColumns = availableWidth >= breakpoint
+        let usesColumns = availableWidth >= breakpoint && !dynamicTypeSize.isAccessibilitySize
         let usesEqualHeightColumns = usesColumns && equalizesColumnHeights
         let layout = usesEqualHeightColumns
-            ? AnyLayout(PaddrEqualHeightColumnsLayout(spacing: PaddrStyle.Spacing.s3))
+            ? AnyLayout(PaddrEqualHeightColumnsLayout(spacing: columnSpacing))
             : usesColumns
                 ? AnyLayout(HStackLayout(alignment: .top, spacing: columnSpacing))
                 : AnyLayout(VStackLayout(alignment: .leading, spacing: PaddrStyle.Spacing.s4))

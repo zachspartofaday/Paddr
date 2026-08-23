@@ -90,7 +90,7 @@ struct ApplyBarView: View {
                 )
                 .accessibilityHidden(true)
             }
-            .paddrTypography(.caption)
+            .paddrTypography(.rowLabel)
             .foregroundStyle(
                 messageState == .failure ? PaddrStyle.errorText : PaddrStyle.warningText
             )
@@ -102,7 +102,7 @@ struct ApplyBarView: View {
                 model.readiness.nextAction.title,
                 systemImage: model.readiness.nextAction.systemImage
             )
-            .paddrTypography(.caption)
+            .paddrTypography(.rowLabel)
             .foregroundStyle(
                 model.readiness.nextAction == .none
                     ? PaddrStyle.activeText

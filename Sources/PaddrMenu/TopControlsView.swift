@@ -30,7 +30,6 @@ struct TopControlsView: View {
             .frame(minHeight: PaddrStyle.Metrics.row)
             if !model.hasSystemAccess { permissionsContent }
         }
-        .padding(PaddrStyle.Spacing.s3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .paddrCard()
         .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in
@@ -62,10 +61,8 @@ struct TopControlsView: View {
 
     private var permissionsContent: some View {
         VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s2) {
-            Text("Permissions")
-                .paddrTypography(.sectionTitle)
+            PaddrSectionHeader("Permissions")
                 .fixedSize()
-                .accessibilityAddTraits(.isHeader)
 
             inputMonitoringTile
             accessibilityTile

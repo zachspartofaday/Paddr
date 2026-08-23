@@ -44,7 +44,7 @@ struct PermissionTile: View {
                     .paddrAccessibilityID("permissions", identifier, "settings")
             }
         }
-        .padding(.horizontal, PaddrStyle.Spacing.s2)
+        .padding(.horizontal, PaddrStyle.Inset.control)
         .frame(maxWidth: .infinity, minHeight: PaddrStyle.Metrics.row)
         .background(
             tileColor.opacity(PaddrStyle.permissionFillOpacity),

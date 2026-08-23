@@ -130,7 +130,6 @@ struct OnboardingGuideView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(PaddrStyle.Spacing.s3)
         .paddrCard()
         .accessibilityElement(children: .contain)
     }

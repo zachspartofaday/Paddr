@@ -68,7 +68,7 @@ struct StatusCell: View {
                     .lineLimit(1)
             }
         }
-        .padding(.horizontal, PaddrStyle.Spacing.s3)
+        .padding(.horizontal, PaddrStyle.Inset.control)
         .frame(minHeight: PaddrStyle.Metrics.row)
         .background(
             state.color.opacity(0.12),

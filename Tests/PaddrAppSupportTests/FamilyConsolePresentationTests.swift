@@ -14,7 +14,42 @@ final class FamilyConsolePresentationTests: XCTestCase {
         XCTAssertEqual(PaddrStyle.Metrics.defaultWindowSize, NSSize(width: 1_280, height: 700))
         XCTAssertEqual(PaddrStyle.Metrics.defaultContentWidth, 1_232)
         XCTAssertEqual(PaddrStyle.Metrics.outerSpacing, 24)
+        XCTAssertEqual(PaddrStyle.Inset.window, 24)
+        XCTAssertEqual(PaddrStyle.Inset.card, 16)
+        XCTAssertEqual(PaddrStyle.Inset.section, 16)
+        XCTAssertEqual(PaddrStyle.Inset.control, 12)
+        XCTAssertEqual(PaddrStyle.cardSpacing, 16)
+        XCTAssertEqual(PaddrStyle.Metrics.padEditorColumnsBreakpoint, 792)
+        XCTAssertEqual(PaddrStyle.minimumPadSectionWidth, 324)
+        XCTAssertEqual(PaddrStyle.minimumPadColumnWidth, 388)
+        XCTAssertEqual(PaddrStyle.padColumnWidth, 608)
+        XCTAssertEqual(
+            PaddrStyle.Metrics.padEditorColumnsBreakpoint,
+            (2 * PaddrStyle.minimumPadColumnWidth) + PaddrStyle.cardSpacing
+        )
         XCTAssertEqual(PaddrStyle.Metrics.statusBarInlineBreakpoint, 1_120)
+    }
+
+    func testTypographyRolesFormAStrictNativeHierarchy() {
+        func height(for role: PaddrTextRole) -> CGFloat {
+            let hostingView = NSHostingView(
+                rootView: Text("Hierarchy").paddrTypography(role)
+            )
+            hostingView.layoutSubtreeIfNeeded()
+            return hostingView.fittingSize.height
+        }
+
+        let page = height(for: .pageTitle)
+        let card = height(for: .cardTitle)
+        let section = height(for: .sectionTitle)
+        let band = height(for: .sectionLabel)
+        let row = height(for: .rowLabel)
+
+        XCTAssertGreaterThan(page, card)
+        XCTAssertGreaterThan(card, section)
+        XCTAssertGreaterThan(section, band)
+        XCTAssertGreaterThan(band, row)
+        XCTAssertEqual(row, height(for: .value), accuracy: 0.5)
     }
 
     func testFamilyConsolePaletteMatchesApprovedValues() throws {

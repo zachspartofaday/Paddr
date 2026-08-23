@@ -26,11 +26,13 @@ User-visible changes to Paddr are recorded here. Release entries describe confir
   wider default window size, with each pad preview and settings inspector also visible in
   columns and separated by whitespace instead of a rule. Pointer tracking, zone mode, and
   selected-area rows now carry icons and consistent trailing alignment; region headings have
-  clearer hierarchy; and status pills use larger uniform type, stronger side padding, and
-  whole-pill wrapping at narrow widths and Accessibility text sizes.
-  The same mounted editor subtrees stack only at genuinely narrow widths. Both configurations
-  remain independent and every mapping behavior is unchanged. Wider restored windows use their
-  available width, fixed trackpad maps are centered, and inset controls remain inside their card
+  a deliberate native type ladder; every primary card and inset panel shares a 16-point content
+  margin and 16-point sibling rhythm; compact tiles share a 12-point horizontal inset; and status
+  pills use larger uniform type, stronger side padding, and whole-pill wrapping at narrow widths
+  and Accessibility text sizes.
+  The same mounted editor subtrees stack at genuinely narrow widths and Accessibility text sizes.
+  Both configurations remain independent and every mapping behavior is unchanged. Wider restored
+  windows use their available width, fixed trackpad maps are centered, and inset controls remain inside their card
   boundaries; document overflow scrolls without taking over the saved window height
   ([#77](https://github.com/zachspartofaday/Paddr/issues/77)).
 - Added a pure readiness resolver with deterministic next-action guidance and output
