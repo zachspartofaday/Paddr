@@ -74,6 +74,21 @@ for architecture in $architectures; do
     lipo -archs "$binary_path" | tr ' ' '\n' | grep -qx "$architecture"
 done
 
+if ! final_source_revision=$(git -C "$repo_dir" rev-parse HEAD) ||
+   ! final_source_dirty=$("$script_dir/source-dirty.sh" "$repo_dir"); then
+    echo "Unable to revalidate the source checkout after building the app." >&2
+    exit 1
+fi
+case "$final_source_dirty" in
+    true|false) ;;
+    *) echo "Invalid post-build source checkout state: $final_source_dirty" >&2; exit 1 ;;
+esac
+if test "$final_source_revision" != "$source_revision" ||
+   test "$final_source_dirty" != "$source_dirty"; then
+    echo "Source checkout changed while the app was being built; refusing to publish it." >&2
+    exit 1
+fi
+
 if [ "$sign_identity" = "-" ]; then
     codesign --force --sign - "$staged_app"
 else

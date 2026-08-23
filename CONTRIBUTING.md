@@ -41,6 +41,7 @@ swift build -c release -Xswiftc -warnings-as-errors --arch arm64
 swift build -c release -Xswiftc -warnings-as-errors --arch arm64 --product PaddrCLI
 scripts/test-cli.sh "$(swift build -c release --arch arm64 --show-bin-path)/PaddrCLI"
 scripts/test-release-identity.sh
+scripts/test-release-production.sh
 ```
 
 To assemble a local ad-hoc app without touching the repository's `dist` directory:
