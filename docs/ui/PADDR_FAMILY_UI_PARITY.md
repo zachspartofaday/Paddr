@@ -200,4 +200,6 @@ private repository path ships in Paddr application code or user-facing product r
 `THIRD_PARTY_NOTICES.md` retains the MIT notice required by the grant.
 `scripts/build-app.sh` installs it as
 `Paddr.app/Contents/Resources/ThirdPartyNotices.txt`, and the Help and status menus expose
-an **Open Source Notices…** command.
+an **Open Source Notices…** command. The PaddrMenu SwiftPM target carries a byte-identical
+resource copy so the same command also works in supported `swift run Paddr` development
+launches; regression coverage prevents that copy from drifting from the canonical notice.

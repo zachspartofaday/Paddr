@@ -212,10 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     @objc private func openSourceNotices() {
-        guard let url = Bundle.main.url(
-            forResource: "ThirdPartyNotices",
-            withExtension: "txt"
-        ) else {
+        guard let url = PaddrOpenSourceNotices.url else {
             NSSound.beep()
             return
         }

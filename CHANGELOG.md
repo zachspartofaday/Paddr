@@ -46,7 +46,11 @@ User-visible changes to Paddr are recorded here. Release entries describe confir
   height ([#77](https://github.com/zachspartofaday/Paddr/issues/77)).
 - Added a pure readiness resolver with deterministic next-action guidance and output
   disabled reasons. The menu-bar item now announces output, controller, puck transport,
-  and active-profile semantics.
+  and active-profile semantics. While a profile operation temporarily disables output, the
+  guidance now asks the user to wait instead of advertising an unavailable enable action.
+- Kept **Open Source Notices…** available in both packaged applications and supported
+  `swift run Paddr` development launches, with a synchronized SwiftPM copy of the canonical
+  release notice.
 - Superseded the 0.9.11 **Center tap radius** known issue ([#50](https://github.com/zachspartofaday/Paddr/issues/50)): Pointer mode can now track across the full pad while the radius continues to define the tap area. Each pad has a **Track pointer inside tap radius** switch for choosing full-pad tracking or the former coupled tracking dead zone. Fresh profile stores and newly created configurations use full-pad tracking; existing canonical and raw configurations preserve coupled behavior until changed, including the built-in Default synthesized for an existing canonical document. Duplicating Default preserves that source document’s behavior.
 - Added the controller's passively reported battery percentage and charge state to a reserved **Battery** status pill and the native status menu, with stale battery state cleared whenever the active controller is lost or replaced ([#54](https://github.com/zachspartofaday/Paddr/issues/54)).
 - Fixed the controller staying **Not found** on some pucks even though macOS saw the controller ([#52](https://github.com/zachspartofaday/Paddr/issues/52)). Paddr now listens on all four controller slots the puck exposes (USB interfaces 2–5) instead of a single heuristically chosen interface, accepts the shorter controller-state report variants some firmware emits instead of requiring exactly 54-byte reports, and reacts to the puck's explicit wireless connect/disconnect events so controller status updates immediately.

@@ -87,6 +87,10 @@ final class FamilyConsolePresentationTests: XCTestCase {
             (input(controllerConnected: false), .connectController),
             (input(accessibilityTrusted: false), .requestAccessibility),
             (input(isReleasingOutput: true), .waitForOutputRelease),
+            (
+                input(isEnabled: false, isRunning: false, canToggleOutput: false),
+                .waitForProfileOperation
+            ),
             (input(isEnabled: false), .enableOutput),
             (input(isRunning: false), .releaseTrackpads),
             (input(), .none)
@@ -99,6 +103,11 @@ final class FamilyConsolePresentationTests: XCTestCase {
                 "Unexpected action for \(input)"
             )
         }
+
+        XCTAssertEqual(
+            String(localized: PaddrReadinessNextAction.waitForProfileOperation.title),
+            "Wait for the profile operation to finish"
+        )
     }
 
     func testReadinessResolverExplainsEveryDisabledOutputState() {

@@ -73,6 +73,7 @@ public enum PaddrReadinessNextAction: Equatable, Sendable {
     case connectController
     case requestAccessibility
     case waitForOutputRelease
+    case waitForProfileOperation
     case enableOutput
     case releaseTrackpads
     case none
@@ -85,6 +86,7 @@ public enum PaddrReadinessNextAction: Equatable, Sendable {
         case .connectController: "Connect the controller through the puck"
         case .requestAccessibility: "Allow Accessibility"
         case .waitForOutputRelease: "Wait for mapped input to release"
+        case .waitForProfileOperation: "Wait for the profile operation to finish"
         case .enableOutput: "Enable Trackpad Output"
         case .releaseTrackpads: "Release both trackpads"
         case .none: "Ready"
@@ -99,6 +101,7 @@ public enum PaddrReadinessNextAction: Equatable, Sendable {
         case .connectController: "gamecontroller"
         case .requestAccessibility: "accessibility"
         case .waitForOutputRelease: "arrow.down.circle"
+        case .waitForProfileOperation: "hourglass"
         case .enableOutput: "play.circle"
         case .releaseTrackpads: "hand.raised"
         case .none: "checkmark.circle.fill"
@@ -170,7 +173,7 @@ public enum PaddrReadinessResolver {
         } else if input.isReleasingOutput {
             nextAction = .waitForOutputRelease
         } else if !input.isEnabled {
-            nextAction = .enableOutput
+            nextAction = input.canToggleOutput ? .enableOutput : .waitForProfileOperation
         } else if !input.isRunning {
             nextAction = .releaseTrackpads
         } else {

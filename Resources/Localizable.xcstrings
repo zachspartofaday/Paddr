@@ -67,6 +67,9 @@
     "Wait for mapped input to release": {
       "comment": "Readiness action shown while mapped output is being released."
     },
+    "Wait for the profile operation to finish": {
+      "comment": "Readiness action shown while a profile write temporarily disables output controls."
+    },
     "3 × 3 grid": {
       "localizations": {
         "en": {

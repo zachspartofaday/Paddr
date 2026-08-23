@@ -2847,6 +2847,39 @@ final class MenuModelTests: XCTestCase {
         )
     }
 
+    func testPendingProfileSaveAdvertisesWaitingInsteadOfDisabledEnableAction() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, _, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = DispatchSemaphore(value: 0)
+        state.saveGate = saveGate
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.send(.controllerConnected)
+        await waitUntil(model: model) { model.controllerConnected }
+
+        XCTAssertEqual(model.readiness.nextAction, .enableOutput)
+        XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
+        await waitUntil { state.saveCallCount == 1 }
+
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertFalse(model.canToggleOutput)
+        XCTAssertEqual(model.readiness.outputDisabledReason, .profileOperation)
+        XCTAssertEqual(model.readiness.nextAction, .waitForProfileOperation)
+        XCTAssertEqual(
+            String(localized: model.readiness.nextAction.title),
+            "Wait for the profile operation to finish"
+        )
+
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) { model.canToggleOutput }
+
+        XCTAssertEqual(model.readiness.nextAction, .enableOutput)
+    }
+
     func testEnabledDirtyActivationCommitSerializesRenameWithoutStaleOverwrite() async throws {
         let state = readyState(receiver: "Fake puck")
         let (document, first, second) = try twoProfileDocument()
