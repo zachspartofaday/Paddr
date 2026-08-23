@@ -20,7 +20,7 @@
       "comment": "Readiness action shown when the puck transport is unavailable."
     },
     "Enable or disable mapped trackpad output": {
-      "comment": "Help text for the Trackpad Output toolbar switch."
+      "comment": "Help text for the Trackpad Output switch in the bottom status bar."
     },
     "Enable Trackpad Output": {
       "comment": "Readiness action shown when setup is ready and output is off."

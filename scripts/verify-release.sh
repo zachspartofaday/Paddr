@@ -55,6 +55,17 @@ verify_app() {
         printf '%s\n' "$actual_architectures" | tr ' ' '\n' | grep -qx "$architecture"
     done
 
+    symbol_table="$extract_dir/Paddr.nm"
+    if ! nm -pa "$binary" > "$symbol_table"; then
+        echo "Unable to inspect the app binary symbol table: $binary" >&2
+        return 1
+    fi
+    if awk '$5 == "SO" || $5 == "OSO" { found = 1 } END { exit found ? 0 : 1 }' \
+        "$symbol_table"; then
+        echo "App binary contains forbidden N_SO/N_OSO source or object path records: $binary" >&2
+        return 1
+    fi
+
     test -f "$verified_app/Contents/Resources/en.lproj/Localizable.strings"
     test -f "$verified_app/Contents/Resources/ThirdPartyNotices.txt"
     grep -q '6c65d74fac9add281918438629228333535752a4' \

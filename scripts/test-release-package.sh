@@ -134,4 +134,52 @@ if "$script_dir/verify-release.sh" \
     exit 1
 fi
 
+repo_dir=$(dirname -- "$script_dir")
+build_scratch_path=${BUILD_SCRATCH_PATH:-}
+architectures=${ARCHITECTURES:-arm64}
+set -- -c release --product Paddr -Xswiftc -warnings-as-errors
+if test -n "$build_scratch_path"; then
+    set -- "$@" --scratch-path "$build_scratch_path"
+fi
+for architecture in $architectures; do
+    set -- "$@" --arch "$architecture"
+done
+unstripped_build_dir=$(
+    cd "$repo_dir"
+    swift build "$@" --show-bin-path
+)
+unstripped_binary="$unstripped_build_dir/Paddr"
+if ! nm -pa "$unstripped_binary" | \
+    awk '$5 == "SO" || $5 == "OSO" { found = 1 } END { exit found ? 0 : 1 }'; then
+    echo "Unstripped release fixture does not contain N_SO/N_OSO records." >&2
+    exit 1
+fi
+
+unstripped_dir="$recipient_dir/unstripped"
+unstripped_stage="$recipient_dir/unstripped-stage"
+mkdir -p "$unstripped_dir" "$unstripped_stage"
+cp -R "$app_path" "$unstripped_stage/Paddr.app"
+cp "$unstripped_binary" "$unstripped_stage/Paddr.app/Contents/MacOS/Paddr"
+chmod 755 "$unstripped_stage/Paddr.app/Contents/MacOS/Paddr"
+codesign --force --sign - "$unstripped_stage/Paddr.app" >/dev/null 2>&1
+ditto -c -k --keepParent --norsrc \
+    "$unstripped_stage/Paddr.app" "$unstripped_dir/Paddr.zip"
+(
+    cd "$unstripped_dir"
+    shasum -a 256 Paddr.zip > Paddr.zip.sha256
+)
+unstripped_verification_output="$unstripped_dir/verification-output.txt"
+if "$script_dir/verify-release.sh" \
+    "$app_path" "$unstripped_dir/Paddr.zip" "$unstripped_dir/Paddr.zip.sha256" \
+    "$expected_version" "$expected_build" >"$unstripped_verification_output" 2>&1; then
+    echo "Release verification accepted an unstripped app binary." >&2
+    exit 1
+fi
+if ! grep -q 'forbidden N_SO/N_OSO source or object path records' \
+    "$unstripped_verification_output"; then
+    echo "Release verification rejected the unstripped fixture for an unexpected reason." >&2
+    cat "$unstripped_verification_output" >&2
+    exit 1
+fi
+
 echo "Release artifacts verify from a clean recipient directory."

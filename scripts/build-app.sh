@@ -53,6 +53,7 @@ cp "$repo_dir/Packaging/Info.plist" "$contents_path/Info.plist"
 cp "$build_dir/Paddr" "$binary_path"
 cp "$repo_dir/THIRD_PARTY_NOTICES.md" "$contents_path/Resources/ThirdPartyNotices.txt"
 chmod 755 "$binary_path"
+strip -S "$binary_path"
 
 xcrun xcstringstool compile \
     "$repo_dir/Resources/Localizable.xcstrings" \
