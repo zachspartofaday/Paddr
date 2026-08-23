@@ -1109,6 +1109,25 @@ final class RuntimeTests: XCTestCase {
         XCTAssertEqual(result.summary.reportCount, 2)
     }
 
+    func testDurationStopsAfterMonotonicBoundary() throws {
+        let clock = ManualUptimeClock()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .perform { clock.set(21) },
+            .report(neutralReport(), at: 21)
+        ])
+
+        let result = try run(
+            duration: .nanoseconds(20),
+            hid: hid,
+            clock: clock,
+            events: EventRecorder()
+        )
+
+        XCTAssertEqual(result.termination, .stopped)
+        XCTAssertEqual(result.summary.reportCount, 1)
+    }
+
     func testDurationValidationRejectsZeroAndNanosecondOverflow() throws {
         XCTAssertThrowsError(try TrackpadRuntime.validatedDurationNanoseconds(.zero))
         XCTAssertThrowsError(

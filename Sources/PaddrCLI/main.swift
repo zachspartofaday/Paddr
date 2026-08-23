@@ -372,11 +372,11 @@ private func run(_ options: CLIOptions) throws {
 
     print(options.observeOnly ? "Observing until stopped." : "Output enabled; press Control-C to stop.")
     let verbose = options.verbose
-    let result = try TrackpadRuntime.run(
+    let result = try CLIExecution.run(
         configuration: options.configuration,
         observeOnly: options.observeOnly,
         stopToken: stop,
-        duration: options.duration?.runtimeValue,
+        duration: options.duration,
         onAction: { action in
             if verbose { print("- \(action)") }
         }

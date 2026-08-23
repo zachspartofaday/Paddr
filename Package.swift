@@ -23,7 +23,7 @@ let package = Package(
             dependencies: ["PaddrCore", "PaddrAppSupport"]
         ),
         .testTarget(name: "PaddrTests", dependencies: ["PaddrCore"]),
-        .testTarget(name: "PaddrCLITests", dependencies: ["PaddrCLIKit"]),
+        .testTarget(name: "PaddrCLITests", dependencies: ["PaddrCLIKit", "PaddrCore"]),
         .testTarget(
             name: "PaddrAppSupportTests",
             dependencies: ["PaddrAppSupport", "PaddrCore", "PaddrMenu"]
