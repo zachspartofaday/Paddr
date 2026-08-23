@@ -17,13 +17,16 @@ User-visible changes to Paddr are recorded here. Release entries describe confir
   [#78](https://github.com/zachspartofaday/Paddr/issues/78)).
 - Blended the configuration and guide titlebars into the dark family background with
   full-size content, transparent titlebar backgrounds, and no separator. Window titles,
-  configuration-toolbar behavior, saved window position, sizing, and lifecycle remain
-  unchanged; existing v4 window frames migrate once without losing their usable size
-  or top-edge position.
+  configuration-toolbar behavior, default/minimum usable sizes, saved window position,
+  and lifecycle remain unchanged; existing v4 window frames migrate once without losing
+  their usable size or top-edge position.
 - Kept the Left and Right trackpad editors visible together in equal columns at the
   default window size, stacking the same two mounted editor subtrees only at genuinely
   narrow widths. Both configurations remain independent and every mapping behavior is
-  unchanged ([#77](https://github.com/zachspartofaday/Paddr/issues/77)).
+  unchanged. Wider restored windows now use their available width, fixed trackpad maps
+  are centered, and inset controls remain inside their card boundaries; document overflow
+  scrolls without taking over the saved window height
+  ([#77](https://github.com/zachspartofaday/Paddr/issues/77)).
 - Added a pure readiness resolver with deterministic next-action guidance and output
   disabled reasons. The menu-bar item now announces output, controller, puck transport,
   and active-profile semantics.

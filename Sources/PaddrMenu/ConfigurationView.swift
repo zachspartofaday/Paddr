@@ -3,8 +3,6 @@ import SwiftUI
 
 struct ConfigurationView: View {
     @Bindable var model: PaddrMenuModel
-    @State private var configurationContentHeight: CGFloat = 0
-    @State private var commandBarHeight = PaddrStyle.Metrics.commandBar
 
     var body: some View {
         ZStack {
@@ -20,29 +18,12 @@ struct ConfigurationView: View {
                             isEditable: model.canEditActiveProfile
                         )
                     }
-                    .frame(maxWidth: PaddrStyle.Metrics.contentMaxWidth)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(PaddrStyle.Metrics.outerSpacing)
-                    .frame(maxWidth: .infinity)
-                    .onGeometryChange(
-                        for: CGFloat.self,
-                        of: { $0.size.height },
-                        action: { measuredHeight in
-                            guard measuredHeight > 0 else { return }
-                            configurationContentHeight = measuredHeight
-                        }
-                    )
                 }
                 .scrollIndicators(.automatic)
 
                 ApplyBarView(model: model)
-                    .onGeometryChange(
-                        for: CGFloat.self,
-                        of: { $0.size.height },
-                        action: { measuredHeight in
-                            guard measuredHeight > 0 else { return }
-                            commandBarHeight = measuredHeight
-                        }
-                    )
             }
         }
         .frame(
@@ -54,16 +35,6 @@ struct ConfigurationView: View {
         .controlSize(.large)
         .tint(PaddrStyle.controlTint)
         .preferredColorScheme(.dark)
-        .background {
-            if configurationContentHeight > 0 {
-                WindowContentFitter(
-                    targetHeight: max(
-                        PaddrStyle.Metrics.minimumWindowSize.height,
-                        configurationContentHeight + commandBarHeight
-                    )
-                )
-            }
-        }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button("Refresh", systemImage: "arrow.clockwise", action: model.refreshStatus)

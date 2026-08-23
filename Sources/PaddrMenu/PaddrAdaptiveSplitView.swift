@@ -17,7 +17,7 @@ struct PaddrAdaptiveSplitView<Leading: View, Trailing: View>: View {
     @ViewBuilder let leading: () -> Leading
     @ViewBuilder let trailing: () -> Trailing
 
-    @State private var availableWidth = PaddrStyle.Metrics.contentMaxWidth
+    @State private var availableWidth = PaddrStyle.Metrics.defaultContentWidth
 
     init(
         breakpoint: CGFloat,

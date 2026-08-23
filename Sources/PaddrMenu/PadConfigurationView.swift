@@ -161,7 +161,7 @@ struct PadConfigurationView: View {
         @ViewBuilder settings: @escaping () -> some View
     ) -> some View {
         PaddrAdaptiveSplitView(
-            breakpoint: 680,
+            breakpoint: PaddrStyle.previewInspectorColumnsBreakpoint,
             leadingWidth: PaddrStyle.Metrics.zoneMapWidth,
             leading: { previewSection(title: previewTitle) },
             trailing: { settingsSection(settings) }
@@ -192,8 +192,10 @@ struct PadConfigurationView: View {
                     width: PaddrStyle.Metrics.zoneMapWidth,
                     height: PaddrStyle.Metrics.zoneMapHeight
                 )
+                .frame(maxWidth: .infinity, alignment: .center)
                 .help("Mirrors how the trackpad will respond in this mode.")
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var sensitivityRow: some View {

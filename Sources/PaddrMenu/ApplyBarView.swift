@@ -37,10 +37,8 @@ struct ApplyBarView: View {
                 )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(maxWidth: PaddrStyle.Metrics.contentMaxWidth)
         .padding(.horizontal, PaddrStyle.Metrics.outerSpacing)
         .padding(.vertical, PaddrStyle.Spacing.s2)
-        .frame(maxWidth: .infinity)
         .frame(minHeight: PaddrStyle.Metrics.commandBar)
         .background(PaddrStyle.night0.opacity(0.96))
         .overlay(alignment: .top) {

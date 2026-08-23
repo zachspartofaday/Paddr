@@ -57,7 +57,9 @@ enum PaddrStyle {
         /// `row` plus a `Spacing.s2` inset above and below.
         static let commandBar: CGFloat = 54
 
-        static let contentMaxWidth: CGFloat = 820
+        /// Content width at the default window size. Wider restored or user-sized
+        /// windows remain fluid instead of introducing fixed dead gutters.
+        static let defaultContentWidth: CGFloat = 820
         static let outerSpacing: CGFloat = 24
         /// Below this content width, two complete pad editors no longer have
         /// enough room for their native mode controls and stack vertically.
@@ -81,9 +83,8 @@ enum PaddrStyle {
     }
 
     /// Widths are derived from the container they must fit, not chosen a priori. The binding
-    /// constraint is the pad card's inspector column: a settings row's inline branch needs
-    /// `labelColumn + Spacing.s3 + control <= zoneInspectorWidth`. Exceeding it does not clip
-    /// — it silently drops every picker row into `PaddrSettingsRow`'s stacked fallback.
+    /// constraint is the inset section inside one default dual-pad column: a settings row's
+    /// inline branch must fit after both the card and section padding are removed.
     enum Width {
         /// Numeric value column, monospaced and trailing-aligned.
         static let readout: CGFloat = 48
@@ -95,9 +96,9 @@ enum PaddrStyle {
         static let controlWide: CGFloat = 200
         /// Label column for rows whose control is a fixed-width picker.
         static let labelColumn: CGFloat = 108
-        /// Label column for slider rows: their labels are longer ("Pointer acceleration")
-        /// and their control is flexible, so they can afford what a picker row cannot.
-        static let labelColumnWide: CGFloat = 152
+        /// Label column for slider rows. It is wide enough for "Pointer acceleration"
+        /// while preserving a usable native slider at the dual-column breakpoint.
+        static let labelColumnWide: CGFloat = 136
     }
 
     // Family-console palette adapted under the bounded MIT grant recorded in
@@ -152,10 +153,21 @@ enum PaddrStyle {
     static let permissionFillOpacity = 0.07
     static let permissionStrokeOpacity = 0.75
 
-    static let padColumnWidth = (Metrics.contentMaxWidth - Spacing.s3) / 2
-    static let zoneInspectorWidth: CGFloat = 480
+    static let padColumnWidth = (Metrics.defaultContentWidth - Spacing.s3) / 2
+    static let minimumPadColumnWidth = (
+        Metrics.padEditorColumnsBreakpoint - Spacing.s3
+    ) / 2
+    static let minimumPadSectionWidth = minimumPadColumnWidth - (4 * Spacing.s3)
+    static let previewInspectorColumnsBreakpoint = Metrics.zoneMapWidth
+        + minimumPadSectionWidth
+        + (2 * Spacing.s3)
+        + 1
     static let behaviorPickerWidth: CGFloat = 272
-    static let sliderMinimumWidth: CGFloat = 160
+    static let sliderMinimumWidth = minimumPadSectionWidth
+        - Width.labelColumnWide
+        - Spacing.s3
+        - Spacing.s2
+        - Width.readout
 }
 
 private struct PaddrTypographyModifier: ViewModifier {

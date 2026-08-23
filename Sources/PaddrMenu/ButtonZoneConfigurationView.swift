@@ -15,7 +15,7 @@ struct ButtonZoneConfigurationView: View {
 
     var body: some View {
         PaddrAdaptiveSplitView(
-            breakpoint: 680,
+            breakpoint: PaddrStyle.previewInspectorColumnsBreakpoint,
             leadingWidth: PaddrStyle.Metrics.zoneMapWidth,
             leading: { mapSection },
             trailing: { inspector }
@@ -39,11 +39,14 @@ struct ButtonZoneConfigurationView: View {
             Text("Area map")
                 .paddrTypography(.sectionLabel)
                 .frame(minHeight: PaddrStyle.Metrics.row)
-            padMap.frame(
-                width: PaddrStyle.Metrics.zoneMapWidth,
-                height: PaddrStyle.Metrics.zoneMapHeight
-            )
+            padMap
+                .frame(
+                    width: PaddrStyle.Metrics.zoneMapWidth,
+                    height: PaddrStyle.Metrics.zoneMapHeight
+                )
+                .frame(maxWidth: .infinity, alignment: .center)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var inspector: some View {

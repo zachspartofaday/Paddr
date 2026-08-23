@@ -22,11 +22,11 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         XCTAssertLessThanOrEqual(compactSize.width, 680.5)
         XCTAssertGreaterThan(compactSize.height, 0)
 
-        hostingView.frame.size.width = PaddrStyle.Metrics.contentMaxWidth
+        hostingView.frame.size.width = PaddrStyle.Metrics.defaultContentWidth
         await settle(hostingView)
 
         let inlineSize = hostingView.fittingSize
-        XCTAssertLessThanOrEqual(inlineSize.width, PaddrStyle.Metrics.contentMaxWidth + 0.5)
+        XCTAssertLessThanOrEqual(inlineSize.width, PaddrStyle.Metrics.defaultContentWidth + 0.5)
         XCTAssertGreaterThan(
             compactSize.height,
             inlineSize.height + (PaddrStyle.Metrics.row / 2),
@@ -123,6 +123,30 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         XCTAssertEqual(identifiers.count, 2)
     }
 
+    func testRestoredWideConfigurationUsesAvailableWidthWithoutDeadGutters() async throws {
+        let model = makeMenuModel()
+        let didInitialize = await waitUntil { model.isInitialized && model.hasSystemAccess }
+        XCTAssertTrue(didInitialize)
+        let restoredWidth: CGFloat = 1_120
+        let hostingView = NSHostingView(rootView: ConfigurationView(model: model))
+        hostingView.frame = NSRect(x: 0, y: 0, width: restoredWidth, height: 900)
+        await settle(hostingView)
+
+        let left = try XCTUnwrap(modeSelector(side: .left, in: hostingView))
+        let right = try XCTUnwrap(modeSelector(side: .right, in: hostingView))
+        let availableContentWidth = restoredWidth - (2 * PaddrStyle.Metrics.outerSpacing)
+        let expectedColumnWidth = (
+            availableContentWidth - PaddrStyle.Spacing.s3
+        ) / 2
+
+        XCTAssertEqual(
+            abs(frame(of: left, in: hostingView).midX - frame(of: right, in: hostingView).midX),
+            expectedColumnWidth + PaddrStyle.Spacing.s3,
+            accuracy: 1,
+            "A restored wide window must expand both pad columns instead of centering an 820pt island"
+        )
+    }
+
     func testDualPadEditorsMountSideBySideAtTheDefaultContentWidth() async throws {
         let state = DualPadEvidenceState(configuration: .default)
         let hostingView = dualPadHostingView(state: state)
@@ -148,7 +172,7 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         )
         XCTAssertEqual(
             PaddrStyle.padColumnWidth,
-            (PaddrStyle.Metrics.contentMaxWidth - PaddrStyle.Spacing.s3) / 2
+            (PaddrStyle.Metrics.defaultContentWidth - PaddrStyle.Spacing.s3) / 2
         )
 
         let leftCard = try XCTUnwrap(
@@ -171,6 +195,50 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
             hostingView.bounds.height / 2,
             "Equal-height cards must use their tallest intrinsic height, not the arbitrary host height"
         )
+    }
+
+    func testDualPadBreakpointContainsControlsImmediatelyBelowAtAndAboveIt() async throws {
+        let state = DualPadEvidenceState(configuration: .default)
+        let hostingView = dualPadHostingView(state: state)
+
+        for width in [
+            PaddrStyle.Metrics.padEditorColumnsBreakpoint - 1,
+            PaddrStyle.Metrics.padEditorColumnsBreakpoint,
+            PaddrStyle.Metrics.padEditorColumnsBreakpoint + 1
+        ] {
+            hostingView.frame.size.width = width
+            await settle(hostingView)
+
+            let left = try XCTUnwrap(modeSelector(side: .left, in: hostingView))
+            let right = try XCTUnwrap(modeSelector(side: .right, in: hostingView))
+            if width < PaddrStyle.Metrics.padEditorColumnsBreakpoint {
+                XCTAssertGreaterThan(
+                    abs(frame(of: left, in: hostingView).midY
+                        - frame(of: right, in: hostingView).midY),
+                    PaddrStyle.Metrics.row
+                )
+            } else {
+                XCTAssertEqual(
+                    frame(of: left, in: hostingView).midY,
+                    frame(of: right, in: hostingView).midY,
+                    accuracy: 1
+                )
+            }
+
+            for control in descendants(of: NSControl.self, in: hostingView) {
+                let controlFrame = frame(of: control, in: hostingView)
+                XCTAssertGreaterThanOrEqual(
+                    controlFrame.minX,
+                    hostingView.bounds.minX - 0.5,
+                    "\(type(of: control)) escapes the leading edge at \(width)pt"
+                )
+                XCTAssertLessThanOrEqual(
+                    controlFrame.maxX,
+                    hostingView.bounds.maxX + 0.5,
+                    "\(type(of: control)) escapes the trailing edge at \(width)pt"
+                )
+            }
+        }
     }
 
     func testDualPadEditorsMutateLeftAndRightIndependently() async throws {
@@ -250,7 +318,7 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         hostingView.frame = NSRect(
             x: 0,
             y: 0,
-            width: PaddrStyle.Metrics.contentMaxWidth,
+            width: PaddrStyle.Metrics.defaultContentWidth,
             height: 1_400
         )
         await settle(hostingView)
@@ -353,7 +421,7 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         hostingView.frame = NSRect(
             x: 0,
             y: 0,
-            width: PaddrStyle.Metrics.contentMaxWidth,
+            width: PaddrStyle.Metrics.defaultContentWidth,
             height: 1_400
         )
         return hostingView

@@ -136,27 +136,6 @@ final class MenuViewPresentationTests: XCTestCase {
         assertSize(familyWindow.contentLayoutRect.size, equals: PaddrStyle.Metrics.defaultWindowSize)
     }
 
-    func testWindowContentFitterTreatsTargetHeightAsUsableLayoutHeight() {
-        let window = makeWindow(hasToolbar: true, usesFullSizeContent: true)
-        PaddrFamilyWindowChrome.apply(to: window)
-        PaddrFamilyWindowChrome.setUsableLayoutSize(
-            PaddrStyle.Metrics.defaultWindowSize,
-            for: window
-        )
-        window.center()
-        let originalTopEdge = window.frame.maxY
-        let coordinator = WindowContentFitter.Coordinator()
-        coordinator.targetHeight = 600
-        coordinator.reduceMotion = true
-        defer { coordinator.detach() }
-
-        coordinator.attach(to: window)
-        window.contentView?.layoutSubtreeIfNeeded()
-
-        XCTAssertEqual(window.contentLayoutRect.height, 600, accuracy: 0.5)
-        XCTAssertEqual(window.frame.maxY, originalTopEdge, accuracy: 0.5)
-    }
-
     func testAccessibilityOnboardingPageFitsCompactWindowWithoutScrolling() throws {
         var pager = OnboardingPager()
         pager.advance()
@@ -192,11 +171,11 @@ final class MenuViewPresentationTests: XCTestCase {
             appearsEnabled: true,
             isEditable: true
         )
-        .frame(width: PaddrStyle.Metrics.contentMaxWidth)
+        .frame(width: PaddrStyle.Metrics.defaultContentWidth)
         let hostingView = NSHostingView(rootView: view)
         hostingView.frame = NSRect(
             origin: .zero,
-            size: NSSize(width: PaddrStyle.Metrics.contentMaxWidth, height: 620)
+            size: NSSize(width: PaddrStyle.Metrics.defaultContentWidth, height: 620)
         )
         hostingView.layoutSubtreeIfNeeded()
 
@@ -236,6 +215,35 @@ final class MenuViewPresentationTests: XCTestCase {
         }
     }
 
+    func testFamilyConsoleLeavesWindowHeightUnderUserAndAutosaveControl() async {
+        let store = BlockingProfileStore()
+        let model = PaddrMenuModel(dependencies: dependencies(store: store))
+        defer { store.releaseSave() }
+        let didInitialize = await waitUntil { model.isInitialized }
+        XCTAssertTrue(didInitialize)
+
+        let window = makeWindow(hasToolbar: false, usesFullSizeContent: true)
+        window.contentViewController = NSHostingController(
+            rootView: ConfigurationView(model: model)
+        )
+        PaddrFamilyWindowChrome.apply(to: window)
+        PaddrFamilyWindowChrome.setUsableLayoutSize(
+            PaddrStyle.Metrics.defaultWindowSize,
+            for: window
+        )
+        let expectedFrame = window.frame
+
+        if let contentView = window.contentView {
+            for _ in 0..<12 {
+                contentView.layoutSubtreeIfNeeded()
+                await Task.yield()
+            }
+        }
+
+        XCTAssertTrue(window.frame.isApproximatelyEqual(to: expectedFrame))
+        assertSize(window.contentLayoutRect.size, equals: PaddrStyle.Metrics.defaultWindowSize)
+    }
+
     func testPaddrAppearanceResolvesEveryAdaptiveCombination() {
         for reduceTransparency in [false, true] {
             for contrast in [ColorSchemeContrast.standard, .increased] {
@@ -264,33 +272,36 @@ final class MenuViewPresentationTests: XCTestCase {
     }
 
     func testSettingsRowControlsStayWithinTheSharedRowHeightInEveryPadMode() async {
-        for mode in PadMode.allCases {
-            for layout in PadZoneLayout.allCases {
-                var configuration = PadConfiguration(mode: mode)
-                configuration.zoneLayout = layout
-                let hostingView = NSHostingView(
-                    rootView: PadConfigurationView(
-                        side: .left,
-                        configuration: .constant(configuration)
+        for width in [PaddrStyle.minimumPadColumnWidth, PaddrStyle.padColumnWidth] {
+            for mode in PadMode.allCases {
+                for layout in PadZoneLayout.allCases {
+                    var configuration = PadConfiguration(mode: mode)
+                    configuration.zoneLayout = layout
+                    let hostingView = NSHostingView(
+                        rootView: PadConfigurationView(
+                            side: .left,
+                            configuration: .constant(configuration)
+                        )
+                        .frame(width: width)
                     )
-                    .frame(width: PaddrStyle.padColumnWidth)
-                )
-                hostingView.frame = NSRect(
-                    origin: .zero,
-                    size: NSSize(
-                        width: PaddrStyle.padColumnWidth,
-                        height: PaddrStyle.Metrics.defaultWindowSize.height
+                    hostingView.frame = NSRect(
+                        origin: .zero,
+                        size: NSSize(
+                            width: width,
+                            height: PaddrStyle.Metrics.defaultWindowSize.height
+                        )
                     )
-                )
-                await settle(hostingView)
+                    await settle(hostingView)
 
-                for control in descendants(of: NSControl.self, in: hostingView) {
-                    XCTAssertLessThanOrEqual(
-                        control.bounds.height,
-                        PaddrStyle.Metrics.row + 0.5,
-                        "\(type(of: control)) in \(mode)/\(layout) is taller than the row family"
-                    )
-                    assertControlFits(control, in: hostingView)
+                    for control in descendants(of: NSControl.self, in: hostingView) {
+                        XCTAssertLessThanOrEqual(
+                            control.bounds.height,
+                            PaddrStyle.Metrics.row + 0.5,
+                            "\(type(of: control)) in \(mode)/\(layout) at \(width)pt "
+                                + "is taller than the row family"
+                        )
+                        assertControlFits(control, in: hostingView)
+                    }
                 }
             }
         }
@@ -346,13 +357,13 @@ final class MenuViewPresentationTests: XCTestCase {
         )
     }
 
-    /// The inspector column is the binding constraint on the width scale. A starved label
-    /// can wrap mid-word even when every control remains within bounds, so both widths and
-    /// rendered row geometry are asserted directly.
+    /// The inset section inside one dual-pad column is the binding constraint on the width
+    /// scale. A starved label can wrap mid-word and a slider can push every peer row beyond
+    /// the section border, so the complete row budgets are asserted directly.
     func testPickerRowFitsItsInlineBranchInsideTheInspectorColumn() {
         XCTAssertLessThanOrEqual(
             PaddrStyle.Width.labelColumn + PaddrStyle.Spacing.s3 + PaddrStyle.Width.control,
-            PaddrStyle.zoneInspectorWidth,
+            PaddrStyle.minimumPadSectionWidth,
             "A picker row's inline branch must fit the inspector column"
         )
         // The area-layout row is Text + HStack spacing + Spacer(minLength:) + HStack spacing
@@ -364,7 +375,7 @@ final class MenuViewPresentationTests: XCTestCase {
         modeLabel.layoutSubtreeIfNeeded()
         XCTAssertLessThanOrEqual(
             modeLabel.fittingSize.width,
-            PaddrStyle.zoneInspectorWidth
+            PaddrStyle.minimumPadSectionWidth
                 - PaddrStyle.Width.controlMedium
                 - (3 * PaddrStyle.Spacing.s3),
             "The area-layout row starves its label, which then wraps mid-word"
@@ -376,7 +387,7 @@ final class MenuViewPresentationTests: XCTestCase {
                 width: PaddrStyle.Width.control
             )
         }
-        .frame(width: PaddrStyle.zoneInspectorWidth)
+        .frame(width: PaddrStyle.minimumPadSectionWidth)
         let hostingView = NSHostingView(rootView: row)
         hostingView.layoutSubtreeIfNeeded()
 
@@ -385,6 +396,51 @@ final class MenuViewPresentationTests: XCTestCase {
             PaddrStyle.Metrics.row,
             accuracy: 0.5,
             "The inline row no longer fits the inspector column"
+        )
+    }
+
+    func testSliderRowFitsInsideTheInsetPadSection() {
+        let sliderRowWidth = PaddrStyle.Width.labelColumnWide
+            + PaddrStyle.Spacing.s3
+            + PaddrStyle.sliderMinimumWidth
+            + PaddrStyle.Spacing.s2
+            + PaddrStyle.Width.readout
+
+        XCTAssertGreaterThanOrEqual(
+            PaddrStyle.sliderMinimumWidth,
+            120,
+            "The compact breakpoint must preserve a usable native slider"
+        )
+        let longestLabel = NSHostingView(
+            rootView: Label(
+                LocalizedStringResource("Pointer acceleration"),
+                systemImage: "arrow.up.right.and.arrow.down.left"
+            )
+            .paddrTypography(.rowLabel)
+        )
+        longestLabel.layoutSubtreeIfNeeded()
+        XCTAssertLessThanOrEqual(
+            longestLabel.fittingSize.width,
+            PaddrStyle.Width.labelColumnWide,
+            "The compact slider label column must not truncate its longest label"
+        )
+        XCTAssertLessThanOrEqual(
+            sliderRowWidth,
+            PaddrStyle.minimumPadSectionWidth,
+            "A slider row must not push itself or neighboring rows beyond the inset section"
+        )
+        XCTAssertEqual(
+            PaddrStyle.minimumPadSectionWidth,
+            PaddrStyle.minimumPadColumnWidth - (4 * PaddrStyle.Spacing.s3),
+            "The width budget must include both card and section horizontal padding"
+        )
+        XCTAssertEqual(
+            PaddrStyle.previewInspectorColumnsBreakpoint,
+            PaddrStyle.Metrics.zoneMapWidth
+                + PaddrStyle.minimumPadSectionWidth
+                + (2 * PaddrStyle.Spacing.s3)
+                + 1,
+            "The nested split must derive its breakpoint from the complete rendered row"
         )
     }
 

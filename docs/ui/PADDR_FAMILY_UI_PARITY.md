@@ -28,7 +28,7 @@ means the authority expressly withholds it from the MIT grant.
 
 | Pinned declaration | Disposition and Paddr-local expression |
 | --- | --- |
-| `ConsoleLayout` | **Adapted:** `PaddrStyle.Metrics.contentMaxWidth` and `outerSpacing`. |
+| `ConsoleLayout` | **Adapted:** `PaddrStyle.Metrics.defaultContentWidth` and `outerSpacing`; restored and user-resized windows remain fluid beyond that default. |
 | `ConsolePalette` | **Adapted:** canonical values in `PaddrStyle`, with product-specific token names replaced by neutral names and separate accessible semantic derivatives. |
 | `consoleBackground` and `ConsoleBackgroundModifier` | **Adapted:** `PanelBackgroundView`. |
 | `consoleSurface` and `ConsoleSurfaceModifier` | **Adapted:** `paddrCard()`, `PaddrCardModifier`, and `PaddrAppearance`. |
@@ -71,7 +71,7 @@ means the authority expressly withholds it from the MIT grant.
 | `SCMenuSelector` | **Adapted only as menu chrome:** native Paddr `Picker` and `Menu` controls use `paddrMenuSelector()`. |
 | `SCPanelSection` | **Adapted:** `PaddrSectionContainer` and `PaddrSettingsGroup`; Paddr does not adopt the reference persistence behavior. |
 | `SCContextHelpCard` | **Adapted as tone/surface presentation:** `PermissionTile`; permission state and actions remain Paddr-owned. |
-| `SCWindowConfigurator` | **Adapted only as the window geometry contract:** `PaddrStyle.Metrics` and `WindowContentFitter`. Paddr's `AppDelegate` adds product-local full-size, transparent, separatorless family chrome while retaining visible titles, its unified-compact configuration toolbar, usable-layout sizing, activation, and window lifecycle behavior. Legacy v4 autosaved geometry migrates once to the full-size v5 contract without losing its usable size or top-edge position. |
+| `SCWindowConfigurator` | **Adapted only as the window geometry contract:** `PaddrStyle.Metrics`. Paddr's `AppDelegate` adds product-local full-size, transparent, separatorless family chrome while retaining visible titles, its unified-compact configuration toolbar, usable-layout sizing, activation, and window lifecycle behavior. Legacy v4 autosaved geometry migrates once to the full-size v5 contract without losing its usable size or top-edge position; content scrolls within the user-managed window instead of resizing it to the document. |
 
 ### `SCMapprAccessibility.swift`
 
@@ -125,7 +125,7 @@ editor subtrees during reflow.
 | `cautionAmber` | `#FFB340` |
 | primary / secondary / tertiary text | `#FFFFFF` / `#D7E9FF` / `#9DC4F8` |
 | control height / radius | `38` / `7` points |
-| maximum content width / outer spacing | `820` / `24` points |
+| default content width / outer spacing | `820` / `24` points; wider windows remain fluid |
 
 Paddr keeps those canonical values intact. The following Paddr-local semantic derivatives
 pair them accessibly and are not additional claims of BottleRocket token parity:
@@ -144,6 +144,11 @@ pair them accessibly and are not additional claims of BottleRocket token parity:
 - Left and Right configurations remain independent and keep their existing encoded form.
 - Both Left and Right editors stay mounted and independently bound to their existing
   configuration values. There is no selected-side state or persistence seam.
+- Default geometry uses two equal 404-point pad columns. Wider user or restored windows
+  expand those columns fluidly; document height remains user/autosave-controlled and the
+  configuration surface scrolls within it.
+- The fixed 190×182 pad maps center inside compact sections, and settings-row width budgets
+  include both card and section insets before selecting a horizontal nested split.
 - Responsive pad and zone layouts use `AnyLayout` to move one mounted child tree;
   no stateful editor or control closure is duplicated under `ViewThatFits`.
 - Every status uses text and an SF Symbol as well as color. Increased Contrast,
