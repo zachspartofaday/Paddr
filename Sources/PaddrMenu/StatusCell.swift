@@ -9,6 +9,8 @@ struct StatusCell: View {
     let title: LocalizedStringResource
     let systemImage: String
     let state: StatusBadgeState
+    let isCompact: Bool
+    private let identifier: String
     private let value: Value
     private let explicitAccessibilityValue: String?
 
@@ -16,12 +18,16 @@ struct StatusCell: View {
         title: LocalizedStringResource,
         value: LocalizedStringResource,
         systemImage: String,
-        state: StatusBadgeState
+        state: StatusBadgeState,
+        isCompact: Bool = false,
+        identifier: String = "status"
     ) {
         self.title = title
         self.value = .localized(value)
         self.systemImage = systemImage
         self.state = state
+        self.isCompact = isCompact
+        self.identifier = identifier
         explicitAccessibilityValue = nil
     }
 
@@ -30,12 +36,16 @@ struct StatusCell: View {
         value: String,
         systemImage: String,
         state: StatusBadgeState,
-        accessibilityValue: String? = nil
+        accessibilityValue: String? = nil,
+        isCompact: Bool = false,
+        identifier: String = "status"
     ) {
         self.title = title
         self.value = .verbatim(value)
         self.systemImage = systemImage
         self.state = state
+        self.isCompact = isCompact
+        self.identifier = identifier
         explicitAccessibilityValue = accessibilityValue
     }
 
@@ -46,32 +56,49 @@ struct StatusCell: View {
     }
 
     private func cell(appearance: PaddrAppearance) -> some View {
-        HStack(spacing: PaddrStyle.Spacing.s1) {
+        HStack(spacing: PaddrStyle.Spacing.s2) {
             Image(systemName: systemImage)
                 .foregroundStyle(state.color)
                 .symbolRenderingMode(.hierarchical)
                 .accessibilityHidden(true)
 
-            Text(title)
-                .paddrTypography(.caption)
-                .foregroundStyle(.secondary)
-            valueText
-                .paddrTypography(.value)
-                .foregroundStyle(state.textColor)
-                .lineLimit(1)
+            if !isCompact {
+                HStack(spacing: PaddrStyle.Spacing.s2) {
+                    Text(title)
+                        .paddrTypography(.rowLabel)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    valueText
+                        .paddrTypography(.value)
+                        .foregroundStyle(state.textColor)
+                        .lineLimit(1)
+                }
+            }
         }
-        .padding(.horizontal, PaddrStyle.Spacing.s1)
-        .frame(minHeight: PaddrStyle.Metrics.row)
-        .background(state.color.opacity(0.11), in: .capsule)
+        .padding(
+            .horizontal,
+            isCompact ? PaddrStyle.Spacing.s2 : PaddrStyle.Inset.control
+        )
+        .frame(
+            minWidth: isCompact ? PaddrStyle.Metrics.statusPill : nil,
+            minHeight: PaddrStyle.Metrics.statusPill
+        )
+        .background(
+            state.color.opacity(0.12),
+            in: .rect(cornerRadius: PaddrStyle.Radius.control)
+        )
         .overlay {
-            if appearance.hasIncreasedContrast {
-                Capsule().strokeBorder(state.color, lineWidth: appearance.strokeWidth)
+            if appearance.hasIncreasedContrast || appearance.usesShapeDifferentiation {
+                RoundedRectangle(cornerRadius: PaddrStyle.Radius.control)
+                    .strokeBorder(state.color, lineWidth: appearance.strokeWidth)
             }
         }
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
         .accessibilityValue(accessibilityValue)
+        .help(helpText)
+        .paddrAccessibilityID("status", identifier)
     }
 
     @ViewBuilder private var valueText: some View {
@@ -88,6 +115,23 @@ struct StatusCell: View {
         switch value {
         case let .localized(resource): return Text(resource)
         case let .verbatim(string): return Text(verbatim: string)
+        }
+    }
+
+    private var helpText: Text {
+        Text("\(accessibilityLabelText): \(accessibilityValueText)")
+    }
+
+    var accessibilityLabelText: String { String(localized: title) }
+
+    var accessibilityValueText: String {
+        if let explicitAccessibilityValue {
+            explicitAccessibilityValue
+        } else {
+            switch self.value {
+            case let .localized(resource): String(localized: resource)
+            case let .verbatim(string): string
+            }
         }
     }
 }

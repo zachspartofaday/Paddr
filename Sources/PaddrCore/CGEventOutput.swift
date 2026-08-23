@@ -50,44 +50,70 @@ public protocol TrackpadOutputDispatching: Sendable {
     func dispatch(_ actions: [TrackpadOutputAction]) throws
 }
 
+#if canImport(CoreGraphics)
+enum CGEventRequest: Equatable, Sendable {
+    enum MouseKind: Equatable, Sendable {
+        case moved
+        case leftDragged
+        case rightDragged
+        case leftDown
+        case leftUp
+        case rightDown
+        case rightUp
+    }
+
+    case mouse(kind: MouseKind, button: MouseButtonBinding, x: Double, y: Double)
+    case scroll(horizontal: Int32, vertical: Int32)
+    case key(code: UInt16, isPressed: Bool)
+}
+#endif
+
 public final class CGEventOutput: TrackpadOutputDispatching, Sendable {
     private let heldMouseButtons = Mutex<Set<MouseButtonBinding>>([])
     #if canImport(CoreGraphics)
     private let currentMouseLocation: @Sendable () -> CGPoint?
+    private let postEvent: @Sendable (CGEventRequest) throws -> Void
     #endif
 
     public init() {
         #if canImport(CoreGraphics)
         currentMouseLocation = { CGEvent(source: nil)?.location }
+        postEvent = Self.postLiveEvent
         #endif
     }
 
     #if canImport(CoreGraphics)
     init(currentMouseLocation: @escaping @Sendable () -> CGPoint?) {
         self.currentMouseLocation = currentMouseLocation
+        postEvent = Self.postLiveEvent
+    }
+
+    init(
+        currentMouseLocation: @escaping @Sendable () -> CGPoint?,
+        postEvent: @escaping @Sendable (CGEventRequest) throws -> Void
+    ) {
+        self.currentMouseLocation = currentMouseLocation
+        self.postEvent = postEvent
     }
     #endif
 
     public func dispatch(_ actions: [TrackpadOutputAction]) throws {
         try heldMouseButtons.withLock { heldButtons in
-            #if canImport(CoreGraphics)
-            let source = CGEventSource(stateID: .hidSystemState)
-            #endif
             for action in actions {
                 switch action {
                 case let .mouseMove(dx, dy):
-                    try postMouseMove(dx: dx, dy: dy, heldButtons: heldButtons, source: source)
+                    try postMouseMove(dx: dx, dy: dy, heldButtons: heldButtons)
                 case let .mouseButton(button, isPressed):
-                    try postMouseButton(button, isPressed: isPressed, source: source)
+                    try postMouseButton(button, isPressed: isPressed)
                     if isPressed {
                         heldButtons.insert(button)
                     } else {
                         heldButtons.remove(button)
                     }
                 case let .scroll(dx, dy):
-                    try postScroll(dx: dx, dy: dy, source: source)
+                    try postScroll(dx: dx, dy: dy)
                 case let .key(key, isPressed):
-                    try postKey(key, isPressed: isPressed, source: source)
+                    try postKey(key, isPressed: isPressed)
                 }
             }
         }
@@ -95,8 +121,7 @@ public final class CGEventOutput: TrackpadOutputDispatching, Sendable {
 
     private func postMouseButton(
         _ button: MouseButtonBinding,
-        isPressed: Bool,
-        source: CGEventSource?
+        isPressed: Bool
     ) throws {
         #if canImport(CoreGraphics)
         guard let location = currentMouseLocation() else {
@@ -105,21 +130,19 @@ public final class CGEventOutput: TrackpadOutputDispatching, Sendable {
                 "Could not determine the mouse location for a \(button.rawValue) mouse-button \(transition) event."
             )
         }
-        let mouseButton: CGMouseButton = button == .left ? .left : .right
-        let eventType: CGEventType
+        let kind: CGEventRequest.MouseKind
         switch (button, isPressed) {
-        case (.left, true): eventType = .leftMouseDown
-        case (.left, false): eventType = .leftMouseUp
-        case (.right, true): eventType = .rightMouseDown
-        case (.right, false): eventType = .rightMouseUp
+        case (.left, true): kind = .leftDown
+        case (.left, false): kind = .leftUp
+        case (.right, true): kind = .rightDown
+        case (.right, false): kind = .rightUp
         }
-        guard let event = CGEvent(
-            mouseEventSource: source,
-            mouseType: eventType,
-            mouseCursorPosition: location,
-            mouseButton: mouseButton
-        ) else { throw PaddrError.output("Could not create a \(button.rawValue) mouse-button event.") }
-        event.post(tap: .cghidEventTap)
+        try postEvent(.mouse(
+            kind: kind,
+            button: button,
+            x: location.x,
+            y: location.y
+        ))
         #else
         throw PaddrError.output("CoreGraphics output is unavailable.")
         #endif
@@ -128,43 +151,36 @@ public final class CGEventOutput: TrackpadOutputDispatching, Sendable {
     private func postMouseMove(
         dx: Double,
         dy: Double,
-        heldButtons: Set<MouseButtonBinding>,
-        source: CGEventSource?
+        heldButtons: Set<MouseButtonBinding>
     ) throws {
         #if canImport(CoreGraphics)
-        guard dx != 0 || dy != 0, let current = CGEvent(source: nil)?.location else { return }
+        guard dx != 0 || dy != 0, let current = currentMouseLocation() else { return }
         let destination = CGPoint(x: current.x + dx, y: current.y + dy)
-        let eventType = Self.mouseMovementEventType(heldButtons: heldButtons)
-        let mouseButton: CGMouseButton = heldButtons.contains(.right) && !heldButtons.contains(.left)
+        let kind = Self.mouseMovementKind(heldButtons: heldButtons)
+        let button: MouseButtonBinding = heldButtons.contains(.right) && !heldButtons.contains(.left)
             ? .right
             : .left
-        guard let event = CGEvent(
-            mouseEventSource: source,
-            mouseType: eventType,
-            mouseCursorPosition: destination,
-            mouseButton: mouseButton
-        ) else { throw PaddrError.output("Could not create a mouse event.") }
-        event.post(tap: .cghidEventTap)
+        try postEvent(.mouse(
+            kind: kind,
+            button: button,
+            x: destination.x,
+            y: destination.y
+        ))
         #else
         throw PaddrError.output("CoreGraphics output is unavailable.")
         #endif
     }
 
-    private func postScroll(dx: Double, dy: Double, source: CGEventSource?) throws {
+    private func postScroll(dx: Double, dy: Double) throws {
         #if canImport(CoreGraphics)
         guard dx.isFinite, dy.isFinite else {
             throw PaddrError.output("Scroll output must be finite.")
         }
         guard dx != 0 || dy != 0 else { return }
-        guard let event = CGEvent(
-            scrollWheelEvent2Source: source,
-            units: .pixel,
-            wheelCount: 2,
-            wheel1: Self.clampedScrollValue(dy),
-            wheel2: Self.clampedScrollValue(dx),
-            wheel3: 0
-        ) else { throw PaddrError.output("Could not create a scroll event.") }
-        event.post(tap: .cghidEventTap)
+        try postEvent(.scroll(
+            horizontal: Self.clampedScrollValue(dx),
+            vertical: Self.clampedScrollValue(dy)
+        ))
         #else
         throw PaddrError.output("CoreGraphics output is unavailable.")
         #endif
@@ -178,24 +194,62 @@ public final class CGEventOutput: TrackpadOutputDispatching, Sendable {
         return Int32(rounded)
     }
 
-    private func postKey(_ key: KeyBinding, isPressed: Bool, source: CGEventSource?) throws {
+    private func postKey(_ key: KeyBinding, isPressed: Bool) throws {
         #if canImport(CoreGraphics)
-        guard let event = CGEvent(
-            keyboardEventSource: source,
-            virtualKey: CGKeyCode(key.keyCode),
-            keyDown: isPressed
-        ) else { throw PaddrError.output("Could not create keyboard event for \(key.name).") }
-        event.post(tap: .cghidEventTap)
+        try postEvent(.key(code: key.keyCode, isPressed: isPressed))
         #else
         throw PaddrError.output("CoreGraphics output is unavailable.")
         #endif
     }
 
     #if canImport(CoreGraphics)
-    static func mouseMovementEventType(heldButtons: Set<MouseButtonBinding>) -> CGEventType {
-        if heldButtons.contains(.left) { return .leftMouseDragged }
-        if heldButtons.contains(.right) { return .rightMouseDragged }
-        return .mouseMoved
+    static func mouseMovementKind(
+        heldButtons: Set<MouseButtonBinding>
+    ) -> CGEventRequest.MouseKind {
+        if heldButtons.contains(.left) { return .leftDragged }
+        if heldButtons.contains(.right) { return .rightDragged }
+        return .moved
+    }
+
+    private static func postLiveEvent(_ request: CGEventRequest) throws {
+        let source = CGEventSource(stateID: .hidSystemState)
+        let event: CGEvent?
+        switch request {
+        case let .mouse(kind, button, x, y):
+            let eventType: CGEventType
+            switch kind {
+            case .moved: eventType = .mouseMoved
+            case .leftDragged: eventType = .leftMouseDragged
+            case .rightDragged: eventType = .rightMouseDragged
+            case .leftDown: eventType = .leftMouseDown
+            case .leftUp: eventType = .leftMouseUp
+            case .rightDown: eventType = .rightMouseDown
+            case .rightUp: eventType = .rightMouseUp
+            }
+            event = CGEvent(
+                mouseEventSource: source,
+                mouseType: eventType,
+                mouseCursorPosition: CGPoint(x: x, y: y),
+                mouseButton: button == .left ? .left : .right
+            )
+        case let .scroll(horizontal, vertical):
+            event = CGEvent(
+                scrollWheelEvent2Source: source,
+                units: .pixel,
+                wheelCount: 2,
+                wheel1: vertical,
+                wheel2: horizontal,
+                wheel3: 0
+            )
+        case let .key(code, isPressed):
+            event = CGEvent(
+                keyboardEventSource: source,
+                virtualKey: CGKeyCode(code),
+                keyDown: isPressed
+            )
+        }
+        guard let event else { throw PaddrError.output("Could not create a CGEvent output event.") }
+        event.post(tap: .cghidEventTap)
     }
     #endif
 }

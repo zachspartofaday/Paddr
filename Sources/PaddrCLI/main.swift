@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import PaddrCLIKit
 import PaddrCore
 
 private struct CLIOptions {
@@ -10,7 +11,7 @@ private struct CLIOptions {
     var writeConfigurationURL: URL?
     var listProfiles = false
     var selectProfile: String?
-    var durationSeconds: TimeInterval?
+    var duration: CLIDuration?
     var dryRun = false
     var observeOnly = false
     var verbose = false
@@ -195,9 +196,7 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
         case "--config": _ = try nextValue()
         case "--write-config": options.writeConfigurationURL = url(try nextValue())
         case "--duration":
-            let duration = try parseDouble(nextValue(), option: argument)
-            guard duration > 0 else { throw PaddrError.configuration("--duration must be positive.") }
-            options.durationSeconds = duration
+            options.duration = try CLIDuration(argument: nextValue())
         case "--tap-max-ms":
             let value = try parseDouble(nextValue(), option: argument)
             options.configuration.left.tapMaximumMilliseconds = value
@@ -371,14 +370,13 @@ private func run(_ options: CLIOptions) throws {
         terminationSource.cancel()
     }
 
-    let deadline = options.durationSeconds.map { Date().addingTimeInterval($0) }
     print(options.observeOnly ? "Observing until stopped." : "Output enabled; press Control-C to stop.")
     let verbose = options.verbose
-    let result = try TrackpadRuntime.run(
+    let result = try CLIExecution.run(
         configuration: options.configuration,
         observeOnly: options.observeOnly,
         stopToken: stop,
-        deadline: deadline,
+        duration: options.duration,
         onAction: { action in
             if verbose { print("- \(action)") }
         }

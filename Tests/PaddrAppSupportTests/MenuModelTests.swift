@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Synchronization
 import XCTest
 @testable import PaddrAppSupport
@@ -11,7 +12,7 @@ final class MenuModelTests: XCTestCase {
         var stored = PaddrConfiguration.default
         stored.left.sensitivity = 4
         state.loadedConfiguration = stored
-        let loadGate = DispatchSemaphore(value: 0)
+        let loadGate = BoundedTestGate()
         state.loadGate = loadGate
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
 
@@ -29,7 +30,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(receiver: nil)
         let (document, first, second) = try twoProfileDocument()
         state.loadedProfileDocument = document
-        let loadGate = DispatchSemaphore(value: 0)
+        let loadGate = BoundedTestGate()
         state.loadGate = loadGate
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
 
@@ -52,7 +53,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(receiver: nil)
         let (document, first, second) = try twoProfileDocument()
         state.loadedProfileDocument = document
-        let loadGate = DispatchSemaphore(value: 0)
+        let loadGate = BoundedTestGate()
         state.loadGate = loadGate
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
 
@@ -75,7 +76,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(receiver: nil)
         let (document, first, second) = try twoProfileDocument()
         state.loadedProfileDocument = document
-        let loadGate = DispatchSemaphore(value: 0)
+        let loadGate = BoundedTestGate()
         state.loadGate = loadGate
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
 
@@ -108,7 +109,7 @@ final class MenuModelTests: XCTestCase {
     func testSaveAndApplyBeforeInitializationCannotReplaceLoadFailure() async {
         let state = readyState(receiver: nil)
         state.loadFailure = "Unreadable configuration"
-        let loadGate = DispatchSemaphore(value: 0)
+        let loadGate = BoundedTestGate()
         state.loadGate = loadGate
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
 
@@ -137,7 +138,7 @@ final class MenuModelTests: XCTestCase {
         var stored = PaddrConfiguration.default
         stored.left.sensitivity = 4
         state.loadedConfiguration = stored
-        let loadGate = DispatchSemaphore(value: 0)
+        let loadGate = BoundedTestGate()
         state.loadGate = loadGate
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
@@ -164,7 +165,7 @@ final class MenuModelTests: XCTestCase {
     func testInitializationFailurePreservesNewerPermissionGuidanceAndReconcilesIt() async {
         let state = ModelDependencyState()
         state.loadFailure = "Unreadable configuration"
-        let loadGate = DispatchSemaphore(value: 0)
+        let loadGate = BoundedTestGate()
         state.loadGate = loadGate
         let sleeper = ManualSleeper()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, sleeper: sleeper))
@@ -192,7 +193,7 @@ final class MenuModelTests: XCTestCase {
         var stored = PaddrConfiguration.default
         stored.left.sensitivity = 4
         state.loadedConfiguration = stored
-        let loadGate = DispatchSemaphore(value: 0)
+        let loadGate = BoundedTestGate()
         state.loadGate = loadGate
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
@@ -217,7 +218,7 @@ final class MenuModelTests: XCTestCase {
         var stored = PaddrConfiguration.default
         stored.left.sensitivity = 4
         state.loadedConfiguration = stored
-        let loadGate = DispatchSemaphore(value: 0)
+        let loadGate = BoundedTestGate()
         state.loadGate = loadGate
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
 
@@ -262,10 +263,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertTrue(model.hasSystemAccess)
 
         model.isEnabled = true
-        for _ in 0..<1_000 {
-            if model.isRunning || !model.isEnabled { break }
-            await Task.yield()
-        }
+        await waitUntil(model: model) { model.isRunning || !model.isEnabled }
 
         let startCount = await session.startCount
         XCTAssertTrue(model.isEnabled)
@@ -497,7 +495,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.status == .active }
 
         model.configuration.left.sensitivity = 3
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
         model.saveAndApply()
         await waitUntil { state.saveCallCount == 1 }
@@ -549,23 +547,20 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.status == .active }
 
         model.configuration.left.sensitivity = 3
-        let firstSaveGate = DispatchSemaphore(value: 0)
+        let firstSaveGate = BoundedTestGate()
         state.saveGate = firstSaveGate
         model.saveAndApply()
         await waitUntil { state.saveCallCount == 1 }
 
         model.configuration.left.sensitivity = 5
         model.saveAndApply()
-        let secondSaveGate = DispatchSemaphore(value: 0)
+        let secondSaveGate = BoundedTestGate()
         state.saveGate = secondSaveGate
         firstSaveGate.signal()
         await waitUntil { state.saveCallCount == 2 && state.saveCompletionCount == 1 }
 
         await session.send(.controllerLost(.init(reportCount: 4, actionCount: 2)))
-        for _ in 0..<1_000 {
-            if !model.controllerConnected { break }
-            await Task.yield()
-        }
+        await waitUntil(model: model) { !model.controllerConnected }
         XCTAssertFalse(model.controllerConnected)
         XCTAssertFalse(model.isRunning)
         XCTAssertEqual(model.status, .waitingForController)
@@ -593,7 +588,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.status == .active }
 
         model.configuration.left.sensitivity = 3
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
         model.saveAndApply()
         await waitUntil { state.saveCallCount == 1 }
@@ -623,7 +618,10 @@ final class MenuModelTests: XCTestCase {
     func testReconnectStartsSessionAndBecomesActive() async {
         let state = readyState(receiver: nil)
         let sleeper = ManualSleeper()
-        let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
+        let session = ScriptedSession(
+            events: [.controllerConnected, .outputArmed],
+            keepsStreamOpen: true
+        )
         let model = PaddrMenuModel(
             dependencies: dependencies(
                 state: state,
@@ -638,12 +636,15 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.status == .waitingForController }
         state.receiver = "Fake puck"
         sleeper.wake()
-        await waitUntil(model: model) { model.isRunning }
+        await waitUntil(model: model) { model.isRunning && model.controllerConnected }
 
         XCTAssertTrue(model.isEnabled)
         XCTAssertTrue(model.controllerConnected)
         let startCount = await session.startCount
         XCTAssertEqual(startCount, 1)
+        model.isEnabled = false
+        await session.stop()
+        await waitUntil(model: model) { !model.hasPendingLifecycleWork }
     }
 
     func testDisconnectedDraftEditKeepsReconnectLifecycleStatusAuthoritative() async {
@@ -796,7 +797,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.status, .accessibilitySettings)
 
         let probeCount = state.probeCallCount
-        let probeGate = DispatchSemaphore(value: 0)
+        let probeGate = BoundedTestGate()
         state.probeGate = probeGate
         model.refreshStatus()
         await waitUntil { state.probeCallCount > probeCount }
@@ -877,7 +878,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.status == .active }
 
         let probeCount = state.probeCallCount
-        let probeGate = DispatchSemaphore(value: 0)
+        let probeGate = BoundedTestGate()
         state.probeGate = probeGate
         state.receiver = nil
         model.refreshStatus()
@@ -907,7 +908,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.isRunning }
 
         let probeCount = state.probeCallCount
-        let probeGate = DispatchSemaphore(value: 0)
+        let probeGate = BoundedTestGate()
         state.probeGate = probeGate
         state.receiver = "Delayed receiver"
         model.refreshStatus()
@@ -938,7 +939,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.status == .active }
 
         let probeCount = state.probeCallCount
-        let probeGate = DispatchSemaphore(value: 0)
+        let probeGate = BoundedTestGate()
         state.probeGate = probeGate
         state.receiver = "Probe puck"
         model.refreshStatus()
@@ -1035,7 +1036,7 @@ final class MenuModelTests: XCTestCase {
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
         await waitUntil(model: model) { model.isInitialized }
         model.configuration.left.sensitivity = 3
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
 
         model.saveAndApply()
@@ -1056,7 +1057,7 @@ final class MenuModelTests: XCTestCase {
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
         await waitUntil(model: model) { model.isInitialized }
         model.configuration.left.sensitivity = 3
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
 
         model.saveAndApply()
@@ -1087,7 +1088,7 @@ final class MenuModelTests: XCTestCase {
         let model = PaddrMenuModel(dependencies: dependencies(state: state, sleeper: sleeper))
         await waitUntil(model: model) { model.isInitialized }
         model.configuration.left.sensitivity = 3
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
 
         model.saveAndApply()
@@ -1366,7 +1367,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.isInitialized }
         await waitUntil(model: model) { await session.startCount == 1 }
         model.configuration.left.sensitivity = 3
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
 
         model.isEnabled = true
@@ -1397,14 +1398,14 @@ final class MenuModelTests: XCTestCase {
         await waitUntil { recorder.values.contains("start") }
 
         model.configuration.left.sensitivity = 3
-        let firstSaveGate = DispatchSemaphore(value: 0)
+        let firstSaveGate = BoundedTestGate()
         state.saveGate = firstSaveGate
         model.saveAndApply()
         await waitUntil { state.saveCallCount == 1 }
 
         model.configuration.left.sensitivity = 5
         model.isEnabled = true
-        let secondSaveGate = DispatchSemaphore(value: 0)
+        let secondSaveGate = BoundedTestGate()
         var didQueueRename = false
         model.statusDidChange = {
             guard !didQueueRename, state.saveCompletionCount == 1 else { return }
@@ -1425,9 +1426,8 @@ final class MenuModelTests: XCTestCase {
 
         state.saveGate = nil
         secondSaveGate.signal()
-        for _ in 0..<1_000 {
-            if model.isRunning, state.saveCompletionCount == 3 { break }
-            await Task.yield()
+        await waitUntil(model: model) {
+            model.isRunning && state.saveCompletionCount == 3
         }
         model.statusDidChange = nil
 
@@ -1462,7 +1462,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { model.isInitialized }
         await waitUntil(model: model) { await session.startCount == 1 }
         model.configuration.left.sensitivity = 3
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
 
         model.saveAndApply()
@@ -1493,7 +1493,7 @@ final class MenuModelTests: XCTestCase {
         await waitUntil(model: model) { await session.startCount == 1 }
 
         model.configuration.left.sensitivity = 5
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
 
         model.isEnabled = true
@@ -1502,10 +1502,7 @@ final class MenuModelTests: XCTestCase {
         state.saveGate = nil
         saveGate.signal()
         await waitUntil { state.savedConfiguration?.left.sensitivity == 5 }
-        for _ in 0..<100 {
-            if model.savedConfiguration.left.sensitivity == 5 { break }
-            await Task.yield()
-        }
+        await waitUntil(model: model) { model.savedConfiguration.left.sensitivity == 5 }
 
         XCTAssertEqual(model.savedConfiguration.left.sensitivity, 5)
         await waitUntil(model: model) { await session.startCount == 2 }
@@ -1953,7 +1950,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(receiver: "Fake puck")
         state.loadedProfileDocument = .default
         state.loadDiagnostic = "Missing active profile; Default is active."
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
         let recorder = OperationRecorder()
         state.operationRecorder = recorder
@@ -2018,7 +2015,7 @@ final class MenuModelTests: XCTestCase {
             let state = readyState(receiver: nil)
             let (document, _, second) = try twoProfileDocument()
             state.loadedProfileDocument = document
-            let saveGate = DispatchSemaphore(value: 0)
+            let saveGate = BoundedTestGate()
             state.saveGate = saveGate
             let model = PaddrMenuModel(dependencies: dependencies(state: state))
             await waitUntil(model: model) { model.isInitialized }
@@ -2038,7 +2035,7 @@ final class MenuModelTests: XCTestCase {
             let state = readyState(receiver: nil)
             let (document, _, _) = try twoProfileDocument()
             state.loadedProfileDocument = document
-            let saveGate = DispatchSemaphore(value: 0)
+            let saveGate = BoundedTestGate()
             state.saveGate = saveGate
             let model = PaddrMenuModel(dependencies: dependencies(state: state))
             await waitUntil(model: model) { model.isInitialized }
@@ -2059,7 +2056,7 @@ final class MenuModelTests: XCTestCase {
             var (document, _, second) = try twoProfileDocument()
             document.activeProfileID = .default
             state.loadedProfileDocument = document
-            let saveGate = DispatchSemaphore(value: 0)
+            let saveGate = BoundedTestGate()
             state.saveGate = saveGate
             let model = PaddrMenuModel(dependencies: dependencies(state: state))
             await waitUntil(model: model) { model.isInitialized }
@@ -2081,7 +2078,7 @@ final class MenuModelTests: XCTestCase {
             let state = readyState(receiver: nil)
             let (document, first, _) = try twoProfileDocument()
             state.loadedProfileDocument = document
-            let saveGate = DispatchSemaphore(value: 0)
+            let saveGate = BoundedTestGate()
             state.saveGate = saveGate
             let model = PaddrMenuModel(dependencies: dependencies(state: state))
             await waitUntil(model: model) { model.isInitialized }
@@ -2110,7 +2107,7 @@ final class MenuModelTests: XCTestCase {
             let state = readyState(receiver: nil)
             let (document, first, _) = try twoProfileDocument()
             state.loadedProfileDocument = document
-            let saveGate = DispatchSemaphore(value: 0)
+            let saveGate = BoundedTestGate()
             state.saveGate = saveGate
             let model = PaddrMenuModel(dependencies: dependencies(state: state))
             await waitUntil(model: model) { model.isInitialized }
@@ -2138,7 +2135,7 @@ final class MenuModelTests: XCTestCase {
             let state = readyState(receiver: nil)
             let (document, first, _) = try twoProfileDocument()
             state.loadedProfileDocument = document
-            let saveGate = DispatchSemaphore(value: 0)
+            let saveGate = BoundedTestGate()
             state.saveGate = saveGate
             let model = PaddrMenuModel(dependencies: dependencies(state: state))
             await waitUntil(model: model) { model.isInitialized }
@@ -2209,6 +2206,51 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(state.savedProfileDocument?.activeProfileID, .default)
     }
 
+    func testTargetedRenameUsesCapturedProfileIDInsteadOfCurrentActiveProfile() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertTrue(model.renameProfile(id: second.id, to: "Captured target"))
+        await waitUntil(model: model) {
+            model.profiles.first(where: { $0.id == second.id })?.name == "Captured target"
+        }
+
+        XCTAssertEqual(model.activeProfileID, first.id)
+        XCTAssertEqual(model.activeProfile.name, first.name)
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: second.id)?.name,
+            "Captured target"
+        )
+    }
+
+    func testTargetedRenameFailsClosedWhenCapturedProfileDisappearsOrIsImmutable() async throws {
+        let state = readyState(receiver: nil)
+        let (document, _, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+        let missingID = ConfigurationProfileID(
+            rawValue: "00000000-0000-0000-0000-000000000299"
+        )
+
+        XCTAssertFalse(model.renameProfile(id: missingID, to: "Missing"))
+        XCTAssertEqual(state.saveCallCount, 0)
+        guard case let .failure(.configurationInvalid(missingDiagnostic)) = model.status else {
+            return XCTFail("Expected a missing captured target to publish a validation error")
+        }
+        XCTAssertTrue(missingDiagnostic.contains("no longer exists"))
+
+        XCTAssertFalse(model.renameProfile(id: .default, to: "Mutable Default"))
+        XCTAssertEqual(state.saveCallCount, 0)
+        guard case let .failure(.configurationInvalid(defaultDiagnostic)) = model.status else {
+            return XCTFail("Expected an immutable captured target to publish a validation error")
+        }
+        XCTAssertTrue(defaultDiagnostic.contains("cannot be renamed"))
+    }
+
     func testCreateAndRenameRejectUUIDShapedNamesWithoutPersisting() async throws {
         let createState = readyState(receiver: nil)
         createState.loadedProfileDocument = .default
@@ -2250,7 +2292,7 @@ final class MenuModelTests: XCTestCase {
         let (document, first, second) = try twoProfileDocument()
         state.loadedProfileDocument = document
         state.saveFailure = "simulated profile activation save failure"
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
         let session = GatedSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
@@ -2374,9 +2416,7 @@ final class MenuModelTests: XCTestCase {
         await session.waitForStop(2)
         model.isEnabled = false
         await session.releaseStop(2)
-        for _ in 0..<1_000 where state.saveCompletionCount == 0 {
-            await Task.yield()
-        }
+        await waitUntil { state.saveCompletionCount == 1 }
 
         await waitUntil(model: model) { await session.startCount == 2 }
         XCTAssertEqual(state.saveCompletionCount, 1)
@@ -2404,9 +2444,7 @@ final class MenuModelTests: XCTestCase {
         await session.waitForStop(1)
         model.isEnabled = false
         await session.releaseStop(1)
-        for _ in 0..<1_000 where state.saveCompletionCount == 0 {
-            await Task.yield()
-        }
+        await waitUntil { state.saveCompletionCount == 1 }
 
         await waitUntil(model: model) { await session.startCount == 2 }
         XCTAssertEqual(state.saveCompletionCount, 1)
@@ -2458,7 +2496,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(receiver: nil)
         let (document, _, second) = try twoProfileDocument()
         state.loadedProfileDocument = document
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
         let session = GatedSession(blockedStops: [2])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
@@ -2499,7 +2537,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(receiver: nil)
         let (document, first, second) = try twoProfileDocument()
         state.loadedProfileDocument = document
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
         let session = GatedSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
@@ -2543,7 +2581,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(receiver: "Fake puck")
         let (document, _, second) = try twoProfileDocument()
         state.loadedProfileDocument = document
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
         let session = RetainedEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
@@ -2623,7 +2661,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(receiver: "Fake puck")
         let (document, _, _) = try twoProfileDocument()
         state.loadedProfileDocument = document
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
         let session = ManualEventSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
@@ -2656,7 +2694,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(receiver: nil)
         let (document, first, second) = try twoProfileDocument()
         state.loadedProfileDocument = document
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
         await waitUntil(model: model) { model.isInitialized }
@@ -2678,7 +2716,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(receiver: nil)
         let (document, first, second) = try twoProfileDocument()
         state.loadedProfileDocument = document
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
         await waitUntil(model: model) { model.isInitialized }
@@ -2727,7 +2765,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(receiver: nil)
         let (document, _, second) = try twoProfileDocument()
         state.loadedProfileDocument = document
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
         await waitUntil(model: model) { model.isInitialized }
@@ -2744,7 +2782,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertTrue(model.hasUnsavedChanges)
 
         let inactiveID = second.id
-        let deleteGate = DispatchSemaphore(value: 0)
+        let deleteGate = BoundedTestGate()
         state.saveGate = deleteGate
         XCTAssertTrue(model.deleteProfile(id: inactiveID, confirmed: true))
         await waitUntil { state.saveCallCount == 2 }
@@ -2762,7 +2800,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(receiver: "Fake puck")
         let (document, first, second) = try twoProfileDocument()
         state.loadedProfileDocument = document
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
         let session = ScriptedSession(events: [])
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
@@ -2810,11 +2848,61 @@ final class MenuModelTests: XCTestCase {
         )
     }
 
+    func testPendingProfileSaveAdvertisesWaitingInsteadOfDisabledEnableAction() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, _, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = BoundedTestGate()
+        state.saveGate = saveGate
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        await session.send(.controllerConnected)
+        await waitUntil(model: model) { model.controllerConnected }
+
+        let observationInvalidationCount = Mutex(0)
+        withObservationTracking {
+            _ = model.canToggleOutput
+            _ = model.readiness.nextAction
+        } onChange: {
+            observationInvalidationCount.withLock { $0 += 1 }
+        }
+
+        XCTAssertEqual(model.readiness.nextAction, .enableOutput)
+        XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
+        await waitUntil { state.saveCallCount == 1 }
+
+        XCTAssertEqual(observationInvalidationCount.withLock { $0 }, 1)
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertFalse(model.canToggleOutput)
+        XCTAssertEqual(model.readiness.outputDisabledReason, .profileOperation)
+        XCTAssertEqual(model.readiness.nextAction, .waitForProfileOperation)
+        XCTAssertEqual(
+            String(localized: model.readiness.nextAction.title),
+            "Wait for the profile operation to finish"
+        )
+
+        withObservationTracking {
+            _ = model.canToggleOutput
+            _ = model.readiness.nextAction
+        } onChange: {
+            observationInvalidationCount.withLock { $0 += 1 }
+        }
+
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) { model.canToggleOutput }
+
+        XCTAssertEqual(observationInvalidationCount.withLock { $0 }, 2)
+        XCTAssertEqual(model.readiness.nextAction, .enableOutput)
+    }
+
     func testEnabledDirtyActivationCommitSerializesRenameWithoutStaleOverwrite() async throws {
         let state = readyState(receiver: "Fake puck")
         let (document, first, second) = try twoProfileDocument()
         state.loadedProfileDocument = document
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
         let session = GatedSession()
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
@@ -2875,7 +2963,7 @@ final class MenuModelTests: XCTestCase {
         let state = readyState(receiver: nil)
         let (document, first, second) = try twoProfileDocument()
         state.loadedProfileDocument = document
-        let saveGate = DispatchSemaphore(value: 0)
+        let saveGate = BoundedTestGate()
         state.saveGate = saveGate
         let model = PaddrMenuModel(dependencies: dependencies(state: state))
         await waitUntil(model: model) { model.isInitialized }
@@ -3421,7 +3509,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.status, .off)
     }
 
-    func testDroppedModelIsNotRetainedByLiveSessionStream() async {
+    func testDroppedModelCancelsAndTerminatesLiveSessionStreamWithoutStoppingSession() async {
         let state = readyState(receiver: "Fake receiver")
         let session = ManualEventSession()
         var model: PaddrMenuModel? = PaddrMenuModel(
@@ -3434,14 +3522,34 @@ final class MenuModelTests: XCTestCase {
         }
 
         model = nil
-        for _ in 0..<1_000 {
-            if droppedModel == nil { break }
-            await session.send(.progress(.init(reportCount: 1, actionCount: 0)))
-            await Task.yield()
-        }
+        await session.waitForTermination()
+        await waitUntil { droppedModel == nil }
 
         XCTAssertNil(droppedModel)
-        await session.stop()
+        let stopCount = await session.stopCount
+        XCTAssertEqual(stopCount, 0)
+    }
+
+    func testDroppedModelCancelsReconnectSleep() async {
+        let state = readyState(receiver: nil)
+        let reconnectSleeper = ManualSleeper()
+        var model: PaddrMenuModel? = PaddrMenuModel(
+            dependencies: dependencies(
+                state: state,
+                reconnectSleeper: reconnectSleeper
+            )
+        )
+        weak let droppedModel = model
+        if let model {
+            await waitUntil(model: model) { model.isInitialized }
+        }
+        await reconnectSleeper.waitUntilStarted()
+
+        model = nil
+        await reconnectSleeper.waitUntilCancelled()
+        await waitUntil { droppedModel == nil }
+
+        XCTAssertNil(droppedModel)
     }
 
     private func twoProfileDocument() throws -> (
@@ -3542,28 +3650,6 @@ final class MenuModelTests: XCTestCase {
         )
     }
 
-    private func waitUntil(_ condition: @escaping @Sendable () -> Bool) async {
-        while !condition() { await Task.yield() }
-    }
-
-    private func waitUntil(
-        model: PaddrMenuModel,
-        _ condition: @escaping @MainActor () async -> Bool
-    ) async {
-        if await condition() { return }
-        let (changes, continuation) = AsyncStream<Void>.makeStream(
-            bufferingPolicy: .bufferingNewest(1)
-        )
-        model.statusDidChange = { continuation.yield(()) }
-        defer {
-            model.statusDidChange = nil
-            continuation.finish()
-        }
-        if await condition() { return }
-        for await _ in changes {
-            if await condition() { return }
-        }
-    }
 }
 
 private actor ProgressPressureSession: TrackpadSessionControlling {
@@ -3594,15 +3680,8 @@ private actor ProgressPressureSession: TrackpadSessionControlling {
 }
 
 private final class MenuProgressPressureRuntime: Sendable {
-    private let produced: AsyncStream<Void>
-    private let producedContinuation: AsyncStream<Void>.Continuation
-    private let releaseGate = DispatchSemaphore(value: 0)
-
-    init() {
-        (produced, producedContinuation) = AsyncStream<Void>.makeStream(
-            bufferingPolicy: .bufferingNewest(1)
-        )
-    }
+    private let produced = SessionEventProbe<Void>()
+    private let releaseGate = BoundedTestGate()
 
     func run(
         configuration: PaddrConfiguration,
@@ -3623,7 +3702,7 @@ private final class MenuProgressPressureRuntime: Sendable {
         for reportCount in 41...80 {
             event(.progress(.init(reportCount: reportCount, actionCount: reportCount / 10)))
         }
-        producedContinuation.yield(())
+        produced.record(())
         releaseGate.wait()
         return TrackpadRunResult(
             summary: .init(reportCount: 80, actionCount: 8),
@@ -3632,8 +3711,7 @@ private final class MenuProgressPressureRuntime: Sendable {
     }
 
     func waitUntilProduced() async {
-        var iterator = produced.makeAsyncIterator()
-        _ = await iterator.next()
+        await produced.wait { events, _ in !events.isEmpty }
     }
 
     func release() {
@@ -3682,7 +3760,9 @@ private actor ScriptedSession: TrackpadSessionControlling {
 
 private actor ManualEventSession: TrackpadSessionControlling {
     private var continuation: AsyncStream<TrackpadSessionEvent>.Continuation?
+    private let terminations = SessionEventProbe<Void>()
     private(set) var startCount = 0
+    private(set) var stopCount = 0
 
     func start(
         configuration: PaddrConfiguration,
@@ -3691,12 +3771,14 @@ private actor ManualEventSession: TrackpadSessionControlling {
     ) async -> AsyncStream<TrackpadSessionEvent> {
         startCount += 1
         let (stream, continuation) = AsyncStream<TrackpadSessionEvent>.makeStream()
+        continuation.onTermination = { [terminations] _ in terminations.record(()) }
         self.continuation = continuation
         return stream
     }
 
     @discardableResult
     func stop() async -> TrackpadSessionStopOutcome {
+        stopCount += 1
         continuation?.finish()
         continuation = nil
         return .clean
@@ -3711,10 +3793,14 @@ private actor ManualEventSession: TrackpadSessionControlling {
         continuation?.yield(.controllerConnected)
         continuation?.yield(.outputArmed)
     }
+
+    func waitForTermination() async {
+        await terminations.wait { events, _ in !events.isEmpty }
+    }
 }
 
 private actor RetainedEventSession: TrackpadSessionControlling {
-    private let terminationGate = IndexedStopGate()
+    private let terminations = SessionEventProbe<Int>()
     private var continuations: [AsyncStream<TrackpadSessionEvent>.Continuation] = []
     private(set) var startCount = 0
 
@@ -3726,8 +3812,8 @@ private actor RetainedEventSession: TrackpadSessionControlling {
         startCount += 1
         let index = continuations.count
         let (stream, continuation) = AsyncStream<TrackpadSessionEvent>.makeStream()
-        continuation.onTermination = { [terminationGate] _ in
-            Task { await terminationGate.release(index) }
+        continuation.onTermination = { [terminations] _ in
+            terminations.record(index)
         }
         continuations.append(continuation)
         return stream
@@ -3742,7 +3828,7 @@ private actor RetainedEventSession: TrackpadSessionControlling {
     }
 
     func waitForTermination(of index: Int) async {
-        await terminationGate.wait(for: index)
+        await terminations.wait { events, _ in events.contains(index) }
     }
 
     func finishAll() {
@@ -3754,17 +3840,13 @@ private actor GatedSession: TrackpadSessionControlling {
     var stopOutcome = TrackpadSessionStopOutcome.clean
     private let blockedStops: Set<Int>
     private let gate = IndexedStopGate()
-    private let stopEvents: AsyncStream<Int>
-    private let stopEventsContinuation: AsyncStream<Int>.Continuation
+    private let stopEvents = SessionEventProbe<Int>()
     private var eventContinuation: AsyncStream<TrackpadSessionEvent>.Continuation?
     private(set) var startCount = 0
     private(set) var stopCount = 0
 
     init(blockedStops: Set<Int> = []) {
         self.blockedStops = blockedStops
-        (stopEvents, stopEventsContinuation) = AsyncStream<Int>.makeStream(
-            bufferingPolicy: .bufferingNewest(16)
-        )
     }
 
     func start(
@@ -3785,7 +3867,7 @@ private actor GatedSession: TrackpadSessionControlling {
     func stop() async -> TrackpadSessionStopOutcome {
         stopCount += 1
         let stopNumber = stopCount
-        stopEventsContinuation.yield(stopNumber)
+        stopEvents.record(stopNumber)
         if blockedStops.contains(stopNumber) {
             await gate.wait(for: stopNumber)
         }
@@ -3800,7 +3882,9 @@ private actor GatedSession: TrackpadSessionControlling {
 
     func waitForStop(_ expectedCount: Int) async {
         if stopCount >= expectedCount { return }
-        for await count in stopEvents where count >= expectedCount { return }
+        await stopEvents.wait { events, _ in
+            events.contains { $0 >= expectedCount }
+        }
     }
 
     func releaseStop(_ stopNumber: Int) async {
@@ -3810,21 +3894,54 @@ private actor GatedSession: TrackpadSessionControlling {
 
 private actor IndexedStopGate {
     private var released: Set<Int> = []
-    private var waiters: [Int: [CheckedContinuation<Void, Never>]] = [:]
+    private var waiters: [Int: [UUID: CheckedContinuation<Bool, Never>]] = [:]
 
     func wait(for index: Int) async {
         if released.remove(index) != nil { return }
-        await withCheckedContinuation { continuation in
-            waiters[index, default: []].append(continuation)
+        let token = UUID()
+        let waiter = Task { await suspend(for: index, token: token) }
+        let expiry = Task {
+            try? await Task.sleep(for: defaultAsyncTestTimeout)
+            if !Task.isCancelled { waiter.cancel() }
+        }
+        let didRelease = await waiter.value
+        expiry.cancel()
+        _ = await expiry.result
+        if !didRelease {
+            XCTFail("Timed out waiting for indexed test gate \(index) to open.")
         }
     }
 
     func release(_ index: Int) {
-        guard let continuations = waiters.removeValue(forKey: index) else {
+        guard let waiters = waiters.removeValue(forKey: index), !waiters.isEmpty else {
             released.insert(index)
             return
         }
-        for continuation in continuations { continuation.resume() }
+        for continuation in waiters.values {
+            continuation.resume(returning: true)
+        }
+    }
+
+    private func suspend(for index: Int, token: UUID) async -> Bool {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled {
+                    continuation.resume(returning: false)
+                } else if released.remove(index) != nil {
+                    continuation.resume(returning: true)
+                } else {
+                    waiters[index, default: [:]][token] = continuation
+                }
+            }
+        } onCancel: {
+            Task { await self.cancelWaiter(for: index, token: token) }
+        }
+    }
+
+    private func cancelWaiter(for index: Int, token: UUID) {
+        guard let continuation = waiters[index]?.removeValue(forKey: token) else { return }
+        if waiters[index]?.isEmpty == true { waiters[index] = nil }
+        continuation.resume(returning: false)
     }
 }
 
@@ -3842,14 +3959,14 @@ private final class ModelDependencyState: Sendable {
         var inputMonitoringAccessRequests: [Bool] = []
         var loadFailure: String?
         var loadDiagnostic: String?
-        var loadGate: DispatchSemaphore?
+        var loadGate: BoundedTestGate?
         var loadRanOnMainThread: Bool?
         var saveFailure: String?
-        var saveGate: DispatchSemaphore?
+        var saveGate: BoundedTestGate?
         var saveCallCount = 0
         var saveCompletionCount = 0
         var probeCallCount = 0
-        var probeGate: DispatchSemaphore?
+        var probeGate: BoundedTestGate?
         var operationRecorder: OperationRecorder?
         var statusChangeCount = 0
     }
@@ -3903,7 +4020,7 @@ private final class ModelDependencyState: Sendable {
         get { state.withLock { $0.loadDiagnostic } }
         set { state.withLock { $0.loadDiagnostic = newValue } }
     }
-    var loadGate: DispatchSemaphore? {
+    var loadGate: BoundedTestGate? {
         get { state.withLock { $0.loadGate } }
         set { state.withLock { $0.loadGate = newValue } }
     }
@@ -3915,7 +4032,7 @@ private final class ModelDependencyState: Sendable {
         get { state.withLock { $0.saveFailure } }
         set { state.withLock { $0.saveFailure = newValue } }
     }
-    var saveGate: DispatchSemaphore? {
+    var saveGate: BoundedTestGate? {
         get { state.withLock { $0.saveGate } }
         set { state.withLock { $0.saveGate = newValue } }
     }
@@ -3931,7 +4048,7 @@ private final class ModelDependencyState: Sendable {
         get { state.withLock { $0.probeCallCount } }
         set { state.withLock { $0.probeCallCount = newValue } }
     }
-    var probeGate: DispatchSemaphore? {
+    var probeGate: BoundedTestGate? {
         get { state.withLock { $0.probeGate } }
         set { state.withLock { $0.probeGate = newValue } }
     }
@@ -4005,9 +4122,12 @@ private final class ManualSleeper: Sendable {
     }
 
     private let state = Mutex(State())
+    private let starts = SessionEventProbe<Void>()
+    private let cancellations = SessionEventProbe<Void>()
 
     func sleep() async throws {
         try Task.checkCancellation()
+        starts.record(())
         let id: UInt64 = state.withLock { state in
             state.nextID &+= 1
             return state.nextID
@@ -4026,6 +4146,7 @@ private final class ManualSleeper: Sendable {
                 if let immediate { continuation.resume(returning: immediate) }
             }
         } onCancel: {
+            self.cancellations.record(())
             let cancelled: CheckedContinuation<Bool, Never>? = state.withLock { state in
                 guard let index = state.waiters.firstIndex(where: { $0.id == id }) else {
                     return nil
@@ -4047,5 +4168,13 @@ private final class ManualSleeper: Sendable {
             return state.waiters.removeFirst().continuation
         }
         woken?.resume(returning: true)
+    }
+
+    func waitUntilStarted() async {
+        await starts.wait { events, _ in !events.isEmpty }
+    }
+
+    func waitUntilCancelled() async {
+        await cancellations.wait { events, _ in !events.isEmpty }
     }
 }

@@ -4,15 +4,17 @@ enum StatusBadgeState {
     case active
     case ready
     case problem
+    case critical
     case neutral
 
     /// Icon and background-tint color.
     var color: Color {
         switch self {
         case .active: PaddrStyle.active
-        case .ready: PaddrStyle.accent
-        case .problem: .orange
-        case .neutral: .secondary
+        case .ready: PaddrStyle.successGreen
+        case .problem: PaddrStyle.cautionAmber
+        case .critical: PaddrStyle.errorText
+        case .neutral: PaddrStyle.textTertiary
         }
     }
 
@@ -20,9 +22,10 @@ enum StatusBadgeState {
     var textColor: Color {
         switch self {
         case .active: PaddrStyle.activeText
-        case .ready: PaddrStyle.accentText
+        case .ready: PaddrStyle.activeText
         case .problem: PaddrStyle.warningText
-        case .neutral: .secondary
+        case .critical: PaddrStyle.errorText
+        case .neutral: PaddrStyle.textTertiary
         }
     }
 }

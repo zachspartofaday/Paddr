@@ -334,12 +334,12 @@ final class ConfigurationBoundaryTests: XCTestCase {
 
     #if canImport(CoreGraphics)
     func testMouseMovementUsesDragEventForHeldMappedButton() {
-        XCTAssertEqual(CGEventOutput.mouseMovementEventType(heldButtons: []), .mouseMoved)
-        XCTAssertEqual(CGEventOutput.mouseMovementEventType(heldButtons: [.left]), .leftMouseDragged)
-        XCTAssertEqual(CGEventOutput.mouseMovementEventType(heldButtons: [.right]), .rightMouseDragged)
+        XCTAssertEqual(CGEventOutput.mouseMovementKind(heldButtons: []), .moved)
+        XCTAssertEqual(CGEventOutput.mouseMovementKind(heldButtons: [.left]), .leftDragged)
+        XCTAssertEqual(CGEventOutput.mouseMovementKind(heldButtons: [.right]), .rightDragged)
         XCTAssertEqual(
-            CGEventOutput.mouseMovementEventType(heldButtons: [.left, .right]),
-            .leftMouseDragged
+            CGEventOutput.mouseMovementKind(heldButtons: [.left, .right]),
+            .leftDragged
         )
     }
     #endif

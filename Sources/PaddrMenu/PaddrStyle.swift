@@ -8,6 +8,8 @@ enum PaddrTextRole {
     case pageTitle
     /// Pad-card and guide-page titles.
     case cardTitle
+    /// Titles for preview and settings regions within a card.
+    case sectionTitle
     /// Column and band headers.
     case sectionLabel
     /// Settings-row labels, normally paired with an SF Symbol.
@@ -19,9 +21,10 @@ enum PaddrTextRole {
 
     var font: Font {
         switch self {
-        case .pageTitle: .title2.bold()
-        case .cardTitle: .headline
-        case .sectionLabel: .subheadline.weight(.semibold)
+        case .pageTitle: .title.bold()
+        case .cardTitle: .title2.bold()
+        case .sectionTitle: .title3.weight(.semibold)
+        case .sectionLabel: .headline.weight(.semibold)
         case .rowLabel: .callout
         case .value: .callout.monospacedDigit()
         case .caption: .caption
@@ -48,36 +51,57 @@ enum PaddrStyle {
         static let s5: CGFloat = 24
     }
 
-    /// Heights and fixed surface sizes. `row` is the single control-row family
-    /// (card header, settings row, status cell, permission row, inspector header);
+    /// Semantic insets establish one surface hierarchy across the app: the window gets
+    /// the widest margin, cards and inset panels share one interior margin, and compact
+    /// controls use the next smaller step.
+    enum Inset {
+        static let window = Spacing.s5
+        static let card = Spacing.s4
+        static let section = Spacing.s4
+        static let control = Spacing.s3
+    }
+
+    /// Heights and fixed surface sizes. `row` is the single interactive-row family
+    /// (settings row, status cell, and permission row); headings keep their natural height.
     /// control heights themselves stay native and are never hand-set.
     enum Metrics {
-        static let row: CGFloat = 28
+        static let controlHeight: CGFloat = 38
+        static let row = controlHeight
+        /// Compact status feedback stays subordinate to the editor controls.
+        static let statusPill: CGFloat = 32
         /// `row` plus a `Spacing.s2` inset above and below.
-        static let commandBar: CGFloat = 44
+        static let commandBar: CGFloat = 54
 
-        static let defaultWindowSize = NSSize(width: 1_120, height: 600)
-        static let minimumWindowSize = NSSize(width: 640, height: 360)
-        static let guideWindowSize = NSSize(width: 680, height: 430)
-        static let minimumGuideWindowSize = NSSize(width: 560, height: 430)
+        static let outerSpacing = Inset.window
+        /// Fresh windows match the approved side-by-side preview-and-settings composition.
+        /// Restored and user-sized windows remain fluid around this default.
+        static let defaultWindowSize = NSSize(width: 1_280, height: 700)
+        static let defaultContentWidth = defaultWindowSize.width - (2 * outerSpacing)
+        /// Below this content width, two complete pad editors no longer have
+        /// enough room for their native mode controls and stack vertically.
+        static let padEditorColumnsBreakpoint: CGFloat = 792
+        /// The status row has its own content budget for enlarged, padded pills and guidance.
+        static let statusBarInlineBreakpoint: CGFloat = 1_120
+        static let minimumWindowSize = NSSize(width: 680, height: 520)
+        static let guideWindowSize = NSSize(width: 720, height: 480)
+        static let minimumGuideWindowSize = NSSize(width: 640, height: 460)
 
         static let zoneMapWidth: CGFloat = 190
         static let zoneMapHeight: CGFloat = 182
     }
 
     enum Radius {
-        /// Glass card or banner.
-        static let card: CGFloat = 16
-        /// Inset chips, status containers, zone label plates.
-        static let control: CGFloat = 8
+        /// Console card or banner.
+        static let card: CGFloat = 12
+        /// Inset controls, status containers, and zone label plates.
+        static let control: CGFloat = 7
         /// The physical trackpad. Geometry-bearing and unchanged.
         static let pad: CGFloat = 30
     }
 
     /// Widths are derived from the container they must fit, not chosen a priori. The binding
-    /// constraint is the pad card's inspector column: a settings row's inline branch needs
-    /// `labelColumn + Spacing.s3 + control <= zoneInspectorWidth`. Exceeding it does not clip
-    /// — it silently drops every picker row into `PaddrSettingsRow`'s stacked fallback.
+    /// constraint is the inset section inside one default dual-pad column: a settings row's
+    /// inline branch must fit after both the card and section padding are removed.
     enum Width {
         /// Numeric value column, monospaced and trailing-aligned.
         static let readout: CGFloat = 48
@@ -89,52 +113,80 @@ enum PaddrStyle {
         static let controlWide: CGFloat = 200
         /// Label column for rows whose control is a fixed-width picker.
         static let labelColumn: CGFloat = 108
-        /// Label column for slider rows: their labels are longer ("Pointer acceleration")
-        /// and their control is flexible, so they can afford what a picker row cannot.
-        static let labelColumnWide: CGFloat = 152
+        /// Label column for slider rows. It is wide enough for "Pointer acceleration"
+        /// while preserving a usable native slider at the dual-column breakpoint.
+        static let labelColumnWide: CGFloat = 136
     }
 
-    static let accent = Color(red: 26.0 / 255.0, green: 159.0 / 255.0, blue: 1)
-    static let active = Color(nsColor: .systemGreen)
+    // Family-console palette adapted under the bounded MIT grant recorded in
+    // docs/ui/PADDR_FAMILY_UI_PARITY.md. Product-specific source names are intentionally
+    // replaced with Paddr-local neutral vocabulary.
+    static let night0 = Color(red: 5.0 / 255.0, green: 6.0 / 255.0, blue: 13.0 / 255.0)
+    static let night1 = Color(red: 13.0 / 255.0, green: 17.0 / 255.0, blue: 38.0 / 255.0)
+    static let interfaceBlue = Color(red: 51.0 / 255.0, green: 158.0 / 255.0, blue: 1)
+    static let interfacePurple = Color(red: 115.0 / 255.0, green: 89.0 / 255.0, blue: 1)
+    static let successGreen = Color(red: 70.0 / 255.0, green: 180.0 / 255.0, blue: 135.0 / 255.0)
+    static let cautionAmber = Color(red: 1, green: 179.0 / 255.0, blue: 64.0 / 255.0)
+    static let textPrimary = Color.white
+    static let textSecondary = Color(red: 215.0 / 255.0, green: 233.0 / 255.0, blue: 1)
+    static let textTertiary = Color(red: 157.0 / 255.0, green: 196.0 / 255.0, blue: 248.0 / 255.0)
+    static let errorText = Color(red: 1, green: 0.36, blue: 0.36)
 
-    /// Green status text clears 4.5:1 in light appearance while retaining the
-    /// brighter adaptive system green against dark backgrounds.
-    static let activeText = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? .systemGreen
-            : NSColor(srgbRed: 0, green: 0.42, blue: 0.18, alpha: 1)
-    })
+    static let accent = interfaceBlue
+    static let active = successGreen
+    static let activeText = successText
+    static let accentText = interfaceBlue
+    static let warningText = cautionAmber
+    static let accentGradient = LinearGradient(
+        colors: [interfaceBlue, interfacePurple],
+        startPoint: .leading,
+        endPoint: .trailing
+    )
+    static let surface = Color.white.opacity(0.05)
+    static let elevatedSurface = Color.white.opacity(0.08)
+    static let surfaceStroke = Color.white.opacity(0.10)
 
-    /// Accent for text: the bright product accent reads at only ~2.8:1 against light
-    /// backgrounds, so light appearance gets a darker variant that clears 4.5:1.
-    static let accentText = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor(srgbRed: 26.0 / 255.0, green: 159.0 / 255.0, blue: 1, alpha: 1)
-            : NSColor(srgbRed: 0, green: 0.42, blue: 0.75, alpha: 1)
-    })
+    // Semantic derivatives preserve the canonical family palette above while pairing
+    // colors for the contrast requirements of the UI element that renders them.
+    // `interfaceBlue` remains the accent for text and artwork; native prominent and
+    // selected controls need a darker tint because AppKit renders their labels white.
+    static let controlTint = Color(
+        red: 0,
+        green: 110.0 / 255.0,
+        blue: 195.0 / 255.0
+    )
+    static let controlForeground = textPrimary
+    static let successText = Color(
+        red: 82.0 / 255.0,
+        green: 201.0 / 255.0,
+        blue: 154.0 / 255.0
+    )
+    static let selectedZoneFillTop = interfaceBlue.opacity(0.42)
+    static let selectedZoneFillBottom = interfacePurple.opacity(0.24)
+    static let selectedTapFill = interfacePurple.opacity(0.24)
+    static let selectionBoundary = textPrimary
+    static let selectedZoneCaptionFill = controlTint
+    static let selectedZoneCaptionForeground = controlForeground
+    static let permissionFillOpacity = 0.07
+    static let permissionStrokeOpacity = 0.75
 
-    /// Warning text partner to `accentText`: system orange also fails contrast on
-    /// light backgrounds, so light appearance darkens it.
-    static let warningText = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? .systemOrange
-            : NSColor(srgbRed: 0.65, green: 0.32, blue: 0, alpha: 1)
-    })
-
-    /// Error text follows the adaptive warning-token pattern instead of using the
-    /// bright system red against light backgrounds.
-    static let errorText = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? .systemRed
-            : NSColor(srgbRed: 0.68, green: 0.08, blue: 0.08, alpha: 1)
-    })
-
-    // Sizes the token contract has not yet absorbed; slice 2 removes or rescales them.
-    static let padColumnWidth: CGFloat = 530
-    static let padConfigurationCardHeight: CGFloat = 420
-    static let zoneInspectorWidth: CGFloat = 266
+    /// Sibling cards use the same rhythm horizontally and vertically.
+    static let cardSpacing = Spacing.s4
+    static let padColumnWidth = (Metrics.defaultContentWidth - cardSpacing) / 2
+    static let sliderMinimumWidth: CGFloat = 120
+    static let minimumPadSectionWidth = Width.labelColumnWide
+        + Spacing.s3
+        + sliderMinimumWidth
+        + Spacing.s2
+        + Width.readout
+    static let minimumPadColumnWidth = minimumPadSectionWidth
+        + (2 * Inset.card)
+        + (2 * Inset.section)
+    static let previewInspectorSpacing = Spacing.s5
+    static let previewInspectorColumnsBreakpoint = Metrics.zoneMapWidth
+        + minimumPadSectionWidth
+        + previewInspectorSpacing
     static let behaviorPickerWidth: CGFloat = 272
-    static let sliderMinimumWidth: CGFloat = 160
 }
 
 private struct PaddrTypographyModifier: ViewModifier {
@@ -146,36 +198,22 @@ private struct PaddrCardModifier: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         PaddrAppearanceReader { appearance in
-            // Bezeled, not glass. Paddr's controls are a mix of SwiftUI buttons, a SwiftUI
-            // menu picker, and an AppKit `NSSegmentedControl`, and only the buttons can take
-            // Liquid Glass — so a glass card sat above three controls that could never join
-            // it. The standard control bezel is the one family all four share.
-            Group {
-                if appearance.usesOpaqueFallback {
-                    content.background(
-                        Color(nsColor: .controlBackgroundColor),
-                        in: .rect(cornerRadius: PaddrStyle.Radius.card)
-                    )
-                } else {
-                    content
-                        .background(
-                            PaddrStyle.accent.opacity(0.04),
-                            in: .rect(cornerRadius: PaddrStyle.Radius.card)
-                        )
-                        .background(
-                            .regularMaterial,
-                            in: .rect(cornerRadius: PaddrStyle.Radius.card)
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(PaddrStyle.Inset.card)
+                .background(
+                    appearance.usesOpaqueFallback
+                        ? PaddrStyle.night1
+                        : appearance.surface(elevated: true),
+                    in: .rect(cornerRadius: PaddrStyle.Radius.card)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: PaddrStyle.Radius.card)
+                        .strokeBorder(
+                            appearance.surfaceStroke,
+                            lineWidth: appearance.strokeWidth
                         )
                 }
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: PaddrStyle.Radius.card)
-                    .strokeBorder(
-                        Color(nsColor: .separatorColor)
-                            .opacity(appearance.strokeOpacity(0.46)),
-                        lineWidth: appearance.strokeWidth
-                    )
-            }
         }
     }
 }
@@ -189,20 +227,24 @@ private struct PaddrActionButtonModifier: ViewModifier {
         case .primary:
             content
                 .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
+                .controlSize(.large)
                 .paddrTypography(.rowLabel)
-                .tint(PaddrStyle.accent)
+                .foregroundStyle(PaddrStyle.controlForeground)
+                .tint(PaddrStyle.controlTint)
+                .frame(minHeight: PaddrStyle.Metrics.controlHeight)
         case .secondary:
             content
                 .buttonStyle(.bordered)
-                .controlSize(.regular)
+                .controlSize(.large)
                 .paddrTypography(.rowLabel)
+                .frame(minHeight: PaddrStyle.Metrics.controlHeight)
         case .icon:
             content
                 .labelStyle(.iconOnly)
                 .buttonStyle(.bordered)
-                .controlSize(.regular)
+                .controlSize(.large)
                 .paddrTypography(.rowLabel)
+                .frame(minHeight: PaddrStyle.Metrics.controlHeight)
         }
     }
 }
@@ -215,7 +257,9 @@ extension View {
     func paddrCard() -> some View { modifier(PaddrCardModifier()) }
 
     func paddrMenuSelector() -> some View {
-        tint(Color(nsColor: .labelColor))
+        controlSize(.large)
+            .frame(minHeight: PaddrStyle.Metrics.controlHeight)
+            .tint(PaddrStyle.textPrimary)
     }
 
     func paddrActionButton(_ role: PaddrButtonRole) -> some View {

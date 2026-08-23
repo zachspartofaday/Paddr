@@ -6,9 +6,8 @@ struct ProfileControlsView: View {
     @Bindable var model: PaddrMenuModel
     @State private var confirmationSelectionID: ConfigurationProfileID?
     @State private var showsDiscardConfirmation = false
-    @State private var namePrompt: NamePrompt?
+    @State private var pendingProfileAction: PendingProfileAction?
     @State private var nameDraft = ""
-    @State private var pendingDeleteID: ConfigurationProfileID?
 
     var body: some View {
         let pickerPresentation = profilePickerPresentation
@@ -30,6 +29,7 @@ struct ProfileControlsView: View {
             .accessibilityLabel("Profile")
             .accessibilityValue(Text(verbatim: pickerPresentation.accessibilityValue))
             .help("Select the active profile")
+            .paddrAccessibilityID("profile", "selector")
 
             Menu {
                 if isDefaultProfile {
@@ -67,7 +67,10 @@ struct ProfileControlsView: View {
                 .disabled(!model.canEditActiveProfile)
 
                 Button("Delete Profile", systemImage: "trash", role: .destructive) {
-                    pendingDeleteID = model.activeProfileID
+                    pendingProfileAction = .delete(
+                        id: model.activeProfileID,
+                        name: model.activeProfile.name
+                    )
                 }
                 .disabled(!model.canEditActiveProfile || model.hasUnsavedChanges)
             } label: {
@@ -85,6 +88,7 @@ struct ProfileControlsView: View {
             .accessibilityLabel(profileActionsAccessibilityLabel)
             .accessibilityValue(profileActionsAccessibilityValue)
             .help(profileActionsHelp)
+            .paddrAccessibilityID("profile", "actions")
         }
         .disabled(!model.canManageProfiles)
         .alert("Discard unsaved changes?", isPresented: $showsDiscardConfirmation) {
@@ -103,35 +107,47 @@ struct ProfileControlsView: View {
         } message: {
             Text("Switching profiles replaces the current draft. Unsaved changes will not be copied.")
         }
-        .alert(namePrompt?.title ?? "Profile Name", isPresented: namePromptIsPresented) {
+        .alert(
+            "Create Profile",
+            isPresented: profileActionIsPresented(.create)
+        ) {
             TextField("Profile name", text: $nameDraft)
-            Button("Cancel", role: .cancel) { namePrompt = nil }
-            Button(namePrompt?.actionTitle ?? "Save") {
-                switch namePrompt {
-                case .create:
-                    _ = model.createProfile(named: nameDraft)
-                case .rename:
-                    _ = model.renameActiveProfile(to: nameDraft)
-                case nil:
-                    break
-                }
-                namePrompt = nil
+            Button("Cancel", role: .cancel) { pendingProfileAction = nil }
+            Button("Create") {
+                guard pendingProfileAction?.kind == .create else { return }
+                _ = model.createProfile(named: nameDraft)
+                pendingProfileAction = nil
+            }
+        } message: {
+            Text("Profile names must be nonempty and unique, ignoring case.")
+        }
+        .alert(
+            "Rename Profile",
+            isPresented: profileActionIsPresented(.rename)
+        ) {
+            TextField("Profile name", text: $nameDraft)
+            Button("Cancel", role: .cancel) { pendingProfileAction = nil }
+            Button("Rename") {
+                guard pendingProfileAction?.kind == .rename,
+                      let id = pendingProfileAction?.profileID else { return }
+                _ = model.renameProfile(id: id, to: nameDraft)
+                pendingProfileAction = nil
             }
         } message: {
             Text("Profile names must be nonempty and unique, ignoring case.")
         }
         .confirmationDialog(
-            "Delete \(model.activeProfile.name)?",
-            isPresented: deleteConfirmationIsPresented,
+            "Delete \(pendingProfileAction?.profileName ?? "")?",
+            isPresented: profileActionIsPresented(.delete),
             titleVisibility: .visible
         ) {
             Button("Delete Profile", role: .destructive) {
-                if let id = pendingDeleteID {
-                    _ = model.deleteProfile(id: id, confirmed: true)
-                }
-                pendingDeleteID = nil
+                guard pendingProfileAction?.kind == .delete,
+                      let id = pendingProfileAction?.profileID else { return }
+                _ = model.deleteProfile(id: id, confirmed: true)
+                pendingProfileAction = nil
             }
-            Button("Cancel", role: .cancel) { pendingDeleteID = nil }
+            Button("Cancel", role: .cancel) { pendingProfileAction = nil }
         } message: {
             Text("Deleting the active profile activates Default first. This cannot be undone.")
         }
@@ -164,21 +180,18 @@ struct ProfileControlsView: View {
     private var profileSelection: Binding<ConfigurationProfileID> {
         Binding(
             get: { model.profileSelectionPresentation.selectedProfileID },
-            set: requestProfileSelection
+            set: { id in requestProfileSelection(id: id) }
         )
     }
 
-    private var namePromptIsPresented: Binding<Bool> {
+    private func profileActionIsPresented(_ kind: PendingProfileAction.Kind) -> Binding<Bool> {
         Binding(
-            get: { namePrompt != nil },
-            set: { if !$0 { namePrompt = nil } }
-        )
-    }
-
-    private var deleteConfirmationIsPresented: Binding<Bool> {
-        Binding(
-            get: { pendingDeleteID != nil },
-            set: { if !$0 { pendingDeleteID = nil } }
+            get: { pendingProfileAction?.kind == kind },
+            set: { isPresented in
+                if !isPresented, pendingProfileAction?.kind == kind {
+                    pendingProfileAction = nil
+                }
+            }
         )
     }
 
@@ -195,7 +208,7 @@ struct ProfileControlsView: View {
 
     private func promptForCreate() {
         nameDraft = "New Profile"
-        namePrompt = .create
+        pendingProfileAction = .create(suggestedName: nameDraft)
     }
 
     private func duplicateActiveProfile() {
@@ -204,7 +217,34 @@ struct ProfileControlsView: View {
 
     private func promptForRename() {
         nameDraft = model.activeProfile.name
-        namePrompt = .rename
+        pendingProfileAction = .rename(
+            id: model.activeProfileID,
+            name: model.activeProfile.name
+        )
+    }
+}
+
+struct PendingProfileAction: Equatable {
+    enum Kind: Equatable {
+        case create
+        case rename
+        case delete
+    }
+
+    let kind: Kind
+    let profileID: ConfigurationProfileID?
+    let profileName: String
+
+    static func create(suggestedName: String) -> Self {
+        Self(kind: .create, profileID: nil, profileName: suggestedName)
+    }
+
+    static func rename(id: ConfigurationProfileID, name: String) -> Self {
+        Self(kind: .rename, profileID: id, profileName: name)
+    }
+
+    static func delete(id: ConfigurationProfileID, name: String) -> Self {
+        Self(kind: .delete, profileID: id, profileName: name)
     }
 }
 
@@ -246,25 +286,6 @@ struct ProfilePickerPresentation: Equatable {
                 localized: "Switching to \(pendingName)",
                 comment: "Profile selector accessibility value while the selected profile is being saved"
             )
-        }
-    }
-}
-
-private enum NamePrompt {
-    case create
-    case rename
-
-    var title: LocalizedStringResource {
-        switch self {
-        case .create: "Create Profile"
-        case .rename: "Rename Profile"
-        }
-    }
-
-    var actionTitle: LocalizedStringResource {
-        switch self {
-        case .create: "Create"
-        case .rename: "Rename"
         }
     }
 }

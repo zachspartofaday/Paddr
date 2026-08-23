@@ -1,4 +1,4 @@
-import Foundation
+import Dispatch
 import Synchronization
 
 public final class TrackpadStopToken: Sendable {
@@ -108,18 +108,15 @@ public protocol TrackpadSessionControlling: Sendable {
 public struct TrackpadRuntimeDependencies: Sendable {
     public var openHID: @Sendable () throws -> any TrackpadHIDStreaming
     public var makeOutput: @Sendable () -> any TrackpadOutputDispatching
-    public var wallNow: @Sendable () -> Date
     public var uptimeNanoseconds: @Sendable () -> UInt64
 
     public init(
         openHID: @escaping @Sendable () throws -> any TrackpadHIDStreaming,
         makeOutput: @escaping @Sendable () -> any TrackpadOutputDispatching,
-        wallNow: @escaping @Sendable () -> Date = Date.init,
         uptimeNanoseconds: @escaping @Sendable () -> UInt64 = { DispatchTime.now().uptimeNanoseconds }
     ) {
         self.openHID = openHID
         self.makeOutput = makeOutput
-        self.wallNow = wallNow
         self.uptimeNanoseconds = uptimeNanoseconds
     }
 
@@ -129,20 +126,60 @@ public struct TrackpadRuntimeDependencies: Sendable {
     )
 }
 
+private struct MonotonicRunLimit: Sendable {
+    let startedAt: UInt64
+    let durationNanoseconds: UInt64
+
+    func permits(_ uptime: UInt64) -> Bool {
+        guard uptime >= startedAt else { return false }
+        return uptime - startedAt < durationNanoseconds
+    }
+}
+
 public enum TrackpadRuntime {
     static let controllerLossDeadlineNanoseconds: UInt64 = 1_000_000_000
+
+    package static func validatedDurationNanoseconds(_ duration: Duration) throws -> UInt64 {
+        let components = duration.components
+        guard duration > .zero,
+              components.seconds >= 0,
+              components.attoseconds >= 0
+        else {
+            throw PaddrError.configuration("--duration must be positive.")
+        }
+
+        let (wholeNanoseconds, wholeOverflow) = UInt64(components.seconds)
+            .multipliedReportingOverflow(by: 1_000_000_000)
+        guard !wholeOverflow else {
+            throw PaddrError.configuration("--duration is too large.")
+        }
+        let fractionalNanoseconds = (UInt64(components.attoseconds) + 999_999_999)
+            / 1_000_000_000
+        let (nanoseconds, additionOverflow) = wholeNanoseconds
+            .addingReportingOverflow(fractionalNanoseconds)
+        guard !additionOverflow, nanoseconds > 0 else {
+            throw PaddrError.configuration("--duration is too large.")
+        }
+        return nanoseconds
+    }
 
     public static func run(
         configuration: PaddrConfiguration,
         observeOnly: Bool,
         outputGate: OutputGate? = nil,
         stopToken: TrackpadStopToken,
-        deadline: Date? = nil,
+        duration: Duration? = nil,
         dependencies: TrackpadRuntimeDependencies = .live,
         onEvent: (@Sendable (TrackpadSessionEvent) -> Void)? = nil,
         onAction: (@Sendable (String) -> Void)? = nil
     ) throws -> TrackpadRunResult {
         let validated = try configuration.validated()
+        let runLimit = try duration.map {
+            MonotonicRunLimit(
+                startedAt: dependencies.uptimeNanoseconds(),
+                durationNanoseconds: try validatedDurationNanoseconds($0)
+            )
+        }
         let device = try dependencies.openHID()
         let output = dependencies.makeOutput()
         var controllerEpoch: ControllerEpoch?
@@ -231,7 +268,8 @@ public enum TrackpadRuntime {
         do {
             streamOutcome = .success(try device.stream(
                 shouldContinue: {
-                    stopToken.shouldContinue && (deadline.map { dependencies.wallNow() < $0 } ?? true)
+                    stopToken.shouldContinue
+                        && (runLimit.map { $0.permits(dependencies.uptimeNanoseconds()) } ?? true)
                 },
                 onWake: {
                     try reconcileOutputGate()
@@ -372,9 +410,6 @@ public actor TrackpadSession: TrackpadSessionControlling {
     private let eventGate = SessionEventGate()
     private var activeWorker: WorkerRecord?
     private var requestEpoch: UInt64 = 0
-    #if DEBUG
-    private var epochWaiters: [(epoch: UInt64, continuation: CheckedContinuation<Void, Never>)] = []
-    #endif
 
     public init(runtime: @escaping Runtime = TrackpadSession.liveRuntime) {
         self.runtime = runtime
@@ -478,21 +513,13 @@ public actor TrackpadSession: TrackpadSessionControlling {
     }
 
     #if DEBUG
-    func waitForRequestEpochForTesting(_ expectedEpoch: UInt64) async {
-        guard requestEpoch < expectedEpoch else { return }
-        await withCheckedContinuation { continuation in
-            epochWaiters.append((expectedEpoch, continuation))
-        }
+    func requestEpochForTesting() -> UInt64 {
+        requestEpoch
     }
     #endif
 
     private func advanceRequestEpoch() {
         requestEpoch &+= 1
-        #if DEBUG
-        let ready = epochWaiters.filter { $0.epoch <= requestEpoch }
-        epochWaiters.removeAll { $0.epoch <= requestEpoch }
-        for waiter in ready { waiter.continuation.resume() }
-        #endif
     }
 
     public static func liveRuntime(

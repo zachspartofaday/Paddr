@@ -103,7 +103,7 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var isRejectingEnabledChange = false
     private var profileOperationInProgress = false
     private var pendingProfileActivation: ConfigurationProfile?
-    @ObservationIgnored private var profileDocumentSaveInProgress = false
+    private var profileDocumentSaveInProgress = false
     private var replacesActiveConfiguration = false
     @ObservationIgnored private var activationCommitPending = false
     @ObservationIgnored private var statusRefreshTask: Task<Void, Never>?
@@ -164,6 +164,22 @@ public final class PaddrMenuModel {
             && configurationTask == nil
             && !profileDocumentSaveInProgress
     }
+    public var readiness: PaddrReadinessResolution {
+        PaddrReadinessResolver.resolve(
+            PaddrReadinessInput(
+                isInitialized: isInitialized,
+                puckConnected: receiverDescription != nil,
+                controllerConnected: controllerConnected,
+                batteryAvailable: batteryStatus != nil,
+                inputMonitoringGranted: inputMonitoringGranted,
+                accessibilityTrusted: accessibilityTrusted,
+                isEnabled: isEnabled,
+                isRunning: isRunning,
+                isReleasingOutput: isReleasingOutput,
+                canToggleOutput: canToggleOutput
+            )
+        )
+    }
 
     public init(dependencies: MenuDependencies = .live) {
         self.dependencies = dependencies
@@ -177,6 +193,19 @@ public final class PaddrMenuModel {
                 statusGeneration: initialStatusGeneration
             )
         }
+    }
+
+    isolated deinit {
+        // The lifecycle owns the session stream, so cancel it before the tasks that can
+        // schedule or replace lifecycle work. Deinitialization is intentionally synchronous:
+        // normal application termination remains the await-and-drain path.
+        lifecycleTask?.cancel()
+        reconnectTask?.cancel()
+        initializationTask?.cancel()
+        configurationTask?.cancel()
+        statusRefreshTask?.cancel()
+        permissionRefreshTask?.cancel()
+        terminationTask?.cancel()
     }
 
     public func refreshStatus() {
@@ -450,10 +479,15 @@ public final class PaddrMenuModel {
 
     @discardableResult
     public func renameActiveProfile(to name: String) -> Bool {
+        renameProfile(id: activeProfileID, to: name)
+    }
+
+    @discardableResult
+    public func renameProfile(id: ConfigurationProfileID, to name: String) -> Bool {
         guard canBeginProfileMutation(discardingDraft: false) else { return false }
         do {
             var document = profileDocument
-            try document.renameProfile(id: activeProfileID, to: name)
+            try document.renameProfile(id: id, to: name)
             beginProfileDocumentSave(document)
             return true
         } catch {

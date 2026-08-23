@@ -14,21 +14,13 @@ struct ButtonZoneConfigurationView: View {
     }
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 0) {
-                mapSection.frame(width: PaddrStyle.Metrics.zoneMapWidth)
-                PaddrInsetDivider(axis: .vertical)
-                    .padding(.horizontal, PaddrStyle.Spacing.s2)
-                inspector.frame(width: PaddrStyle.zoneInspectorWidth)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s4) {
-                mapSection
-                inspector
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        PaddrAdaptiveSplitView(
+            breakpoint: PaddrStyle.previewInspectorColumnsBreakpoint,
+            leadingWidth: PaddrStyle.Metrics.zoneMapWidth,
+            showsDivider: false,
+            leading: { mapSection },
+            trailing: { inspector }
+        )
         .onChange(of: configuration.zoneLayout) { _, layout in
             selectedZone = ZoneSelectionPolicy.normalized(selectedZone, for: layout)
         }
@@ -45,46 +37,28 @@ struct ButtonZoneConfigurationView: View {
 
     private var mapSection: some View {
         VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
-            Text("Area map")
-                .paddrTypography(.sectionLabel)
-                .frame(minHeight: PaddrStyle.Metrics.row)
-            padMap.frame(
-                maxWidth: .infinity,
-                minHeight: PaddrStyle.Metrics.zoneMapHeight,
-                maxHeight: PaddrStyle.Metrics.zoneMapHeight
-            )
+            PaddrSectionHeader("Area map")
+            padMap
+                .frame(
+                    width: PaddrStyle.Metrics.zoneMapWidth,
+                    height: PaddrStyle.Metrics.zoneMapHeight
+                )
+                .frame(maxWidth: .infinity, alignment: .center)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var inspector: some View {
         VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
-            Text(LocalizedStringResource("Zone settings"))
-                .paddrTypography(.sectionLabel)
-                .frame(minHeight: PaddrStyle.Metrics.row)
-                .accessibilityAddTraits(.isHeader)
+            PaddrSectionHeader("Zone settings")
 
-            HStack(spacing: PaddrStyle.Spacing.s3) {
-                Text(LocalizedStringResource("Mode"))
-                    .paddrTypography(.sectionLabel)
-                Spacer(minLength: PaddrStyle.Spacing.s3)
+            PaddrSettingsRow(title: "Mode", systemImage: "square.grid.2x2") {
                 areaLayoutPicker
             }
-            .frame(minHeight: PaddrStyle.Metrics.row)
 
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: PaddrStyle.Spacing.s3) {
-                    selectedAreaTitle
-                    Spacer(minLength: PaddrStyle.Spacing.s3)
-                    selectedAreaPicker
-                }
-
-                VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s2) {
-                    selectedAreaTitle
-                    selectedAreaPicker.frame(maxWidth: .infinity, alignment: .trailing)
-                }
+            PaddrSettingsRow(title: "Selected area", systemImage: selectedZone.systemImage) {
+                selectedAreaPicker
             }
-            .frame(minHeight: PaddrStyle.Metrics.row)
-            .frame(maxWidth: .infinity)
 
             PaddrSettingsRow(title: "Action", systemImage: "keyboard") {
                 OutputBindingPicker(
@@ -114,7 +88,6 @@ struct ButtonZoneConfigurationView: View {
                             .frame(width: PaddrStyle.Width.readout, alignment: .trailing)
                     }
                 }
-                .padding(.top, PaddrStyle.Spacing.s3)
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -134,11 +107,6 @@ struct ButtonZoneConfigurationView: View {
         .help("Choose how the trackpad is divided into button areas.")
     }
 
-    private var selectedAreaTitle: some View {
-        Text("Selected area")
-            .paddrTypography(.sectionLabel)
-    }
-
     private var selectedAreaPicker: some View {
         Picker("Selected area", selection: $selectedZone) {
             ForEach(configuration.zoneLayout.zones, id: \.self) { zone in
@@ -149,7 +117,7 @@ struct ButtonZoneConfigurationView: View {
         .pickerStyle(.menu)
         .paddrMenuSelector()
         .frame(width: PaddrStyle.Width.control, alignment: .trailing)
-        .accessibilityIdentifier("selected-area-picker")
+        .paddrAccessibilityID("zones", "selected-area")
         .help("Choose the trackpad area to configure.")
     }
 }

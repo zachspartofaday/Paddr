@@ -8,6 +8,15 @@ app_path="$output_dir/Paddr.app"
 sign_identity=${SIGN_IDENTITY:--}
 architectures=${ARCHITECTURES:-arm64}
 build_scratch_path=${BUILD_SCRATCH_PATH:-}
+source_revision=$(git -C "$repo_dir" rev-parse HEAD)
+if ! source_dirty=$("$script_dir/source-dirty.sh" "$repo_dir"); then
+    echo "Unable to determine the source checkout state." >&2
+    exit 1
+fi
+case "$source_dirty" in
+    true|false) ;;
+    *) echo "Invalid source checkout state: $source_dirty" >&2; exit 1 ;;
+esac
 
 case "$app_path" in
     "$repo_dir"/dist/Paddr.app|"$output_dir"/Paddr.app) ;;
@@ -39,8 +48,12 @@ build_dir=$(swift build "$@" --show-bin-path)
 
 mkdir -p "$contents_path/MacOS" "$contents_path/Resources"
 cp "$repo_dir/Packaging/Info.plist" "$contents_path/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :PaddrSourceRevision string $source_revision" "$contents_path/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :PaddrSourceDirty bool $source_dirty" "$contents_path/Info.plist"
 cp "$build_dir/Paddr" "$binary_path"
+cp "$repo_dir/THIRD_PARTY_NOTICES.md" "$contents_path/Resources/ThirdPartyNotices.txt"
 chmod 755 "$binary_path"
+strip -S "$binary_path"
 
 xcrun xcstringstool compile \
     "$repo_dir/Resources/Localizable.xcstrings" \
@@ -61,6 +74,21 @@ for architecture in $architectures; do
     lipo -archs "$binary_path" | tr ' ' '\n' | grep -qx "$architecture"
 done
 
+if ! final_source_revision=$(git -C "$repo_dir" rev-parse HEAD) ||
+   ! final_source_dirty=$("$script_dir/source-dirty.sh" "$repo_dir"); then
+    echo "Unable to revalidate the source checkout after building the app." >&2
+    exit 1
+fi
+case "$final_source_dirty" in
+    true|false) ;;
+    *) echo "Invalid post-build source checkout state: $final_source_dirty" >&2; exit 1 ;;
+esac
+if test "$final_source_revision" != "$source_revision" ||
+   test "$final_source_dirty" != "$source_dirty"; then
+    echo "Source checkout changed while the app was being built; refusing to publish it." >&2
+    exit 1
+fi
+
 if [ "$sign_identity" = "-" ]; then
     codesign --force --sign - "$staged_app"
 else
@@ -77,8 +105,10 @@ else
     exit 1
 fi
 
+if test "$source_dirty" = true; then source_state=dirty; else source_state=clean; fi
 echo "Built $app_path"
 echo "Architectures: $(lipo -archs "$app_path/Contents/MacOS/Paddr")"
+echo "Source: $source_revision ($source_state)"
 if [ "$sign_identity" = "-" ]; then
     echo "Signing: ad hoc (local testing only)"
 else

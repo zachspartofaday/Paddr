@@ -35,6 +35,45 @@ fi
 
 input_path="$test_dir/input.json"
 printf '%s\n' '{"left":{"mode":"scroll"},"right":{"mode":"mouse"}}' >"$input_path"
+"$cli_path" --config "$input_path" --duration 0.25 --show-config \
+    >"$stdout_path" 2>"$stderr_path"
+if ! grep -Fq '"mode" : "scroll"' "$stdout_path"; then
+    echo "A valid finite --duration did not preserve show-config behavior." >&2
+    exit 1
+fi
+
+assert_invalid_duration() {
+    duration_value=$1
+    expected_diagnostic=$2
+    set +e
+    "$cli_path" --config "$input_path" --duration "$duration_value" --show-config \
+        >"$stdout_path" 2>"$stderr_path"
+    duration_status=$?
+    set -e
+    if [ "$duration_status" -ne 2 ] \
+        || ! grep -Fq -- "$expected_diagnostic" "$stderr_path"; then
+        echo "Invalid --duration '$duration_value' was not rejected safely." >&2
+        exit 1
+    fi
+}
+
+assert_invalid_duration 0 '--duration must be positive.'
+assert_invalid_duration -0.1 '--duration must be positive.'
+assert_invalid_duration nan '--duration requires a finite number.'
+assert_invalid_duration inf '--duration requires a finite number.'
+assert_invalid_duration 1e20 '--duration is too large.'
+
+set +e
+"$cli_path" --config "$input_path" --show-config --duration \
+    >"$stdout_path" 2>"$stderr_path"
+status=$?
+set -e
+if [ "$status" -ne 2 ] \
+    || ! grep -Fq -- '--duration requires a value.' "$stderr_path"; then
+    echo "Missing --duration value did not return a configuration error." >&2
+    exit 1
+fi
+
 "$cli_path" --config "$input_path" \
     --left-mouse-acceleration 0.25 \
     --right-mouse-acceleration 0.75 \

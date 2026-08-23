@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-if test "$#" -ne 5; then
-    echo "Usage: $0 APP_PATH ZIP_PATH DIGEST_PATH EXPECTED_VERSION EXPECTED_BUILD" >&2
+if test "$#" -ne 6; then
+    echo "Usage: $0 APP_PATH ZIP_PATH DIGEST_PATH EXPECTED_VERSION EXPECTED_BUILD EXPECTED_REVISION" >&2
     exit 2
 fi
 
@@ -11,6 +11,7 @@ zip_path=$2
 digest_path=$3
 expected_version=$4
 expected_build=$5
+expected_revision=$6
 expected_architectures=arm64
 temporary_root=${TMPDIR:-/tmp}
 extract_dir=$(mktemp -d "$temporary_root/paddr-verify.XXXXXX")
@@ -39,6 +40,8 @@ verify_app() {
     fi
     test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$expected_version"
     test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")" = "$expected_build"
+    test "$(/usr/libexec/PlistBuddy -c 'Print :PaddrSourceRevision' "$plist")" = "$expected_revision"
+    test "$(/usr/libexec/PlistBuddy -c 'Print :PaddrSourceDirty' "$plist")" = "false"
     test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")" = "com.partofaday.Paddr"
     test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$plist")" = "26.0"
 
@@ -52,7 +55,23 @@ verify_app() {
         printf '%s\n' "$actual_architectures" | tr ' ' '\n' | grep -qx "$architecture"
     done
 
+    symbol_table="$extract_dir/Paddr.nm"
+    if ! nm -pa "$binary" > "$symbol_table"; then
+        echo "Unable to inspect the app binary symbol table: $binary" >&2
+        return 1
+    fi
+    if awk '$5 == "SO" || $5 == "OSO" { found = 1 } END { exit found ? 0 : 1 }' \
+        "$symbol_table"; then
+        echo "App binary contains forbidden N_SO/N_OSO source or object path records: $binary" >&2
+        return 1
+    fi
+
     test -f "$verified_app/Contents/Resources/en.lproj/Localizable.strings"
+    test -f "$verified_app/Contents/Resources/ThirdPartyNotices.txt"
+    grep -q '6c65d74fac9add281918438629228333535752a4' \
+        "$verified_app/Contents/Resources/ThirdPartyNotices.txt"
+    grep -q 'Permission is hereby granted' \
+        "$verified_app/Contents/Resources/ThirdPartyNotices.txt"
     codesign --verify --deep --strict --verbose=2 "$verified_app"
 
     find "$verified_app/Contents" -mindepth 1 -print | while IFS= read -r item; do
@@ -60,6 +79,7 @@ verify_app() {
         case "$relative" in
             Contents/Info.plist|Contents/MacOS|Contents/MacOS/Paddr|Contents/Resources|\
             Contents/Resources/AppIcon.icns|Contents/Resources/Assets.car|\
+            Contents/Resources/ThirdPartyNotices.txt|\
             Contents/Resources/en.lproj|Contents/Resources/en.lproj/Localizable.strings|\
             Contents/_CodeSignature|Contents/_CodeSignature/CodeResources|\
             Contents/CodeResources) ;;
@@ -107,4 +127,4 @@ if ! diff -qr "$app_path" "$extracted_app" >/dev/null; then
     exit 1
 fi
 
-echo "Verified Paddr $expected_version ($expected_build)."
+echo "Verified Paddr $expected_version ($expected_build), revision $expected_revision."

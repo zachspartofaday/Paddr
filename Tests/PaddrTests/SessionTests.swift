@@ -1,4 +1,3 @@
-import Dispatch
 import Synchronization
 import XCTest
 @testable import PaddrCore
@@ -116,9 +115,13 @@ final class SessionTests: XCTestCase {
         let session = TrackpadSession(runtime: runtime.run)
         let oldStream = await session.start(configuration: configuration(sensitivity: 1))
         await runtime.waitForStartCount(1)
-        var oldIterator = oldStream.makeAsyncIterator()
-        let initialEvents = [await oldIterator.next(), await oldIterator.next(), await oldIterator.next()]
-        XCTAssertEqual(initialEvents, [.connecting, .waitingForController("worker:1"), .controllerConnected])
+        let oldEvents = SessionEventProbe<TrackpadSessionEvent>()
+        let observation = oldEvents.observe(oldStream)
+        await oldEvents.wait { events, _ in events.count >= 3 }
+        XCTAssertEqual(
+            Array(oldEvents.events.prefix(3)),
+            [.connecting, .waitingForController("worker:1"), .controllerConnected]
+        )
 
         let replacementConfiguration = configuration(sensitivity: 2)
         let replacement = Task {
@@ -129,9 +132,8 @@ final class SessionTests: XCTestCase {
         _ = await replacement.value
         await runtime.waitForStartCount(2)
 
-        var supersededEvents: [TrackpadSessionEvent] = []
-        while let event = await oldIterator.next() { supersededEvents.append(event) }
-        XCTAssertEqual(supersededEvents, [])
+        await finish(observation, after: oldEvents)
+        XCTAssertEqual(Array(oldEvents.events.dropFirst(3)), [])
 
         let stop = Task { _ = await session.stop() }
         await waitForEpoch(3, session: session)
@@ -144,15 +146,10 @@ final class SessionTests: XCTestCase {
         let session = TrackpadSession(runtime: runtime.run)
         let stream = await session.start(configuration: configuration(sensitivity: 1))
         await runtime.waitUntilProduced()
-
-        var iterator = stream.makeAsyncIterator()
-        var bufferedEvents: [TrackpadSessionEvent] = []
-        for _ in 0..<32 {
-            guard let event = await iterator.next() else {
-                return XCTFail("Expected the bounded session buffer to remain open")
-            }
-            bufferedEvents.append(event)
-        }
+        let events = SessionEventProbe<TrackpadSessionEvent>()
+        let observation = events.observe(stream)
+        await events.wait { values, _ in values.count >= 32 }
+        let bufferedEvents = Array(events.events.prefix(32))
 
         let connectedIndex = bufferedEvents.firstIndex(of: .controllerConnected)
         let armedIndex = bufferedEvents.lastIndex(of: .outputArmed)
@@ -171,9 +168,11 @@ final class SessionTests: XCTestCase {
         XCTAssertLessThanOrEqual(bufferedEvents.count, 32)
 
         runtime.release()
-        var suffix: [TrackpadSessionEvent] = []
-        while let event = await iterator.next() { suffix.append(event) }
-        XCTAssertEqual(suffix, [.stopped(.init(reportCount: 80, actionCount: 8))])
+        await finish(observation, after: events)
+        XCTAssertEqual(
+            Array(events.events.dropFirst(32)),
+            [.stopped(.init(reportCount: 80, actionCount: 8))]
+        )
         await session.stop()
     }
 
@@ -182,21 +181,16 @@ final class SessionTests: XCTestCase {
         let session = TrackpadSession(runtime: runtime.run)
         let stream = await session.start(configuration: configuration(sensitivity: 1))
         await runtime.waitUntilProduced()
-
-        var iterator = stream.makeAsyncIterator()
-        var bufferedEvents: [TrackpadSessionEvent] = []
-        for _ in 0..<32 {
-            guard let event = await iterator.next() else {
-                return XCTFail("Expected the bounded session buffer to remain open")
-            }
-            bufferedEvents.append(event)
-        }
+        let events = SessionEventProbe<TrackpadSessionEvent>()
+        let observation = events.observe(stream)
+        await events.wait { values, _ in values.count >= 32 }
+        let bufferedEvents = Array(events.events.prefix(32))
 
         XCTAssertTrue(bufferedEvents.contains(.outputReleased(revision: 7)))
         XCTAssertTrue(bufferedEvents.contains(.controllerConnected))
 
         runtime.release()
-        while await iterator.next() != nil {}
+        await finish(observation, after: events)
         _ = await session.stop()
     }
 
@@ -205,15 +199,10 @@ final class SessionTests: XCTestCase {
         let session = TrackpadSession(runtime: runtime.run)
         let stream = await session.start(configuration: configuration(sensitivity: 1))
         await runtime.waitUntilProduced()
-
-        var iterator = stream.makeAsyncIterator()
-        var bufferedEvents: [TrackpadSessionEvent] = []
-        for _ in 0..<32 {
-            guard let event = await iterator.next() else {
-                return XCTFail("Expected the bounded session buffer to remain open")
-            }
-            bufferedEvents.append(event)
-        }
+        let events = SessionEventProbe<TrackpadSessionEvent>()
+        let observation = events.observe(stream)
+        await events.wait { values, _ in values.count >= 32 }
+        let bufferedEvents = Array(events.events.prefix(32))
 
         let recoveredBatteryValues = bufferedEvents.compactMap { event -> ControllerBatteryStatus? in
             guard case let .batteryUpdated(battery) = event else { return nil }
@@ -235,9 +224,11 @@ final class SessionTests: XCTestCase {
         XCTAssertLessThanOrEqual(bufferedEvents.count, 32)
 
         runtime.release()
-        var suffix: [TrackpadSessionEvent] = []
-        while let event = await iterator.next() { suffix.append(event) }
-        XCTAssertEqual(suffix, [.stopped(.init(reportCount: 80, actionCount: 0))])
+        await finish(observation, after: events)
+        XCTAssertEqual(
+            Array(events.events.dropFirst(32)),
+            [.stopped(.init(reportCount: 80, actionCount: 0))]
+        )
         _ = await session.stop()
     }
 
@@ -246,15 +237,10 @@ final class SessionTests: XCTestCase {
         let session = TrackpadSession(runtime: runtime.run)
         let stream = await session.start(configuration: configuration(sensitivity: 1))
         await runtime.waitUntilProduced()
-
-        var iterator = stream.makeAsyncIterator()
-        var bufferedEvents: [TrackpadSessionEvent] = []
-        for _ in 0..<32 {
-            guard let event = await iterator.next() else {
-                return XCTFail("Expected the bounded session buffer to remain open")
-            }
-            bufferedEvents.append(event)
-        }
+        let events = SessionEventProbe<TrackpadSessionEvent>()
+        let observation = events.observe(stream)
+        await events.wait { values, _ in values.count >= 32 }
+        let bufferedEvents = Array(events.events.prefix(32))
 
         XCTAssertFalse(bufferedEvents.contains { event in
             if case .batteryUpdated = event { return true }
@@ -271,7 +257,7 @@ final class SessionTests: XCTestCase {
         XCTAssertLessThanOrEqual(bufferedEvents.count, 32)
 
         runtime.release()
-        while await iterator.next() != nil {}
+        await finish(observation, after: events)
         _ = await session.stop()
     }
 
@@ -318,26 +304,31 @@ final class SessionTests: XCTestCase {
     private func events(
         in stream: AsyncStream<TrackpadSessionEvent>
     ) async -> [TrackpadSessionEvent] {
-        var result: [TrackpadSessionEvent] = []
-        for await event in stream { result.append(event) }
-        return result
+        let probe = SessionEventProbe<TrackpadSessionEvent>()
+        let observation = probe.observe(stream)
+        let didFinish = await probe.wait { _, isFinished in isFinished }
+        if !didFinish { observation.cancel() }
+        await observation.value
+        return probe.events
+    }
+
+    private func finish<Event: Sendable>(
+        _ observation: Task<Void, Never>,
+        after probe: SessionEventProbe<Event>
+    ) async {
+        let didFinish = await probe.wait { _, isFinished in isFinished }
+        if !didFinish { observation.cancel() }
+        await observation.value
     }
 
     private func waitForEpoch(_ epoch: UInt64, session: TrackpadSession) async {
-        await session.waitForRequestEpochForTesting(epoch)
+        await eventually { await session.requestEpochForTesting() >= epoch }
     }
 }
 
 private final class ProgressPressureRuntime: Sendable {
-    private let produced: AsyncStream<Void>
-    private let producedContinuation: AsyncStream<Void>.Continuation
-    private let releaseGate = DispatchSemaphore(value: 0)
-
-    init() {
-        (produced, producedContinuation) = AsyncStream<Void>.makeStream(
-            bufferingPolicy: .bufferingNewest(1)
-        )
-    }
+    private let produced = SessionEventProbe<Void>()
+    private let releaseGate = BoundedTestGate()
 
     func run(
         configuration: PaddrConfiguration,
@@ -358,7 +349,7 @@ private final class ProgressPressureRuntime: Sendable {
         for reportCount in 41...80 {
             event(.progress(.init(reportCount: reportCount, actionCount: reportCount / 10)))
         }
-        producedContinuation.yield(())
+        produced.record(())
         releaseGate.wait()
         return TrackpadRunResult(
             summary: .init(reportCount: 80, actionCount: 8),
@@ -367,8 +358,7 @@ private final class ProgressPressureRuntime: Sendable {
     }
 
     func waitUntilProduced() async {
-        var iterator = produced.makeAsyncIterator()
-        _ = await iterator.next()
+        await produced.wait { events, _ in !events.isEmpty }
     }
 
     func release() {
@@ -377,15 +367,8 @@ private final class ProgressPressureRuntime: Sendable {
 }
 
 private final class ReleasePressureRuntime: Sendable {
-    private let produced: AsyncStream<Void>
-    private let producedContinuation: AsyncStream<Void>.Continuation
-    private let releaseGate = DispatchSemaphore(value: 0)
-
-    init() {
-        (produced, producedContinuation) = AsyncStream<Void>.makeStream(
-            bufferingPolicy: .bufferingNewest(1)
-        )
-    }
+    private let produced = SessionEventProbe<Void>()
+    private let releaseGate = BoundedTestGate()
 
     func run(
         configuration: PaddrConfiguration,
@@ -400,7 +383,7 @@ private final class ReleasePressureRuntime: Sendable {
         for reportCount in 1...80 {
             event(.progress(.init(reportCount: reportCount, actionCount: 0)))
         }
-        producedContinuation.yield(())
+        produced.record(())
         releaseGate.wait()
         return TrackpadRunResult(
             summary: .init(reportCount: 80, actionCount: 0),
@@ -409,8 +392,7 @@ private final class ReleasePressureRuntime: Sendable {
     }
 
     func waitUntilProduced() async {
-        var iterator = produced.makeAsyncIterator()
-        _ = await iterator.next()
+        await produced.wait { events, _ in !events.isEmpty }
     }
 
     func release() {
@@ -420,15 +402,11 @@ private final class ReleasePressureRuntime: Sendable {
 
 private final class BatteryPressureRuntime: Sendable {
     private let losesController: Bool
-    private let produced: AsyncStream<Void>
-    private let producedContinuation: AsyncStream<Void>.Continuation
-    private let releaseGate = DispatchSemaphore(value: 0)
+    private let produced = SessionEventProbe<Void>()
+    private let releaseGate = BoundedTestGate()
 
     init(losesController: Bool) {
         self.losesController = losesController
-        (produced, producedContinuation) = AsyncStream<Void>.makeStream(
-            bufferingPolicy: .bufferingNewest(1)
-        )
     }
 
     func run(
@@ -448,7 +426,7 @@ private final class BatteryPressureRuntime: Sendable {
         for reportCount in 1...80 {
             event(.progress(.init(reportCount: reportCount, actionCount: 0)))
         }
-        producedContinuation.yield(())
+        produced.record(())
         releaseGate.wait()
         return TrackpadRunResult(
             summary: .init(reportCount: 80, actionCount: 0),
@@ -457,8 +435,7 @@ private final class BatteryPressureRuntime: Sendable {
     }
 
     func waitUntilProduced() async {
-        var iterator = produced.makeAsyncIterator()
-        _ = await iterator.next()
+        await produced.wait { events, _ in !events.isEmpty }
     }
 
     func release() {
@@ -473,18 +450,11 @@ private final class GatedRuntime: Sendable {
         var maximum = 0
         var sensitivities: [Double] = []
         var lifecycleEvents: [String] = []
-        var gates: [Int: DispatchSemaphore] = [:]
+        var gates: [Int: BoundedTestGate] = [:]
     }
 
     private let state = Mutex(State())
-    private let starts: AsyncStream<Int>
-    private let startContinuation: AsyncStream<Int>.Continuation
-
-    init() {
-        (starts, startContinuation) = AsyncStream<Int>.makeStream(
-            bufferingPolicy: .bufferingNewest(16)
-        )
-    }
+    private let starts = SessionEventProbe<Int>()
 
     var startCount: Int { state.withLock { $0.nextID } }
     var activeCount: Int { state.withLock { $0.active } }
@@ -499,10 +469,10 @@ private final class GatedRuntime: Sendable {
         stopToken: TrackpadStopToken,
         event: @escaping @Sendable (TrackpadSessionEvent) -> Void
     ) throws -> TrackpadRunResult {
-        let (id, gate) = state.withLock { state -> (Int, DispatchSemaphore) in
+        let (id, gate) = state.withLock { state -> (Int, BoundedTestGate) in
             state.nextID += 1
             let id = state.nextID
-            let gate = DispatchSemaphore(value: 0)
+            let gate = BoundedTestGate()
             state.gates[id] = gate
             state.active += 1
             state.maximum = max(state.maximum, state.active)
@@ -512,7 +482,7 @@ private final class GatedRuntime: Sendable {
         }
         event(.waitingForController("worker:\(id)"))
         event(.controllerConnected)
-        startContinuation.yield(id)
+        starts.record(id)
         gate.wait()
         event(.controllerConnected)
         event(.controllerLost(.init(reportCount: id, actionCount: id)))
@@ -534,9 +504,8 @@ private final class GatedRuntime: Sendable {
 
     func waitForStartCount(_ expectedCount: Int) async {
         if startCount >= expectedCount { return }
-        var iterator = starts.makeAsyncIterator()
-        while let count = await iterator.next() {
-            if count >= expectedCount { return }
+        await starts.wait { events, _ in
+            events.contains { $0 >= expectedCount }
         }
     }
 }

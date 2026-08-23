@@ -3,18 +3,18 @@ import SwiftUI
 import PaddrCore
 
 struct PadConfigurationView: View {
+    @Environment(\.paddrFillsEqualHeightColumn) private var fillsEqualHeightColumn
+    @Environment(\.layoutDirection) private var layoutDirection
+
     let side: PadSide
     @Binding var configuration: PadConfiguration
-    @State private var isExpanded: Bool
 
     init(
         side: PadSide,
-        configuration: Binding<PadConfiguration>,
-        initiallyExpanded: Bool = true
+        configuration: Binding<PadConfiguration>
     ) {
         self.side = side
         _configuration = configuration
-        _isExpanded = State(initialValue: initiallyExpanded)
     }
 
     private var title: LocalizedStringResource { side == .left ? "Left trackpad" : "Right trackpad" }
@@ -27,15 +27,6 @@ struct PadConfigurationView: View {
         )
     }
 
-    private var summary: LocalizedStringResource {
-        switch configuration.mode {
-        case .disabled: "Off"
-        case .mouse: "Pointer"
-        case .scroll: "Scroll"
-        case .dpad: configuration.zoneLayout.displayName
-        }
-    }
-
     private var settingsTitle: LocalizedStringResource {
         switch configuration.mode {
         case .disabled: "Trackpad off"
@@ -46,47 +37,33 @@ struct PadConfigurationView: View {
     }
 
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
-                HStack(spacing: PaddrStyle.Spacing.s3) {
-                    PadModePicker(selection: $configuration.mode)
-                        .frame(width: PaddrStyle.behaviorPickerWidth)
+        VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
+            PaddrAdaptiveHeaderLayout(
+                spacing: PaddrStyle.Spacing.s2,
+                layoutDirection: layoutDirection
+            ) {
+                Text(title)
+                    .paddrTypography(.cardTitle)
+                    .foregroundStyle(PaddrStyle.textPrimary)
 
-                    Spacer(minLength: PaddrStyle.Spacing.s2)
-                }
-                .frame(maxWidth: .infinity, minHeight: PaddrStyle.Metrics.row)
-                .padding(.horizontal, PaddrStyle.Spacing.s4)
+                PadModePicker(
+                    selection: $configuration.mode,
+                    accessibilityIdentifier: PaddrAccessibility.identifier(
+                        "pad-mode",
+                        side.rawValue
+                    )
+                )
+                .frame(width: PaddrStyle.behaviorPickerWidth)
+            }
+            .frame(maxWidth: .infinity, minHeight: PaddrStyle.Metrics.row)
 
-                PaddrSectionContainer {
-                    modeSettings
-                }
+            PaddrSectionContainer {
+                modeSettings
             }
-            .padding(.top, PaddrStyle.Spacing.s3)
-        } label: {
-            HStack(spacing: PaddrStyle.Spacing.s2) {
-                Text(title).paddrTypography(.cardTitle)
-                Spacer()
-                Text(summary)
-                    .paddrTypography(.caption)
-                    .foregroundStyle(
-                        configuration.mode == .disabled ? Color.secondary : PaddrStyle.accentText
-                    )
-                    .padding(.horizontal, PaddrStyle.Spacing.s2)
-                    .padding(.vertical, PaddrStyle.Spacing.s1)
-                    .background(
-                        configuration.mode == .disabled
-                            ? Color.secondary.opacity(0.08)
-                            : PaddrStyle.accent.opacity(0.10),
-                        in: .capsule
-                    )
-            }
-            .frame(minHeight: PaddrStyle.Metrics.row)
-            .contentShape(.rect)
         }
-        .padding(PaddrStyle.Spacing.s3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(
-            height: isExpanded ? PaddrStyle.padConfigurationCardHeight : nil,
+            maxHeight: fillsEqualHeightColumn ? .infinity : nil,
             alignment: .topLeading
         )
         .paddrCard()
@@ -128,18 +105,26 @@ struct PadConfigurationView: View {
                         valueText: configuration.mouseDeadzone.formatted(.percent.precision(.fractionLength(0)))
                     )
                     .help("The radius starts at the pad center. Leaving it cancels the tap. At 0%, taps use the maximum-movement limit.")
-                    Toggle(
-                        "Track pointer inside tap radius",
-                        isOn: tracksPointerInsideTapRadius
-                    )
-                    .toggleStyle(.switch)
-                    .accessibilityLabel("Track pointer inside tap radius")
-                    .accessibilityValue(
-                        configuration.centerTapTrackingMode == .decoupled
-                            ? LocalizedStringResource("On")
-                            : LocalizedStringResource("Off")
-                    )
-                    .help("When on, pointer movement continues inside and across the center tap radius. When off, the radius also acts as a pointer dead zone.")
+                    PaddrSettingsRow(
+                        title: "Track pointer inside tap radius",
+                        systemImage: "cursorarrow.motionlines",
+                        labelWidth: nil
+                    ) {
+                        Toggle(
+                            "Track pointer inside tap radius",
+                            isOn: tracksPointerInsideTapRadius
+                        )
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .accessibilityLabel("Track pointer inside tap radius")
+                        .accessibilityValue(
+                            configuration.centerTapTrackingMode == .decoupled
+                                ? LocalizedStringResource("On")
+                                : LocalizedStringResource("Off")
+                        )
+                        .help("When on, pointer movement continues inside and across the center tap radius. When off, the radius also acts as a pointer dead zone.")
+                        .paddrAccessibilityID("pad", side.rawValue, "pointer-tracking")
+                    }
                     TapActionPicker(selection: $configuration.tapKey)
                 }
             }
@@ -163,33 +148,20 @@ struct PadConfigurationView: View {
         previewTitle: LocalizedStringResource,
         @ViewBuilder settings: @escaping () -> some View
     ) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 0) {
-                previewSection(title: previewTitle)
-                    .frame(width: PaddrStyle.Metrics.zoneMapWidth)
-                PaddrInsetDivider(axis: .vertical)
-                    .padding(.horizontal, PaddrStyle.Spacing.s2)
-                settingsSection(settings)
-                    .frame(width: PaddrStyle.zoneInspectorWidth, alignment: .topLeading)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s4) {
-                previewSection(title: previewTitle)
-                settingsSection(settings)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        PaddrAdaptiveSplitView(
+            breakpoint: PaddrStyle.previewInspectorColumnsBreakpoint,
+            leadingWidth: PaddrStyle.Metrics.zoneMapWidth,
+            showsDivider: false,
+            leading: { previewSection(title: previewTitle) },
+            trailing: { settingsSection(settings) }
+        )
     }
 
     private func settingsSection<Settings: View>(
         @ViewBuilder _ settings: () -> Settings
     ) -> some View {
         VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
-            Text(settingsTitle)
-                .paddrTypography(.sectionLabel)
-                .frame(minHeight: PaddrStyle.Metrics.row)
-                .accessibilityAddTraits(.isHeader)
+            PaddrSectionHeader(settingsTitle)
             settings()
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -198,17 +170,16 @@ struct PadConfigurationView: View {
 
     private func previewSection(title: LocalizedStringResource) -> some View {
         VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
-            Text(title)
-                .paddrTypography(.sectionLabel)
-                .frame(minHeight: PaddrStyle.Metrics.row)
+            PaddrSectionHeader(title)
             PadModePreview(mode: configuration.mode, deadzone: configuration.mouseDeadzone)
-                .frame(maxWidth: PaddrStyle.Metrics.zoneMapWidth * 1.4)
                 .frame(
-                    minHeight: PaddrStyle.Metrics.zoneMapHeight,
-                    maxHeight: PaddrStyle.Metrics.zoneMapHeight
+                    width: PaddrStyle.Metrics.zoneMapWidth,
+                    height: PaddrStyle.Metrics.zoneMapHeight
                 )
+                .frame(maxWidth: .infinity, alignment: .center)
                 .help("Mirrors how the trackpad will respond in this mode.")
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var sensitivityRow: some View {
@@ -227,6 +198,7 @@ struct PadConfigurationView: View {
 
 private struct PadModePicker: NSViewRepresentable {
     @Binding var selection: PadMode
+    let accessibilityIdentifier: String
 
     private static let modes: [PadMode] = [.disabled, .mouse, .scroll, .dpad]
     private static let labels = [
@@ -267,6 +239,8 @@ private struct PadModePicker: NSViewRepresentable {
         )
         control.segmentDistribution = .fillEqually
         control.setAccessibilityLabel(String(localized: LocalizedStringResource("Behavior")))
+        control.setAccessibilityIdentifier(accessibilityIdentifier)
+        control.identifier = NSUserInterfaceItemIdentifier(accessibilityIdentifier)
         update(control, coordinator: context.coordinator)
         return control
     }

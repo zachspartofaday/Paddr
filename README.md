@@ -134,4 +134,6 @@ Issues and focused pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING
 
 ## License
 
-Paddr is available under the [MIT License](LICENSE).
+Paddr is available under the [MIT License](LICENSE). The bounded BottleRocket family-UI
+adaptation is documented in the [parity manifest](docs/ui/PADDR_FAMILY_UI_PARITY.md),
+with its required MIT attribution in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

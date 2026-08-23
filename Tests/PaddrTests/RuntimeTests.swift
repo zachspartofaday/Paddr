@@ -1058,10 +1058,92 @@ final class RuntimeTests: XCTestCase {
         ])
     }
 
+    func testDurationStopsAtExactMonotonicBoundaryAndReleasesHeldOutput() throws {
+        let clock = ManualUptimeClock()
+        let output = RecordingOutput()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .report(heldLeftReport(), at: 10),
+            .perform { clock.set(20) },
+            .report(neutralReport(), at: 20)
+        ])
+        var configuration = PaddrConfiguration.default
+        configuration.left.mode = .dpad
+        configuration.left.dpadKeys.up = "space"
+
+        let result = try run(
+            configuration: configuration,
+            duration: .nanoseconds(20),
+            hid: hid,
+            clock: clock,
+            output: output,
+            events: EventRecorder()
+        )
+
+        let space = try KeyCatalog.resolve("space")
+        XCTAssertEqual(result.termination, .stopped)
+        XCTAssertEqual(result.summary.reportCount, 2)
+        XCTAssertEqual(output.actions, [
+            .key(space, isPressed: true),
+            .key(space, isPressed: false)
+        ])
+    }
+
+    func testDurationAllowsWorkImmediatelyBeforeMonotonicBoundary() throws {
+        let clock = ManualUptimeClock()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .perform { clock.set(20) },
+            .report(neutralReport(), at: 20),
+            .stop
+        ])
+
+        let result = try run(
+            duration: .nanoseconds(21),
+            hid: hid,
+            clock: clock,
+            events: EventRecorder()
+        )
+
+        XCTAssertEqual(result.termination, .stopped)
+        XCTAssertEqual(result.summary.reportCount, 2)
+    }
+
+    func testDurationStopsAfterMonotonicBoundary() throws {
+        let clock = ManualUptimeClock()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0),
+            .perform { clock.set(21) },
+            .report(neutralReport(), at: 21)
+        ])
+
+        let result = try run(
+            duration: .nanoseconds(20),
+            hid: hid,
+            clock: clock,
+            events: EventRecorder()
+        )
+
+        XCTAssertEqual(result.termination, .stopped)
+        XCTAssertEqual(result.summary.reportCount, 1)
+    }
+
+    func testDurationValidationRejectsZeroAndNanosecondOverflow() throws {
+        XCTAssertThrowsError(try TrackpadRuntime.validatedDurationNanoseconds(.zero))
+        XCTAssertThrowsError(
+            try TrackpadRuntime.validatedDurationNanoseconds(.seconds(Int64.max))
+        )
+        XCTAssertEqual(
+            try TrackpadRuntime.validatedDurationNanoseconds(.nanoseconds(1)),
+            1
+        )
+    }
+
     private func run(
         configuration: PaddrConfiguration = .default,
         observeOnly: Bool = false,
         outputGate: OutputGate? = nil,
+        duration: Duration? = nil,
         hid: ScriptedHID,
         clock: ManualUptimeClock,
         output: any TrackpadOutputDispatching = RecordingOutput(),
@@ -1072,6 +1154,7 @@ final class RuntimeTests: XCTestCase {
             observeOnly: observeOnly,
             outputGate: outputGate,
             stopToken: TrackpadStopToken(),
+            duration: duration,
             dependencies: TrackpadRuntimeDependencies(
                 openHID: { hid },
                 makeOutput: { output },

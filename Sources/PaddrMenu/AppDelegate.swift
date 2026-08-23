@@ -3,6 +3,147 @@ import PaddrAppSupport
 import SwiftUI
 import PaddrCore
 
+enum PaddrMenuBarPalette {
+    static func color(for role: MenuBarTintRole) -> NSColor? {
+        switch role {
+        case .active:
+            active
+        case .warning:
+            warning
+        case .none:
+            nil
+        }
+    }
+
+    private static let active = NSColor(name: nil) { appearance in
+        isDark(appearance)
+            ? NSColor(srgbRed: 70.0 / 255.0, green: 180.0 / 255.0, blue: 135.0 / 255.0, alpha: 1)
+            : NSColor(srgbRed: 35.0 / 255.0, green: 125.0 / 255.0, blue: 87.0 / 255.0, alpha: 1)
+    }
+
+    private static let warning = NSColor(name: nil) { appearance in
+        isDark(appearance)
+            ? NSColor(srgbRed: 1, green: 179.0 / 255.0, blue: 64.0 / 255.0, alpha: 1)
+            : NSColor(srgbRed: 168.0 / 255.0, green: 90.0 / 255.0, blue: 0, alpha: 1)
+    }
+
+    private static func isDark(_ appearance: NSAppearance) -> Bool {
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    }
+}
+
+@MainActor
+enum PaddrFamilyWindowChrome {
+    static let configurationTitlePointSize: CGFloat = 16
+
+    static let styleMask: NSWindow.StyleMask = [
+        .titled,
+        .closable,
+        .miniaturizable,
+        .resizable,
+        .fullSizeContentView
+    ]
+
+    static func apply(to window: NSWindow) {
+        window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
+    }
+
+    /// Keeps the compact blended titlebar while giving the product name a deliberate,
+    /// non-interactive treatment instead of turning it into a toolbar control.
+    static func installConfigurationTitle(_ title: String, in window: NSWindow) {
+        let label = NSTextField(labelWithString: title)
+        label.font = .systemFont(ofSize: configurationTitlePointSize, weight: .semibold)
+        label.textColor = .labelColor
+        label.lineBreakMode = .byTruncatingTail
+        label.usesSingleLineMode = true
+        label.setAccessibilityIdentifier(PaddrAccessibility.identifier("window", "title"))
+        label.setAccessibilityLabel(title)
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        let horizontalInset: CGFloat = 10
+        let container = NSView(
+            frame: NSRect(
+                origin: .zero,
+                size: NSSize(
+                    width: ceil(label.intrinsicContentSize.width) + (2 * horizontalInset),
+                    height: 32
+                )
+            )
+        )
+        container.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: horizontalInset),
+            label.trailingAnchor.constraint(
+                lessThanOrEqualTo: container.trailingAnchor,
+                constant: -horizontalInset
+            ),
+            label.centerYAnchor.constraint(equalTo: container.centerYAnchor)
+        ])
+
+        let accessory = NSTitlebarAccessoryViewController()
+        accessory.layoutAttribute = .leading
+        accessory.view = container
+        window.addTitlebarAccessoryViewController(accessory)
+        window.titleVisibility = .hidden
+    }
+
+    static func setMinimumUsableLayoutSize(_ size: NSSize, for window: NSWindow) {
+        window.contentMinSize = contentSize(forUsableLayoutSize: size, in: window)
+    }
+
+    static func setUsableLayoutSize(_ size: NSSize, for window: NSWindow) {
+        for _ in 0..<3 {
+            window.contentView?.layoutSubtreeIfNeeded()
+            guard !window.contentLayoutRect.size.isApproximatelyEqual(to: size) else { return }
+            window.setContentSize(contentSize(forUsableLayoutSize: size, in: window))
+        }
+    }
+
+    /// Restores a physical frame written under a different toolbar style without silently
+    /// changing the usable layout size or the saved top edge.
+    @discardableResult
+    static func migrateAutosavedFrame(
+        usingName name: String,
+        from sourceStyle: NSWindow.ToolbarStyle,
+        to targetStyle: NSWindow.ToolbarStyle,
+        for window: NSWindow
+    ) -> Bool {
+        window.toolbarStyle = sourceStyle
+        guard window.setFrameUsingName(name) else {
+            window.toolbarStyle = targetStyle
+            return false
+        }
+
+        window.contentView?.layoutSubtreeIfNeeded()
+        let usableSize = window.contentLayoutRect.size
+        let topLeft = NSPoint(x: window.frame.minX, y: window.frame.maxY)
+        window.toolbarStyle = targetStyle
+        setUsableLayoutSize(usableSize, for: window)
+        window.setFrameTopLeftPoint(topLeft)
+        return true
+    }
+
+    private static func contentSize(
+        forUsableLayoutSize size: NSSize,
+        in window: NSWindow
+    ) -> NSSize {
+        window.contentView?.layoutSubtreeIfNeeded()
+        return WindowFrameGeometry.contentSize(
+            forLayoutSize: size,
+            currentContentRect: window.contentRect(forFrameRect: window.frame),
+            currentLayoutRect: window.contentLayoutRect
+        )
+    }
+}
+
+private extension NSSize {
+    func isApproximatelyEqual(to other: NSSize, tolerance: CGFloat = 0.5) -> Bool {
+        abs(width - other.width) <= tolerance
+            && abs(height - other.height) <= tolerance
+    }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     private let model = PaddrMenuModel()
@@ -68,6 +209,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     @objc private func showGuideFromHelp() {
         showGuideWindow(trigger: .help)
+    }
+
+    @objc private func openSourceNotices() {
+        guard let url = PaddrOpenSourceNotices.url else {
+            NSSound.beep()
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 
     @objc private func selectProfile(_ sender: NSMenuItem) {
@@ -215,6 +364,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         )
         guideItem.target = self
         helpMenu.addItem(guideItem)
+        let noticesItem = NSMenuItem(
+            title: String(localized: "Open Source Notices…"),
+            action: #selector(openSourceNotices),
+            keyEquivalent: ""
+        )
+        noticesItem.target = self
+        noticesItem.identifier = NSUserInterfaceItemIdentifier(
+            PaddrAccessibility.identifier("menu", "open-source-notices")
+        )
+        helpMenu.addItem(noticesItem)
 
         NSApplication.shared.mainMenu = mainMenu
         NSApplication.shared.servicesMenu = servicesMenu
@@ -224,6 +383,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     private func rebuildStatusMenu() {
         statusMenu.removeAllItems()
+
+        let presentation = MenuBarPresentation(
+            isEnabled: model.isEnabled,
+            isRunning: model.isRunning,
+            isReleasingOutput: model.isReleasingOutput,
+            controllerConnected: model.controllerConnected,
+            puckConnected: model.receiverDescription != nil,
+            profileName: model.activeProfile.name
+        )
+
+        addStatusSummary(
+            presentation.outputSummary,
+            identifier: "output-summary"
+        )
+        addStatusSummary(
+            presentation.controllerSummary,
+            identifier: "controller-summary"
+        )
+        addStatusSummary(
+            presentation.transportSummary,
+            identifier: "transport-summary"
+        )
+        addStatusSummary(
+            presentation.profileSummary,
+            identifier: "profile-summary"
+        )
+        statusMenu.addItem(.separator())
 
         let outputItem = NSMenuItem(
             title: String(localized: "Trackpad Output"),
@@ -237,6 +423,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             systemSymbolName: model.isEnabled ? "wave.3.right.circle.fill" : "pause.circle",
             accessibilityDescription: String(localized: "Trackpad Output")
         )
+        outputItem.identifier = NSUserInterfaceItemIdentifier(
+            PaddrAccessibility.identifier("menu", "output-toggle")
+        )
+        if let reason = model.readiness.outputDisabledReason {
+            outputItem.toolTip = String(localized: reason.message)
+        }
         statusMenu.addItem(outputItem)
         statusMenu.addItem(.separator())
 
@@ -307,6 +499,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         )
         statusMenu.addItem(guideItem)
 
+        let noticesItem = NSMenuItem(
+            title: String(localized: "Open Source Notices…"),
+            action: #selector(openSourceNotices),
+            keyEquivalent: ""
+        )
+        noticesItem.target = self
+        noticesItem.image = NSImage(
+            systemSymbolName: "doc.text",
+            accessibilityDescription: String(localized: "Open Source Notices")
+        )
+        noticesItem.identifier = NSUserInterfaceItemIdentifier(
+            PaddrAccessibility.identifier("menu", "open-source-notices")
+        )
+        statusMenu.addItem(noticesItem)
+
         statusMenu.addItem(.separator())
         let quitItem = NSMenuItem(
             title: String(localized: "Quit Paddr"),
@@ -318,17 +525,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     private func updateStatusItem() {
-        let symbol = model.isEnabled ? "hand.point.up.left.fill" : "hand.point.up.left"
-        let image = NSImage(
-            systemSymbolName: symbol,
-            accessibilityDescription: String(localized: "Paddr")
+        let presentation = MenuBarPresentation(
+            isEnabled: model.isEnabled,
+            isRunning: model.isRunning,
+            isReleasingOutput: model.isReleasingOutput,
+            controllerConnected: model.controllerConnected,
+            puckConnected: model.receiverDescription != nil,
+            profileName: model.activeProfile.name
         )
-        image?.isTemplate = !model.isEnabled
+        let image = NSImage(
+            systemSymbolName: presentation.symbolName,
+            accessibilityDescription: presentation.accessibilityLabel
+        )
+        image?.isTemplate = presentation.usesTemplateImage
         statusItem?.button?.image = image
-        statusItem?.button?.contentTintColor = model.isEnabled
-            ? (model.controllerConnected ? .systemBlue : .systemOrange)
-            : nil
+        statusItem?.button?.contentTintColor = PaddrMenuBarPalette.color(
+            for: presentation.tintRole
+        )
+        statusItem?.button?.toolTip = presentation.accessibilityLabel
+        statusItem?.button?.setAccessibilityLabel(presentation.accessibilityLabel)
+        statusItem?.button?.setAccessibilityIdentifier(
+            PaddrAccessibility.identifier("status-item")
+        )
         rebuildStatusMenu()
+    }
+
+    private func addStatusSummary(_ title: String, identifier: String) {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        item.identifier = NSUserInterfaceItemIdentifier(
+            PaddrAccessibility.identifier("menu", identifier)
+        )
+        statusMenu.addItem(item)
     }
 
     private func showConfigurationWindow() {
@@ -342,14 +570,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: PaddrStyle.Metrics.defaultWindowSize),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: PaddrFamilyWindowChrome.styleMask,
             backing: .buffered,
             defer: false
         )
         window.title = String(localized: "Paddr")
-        window.titleVisibility = .visible
+        window.appearance = NSAppearance(named: .darkAqua)
         window.toolbarStyle = .unifiedCompact
-        window.contentMinSize = PaddrStyle.Metrics.minimumWindowSize
         window.collectionBehavior.insert(.fullScreenNone)
         window.standardWindowButton(.zoomButton)?.isEnabled = false
         window.tabbingMode = .disallowed
@@ -358,11 +585,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         window.contentViewController = NSHostingController(
             rootView: ConfigurationView(model: model)
         )
-        let autosaveName = "PaddrConfigurationWindow.v4"
+        PaddrFamilyWindowChrome.apply(to: window)
+        PaddrFamilyWindowChrome.installConfigurationTitle(window.title, in: window)
+        let autosaveName = "PaddrConfigurationWindow.v7"
+        let expandedAutosaveName = "PaddrConfigurationWindow.v6"
+        let compactAutosaveName = "PaddrConfigurationWindow.v5"
+        let legacyAutosaveName = "PaddrConfigurationWindow.v4"
         if !window.setFrameUsingName(autosaveName) {
-            window.setContentSize(PaddrStyle.Metrics.defaultWindowSize)
-            window.center()
+            if PaddrFamilyWindowChrome.migrateAutosavedFrame(
+                usingName: expandedAutosaveName,
+                from: .unified,
+                to: .unifiedCompact,
+                for: window
+            ) {
+                // Migrated under the short-lived regular unified titlebar geometry.
+            } else if window.setFrameUsingName(compactAutosaveName) {
+                // This frame already uses compact titlebar geometry.
+            } else if window.setFrameUsingName(legacyAutosaveName) {
+                let legacyUsableSize = window.contentRect(forFrameRect: window.frame).size
+                PaddrFamilyWindowChrome.setUsableLayoutSize(legacyUsableSize, for: window)
+            } else {
+                PaddrFamilyWindowChrome.setUsableLayoutSize(
+                    PaddrStyle.Metrics.defaultWindowSize,
+                    for: window
+                )
+                window.center()
+            }
         }
+        PaddrFamilyWindowChrome.setMinimumUsableLayoutSize(
+            PaddrStyle.Metrics.minimumWindowSize,
+            for: window
+        )
         window.setFrameAutosaveName(autosaveName)
 
         let controller = NSWindowController(window: window)
@@ -395,12 +648,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: PaddrStyle.Metrics.guideWindowSize),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: PaddrFamilyWindowChrome.styleMask,
             backing: .buffered,
             defer: false
         )
         window.title = String(localized: "Paddr Guide")
-        window.contentMinSize = PaddrStyle.Metrics.minimumGuideWindowSize
+        window.appearance = NSAppearance(named: .darkAqua)
         window.collectionBehavior.insert(.fullScreenNone)
         window.standardWindowButton(.zoomButton)?.isEnabled = false
         window.tabbingMode = .disallowed
@@ -412,6 +665,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 onSkip: { [weak self] in self?.dismissGuide(as: .skipped) },
                 onComplete: { [weak self] in self?.dismissGuide(as: .completed) }
             )
+        )
+        PaddrFamilyWindowChrome.apply(to: window)
+        PaddrFamilyWindowChrome.setUsableLayoutSize(
+            PaddrStyle.Metrics.guideWindowSize,
+            for: window
+        )
+        PaddrFamilyWindowChrome.setMinimumUsableLayoutSize(
+            PaddrStyle.Metrics.minimumGuideWindowSize,
+            for: window
         )
         window.center()
 

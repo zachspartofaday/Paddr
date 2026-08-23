@@ -1,6 +1,75 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%arg: %arg": {
+      "comment": "Status-pill help text; the arguments are the status title and its current value."
+    },
+    "Allow Accessibility": {
+      "comment": "Readiness action requesting Accessibility permission."
+    },
+    "Allow Input Monitoring": {
+      "comment": "Readiness action requesting Input Monitoring permission."
+    },
+    "Controller: %arg": {
+      "comment": "Status-menu summary for controller connection."
+    },
+    "Connect the controller through the puck": {
+      "comment": "Readiness action shown when the puck is present but the controller is not."
+    },
+    "Connect the puck, then refresh": {
+      "comment": "Readiness action shown when the puck transport is unavailable."
+    },
+    "Enable or disable mapped trackpad output": {
+      "comment": "Help text for the Trackpad Output switch in the bottom status bar."
+    },
+    "Enable Trackpad Output": {
+      "comment": "Readiness action shown when setup is ready and output is off."
+    },
+    "Open Source Notices": {
+      "comment": "Accessibility description for the open-source notices command."
+    },
+    "Open Source Notices…": {
+      "comment": "Menu command that opens the licenses bundled with Paddr."
+    },
+    "Output: %arg": {
+      "comment": "Status-menu summary for mapped output."
+    },
+    "Paddr. %arg. %arg. %arg. %arg.": {
+      "comment": "Menu-bar status item summary in output, controller, transport, profile order."
+    },
+    "Preparing Paddr": {
+      "comment": "Readiness state shown while the model initializes."
+    },
+    "Profile: %arg": {
+      "comment": "Status-menu summary for the active profile; the argument is its user-visible name."
+    },
+    "Puck connected": {
+      "comment": "Status-menu value indicating that the puck transport is connected."
+    },
+    "Puck not found": {
+      "comment": "Status-menu value indicating that the puck transport is unavailable."
+    },
+    "Release both trackpads": {
+      "comment": "Readiness action shown while output waits for neutral trackpads."
+    },
+    "Trackpad Output is unavailable until mapped keys and mouse buttons finish releasing.": {
+      "comment": "Disabled reason for the output switch during release."
+    },
+    "Trackpad Output is unavailable while Paddr prepares the current profile.": {
+      "comment": "Disabled reason for the output switch during initialization."
+    },
+    "Trackpad Output is unavailable while the profile operation finishes.": {
+      "comment": "Disabled reason for the output switch during a profile operation."
+    },
+    "Transport: %arg": {
+      "comment": "Status-menu summary for the puck transport."
+    },
+    "Wait for mapped input to release": {
+      "comment": "Readiness action shown while mapped output is being released."
+    },
+    "Wait for the profile operation to finish": {
+      "comment": "Readiness action shown while a profile write temporarily disables output controls."
+    },
     "3 × 3 grid": {
       "localizations": {
         "en": {
@@ -393,6 +462,16 @@
         }
       }
     },
+    "Configuration saved": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configuration saved"
+          }
+        }
+      }
+    },
     "Configuration saved.": {
       "localizations": {
         "en": {
@@ -476,6 +555,8 @@
         }
       }
     },
+    "Create": {},
+    "Create Profile": {},
     "Create, duplicate, rename, or delete profiles": {},
     "Cut": {
       "localizations": {
@@ -1231,6 +1312,7 @@
         }
       }
     },
+    "Rename": {},
     "Rename Profile": {},
     "Request": {
       "comment": "Button that requests a macOS privacy permission.",

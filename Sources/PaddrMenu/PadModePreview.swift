@@ -11,6 +11,12 @@ struct PadModePreview: View {
     let deadzone: Double
 
     var body: some View {
+        PaddrAppearanceReader { appearance in
+            pad(appearance: appearance)
+        }
+    }
+
+    private func pad(appearance: PaddrAppearance) -> some View {
         Canvas { context, size in
             let bounds = CGRect(origin: .zero, size: size)
             let padShape = Path(
@@ -21,8 +27,8 @@ struct PadModePreview: View {
                 padShape,
                 with: .linearGradient(
                     Gradient(colors: [
-                        Color.primary.opacity(0.085),
-                        Color.primary.opacity(0.035)
+                        appearance.surface(elevated: true),
+                        appearance.surface(elevated: false)
                     ]),
                     startPoint: CGPoint(x: bounds.midX, y: bounds.minY),
                     endPoint: CGPoint(x: bounds.midX, y: bounds.maxY)
@@ -42,10 +48,15 @@ struct PadModePreview: View {
         .overlay {
             ZStack {
                 RoundedRectangle(cornerRadius: PaddrStyle.Radius.pad)
-                    .strokeBorder(.white.opacity(0.10), lineWidth: 1)
+                    .strokeBorder(appearance.surfaceStroke, lineWidth: appearance.strokeWidth)
                     .padding(1)
                 RoundedRectangle(cornerRadius: PaddrStyle.Radius.pad)
-                    .strokeBorder(.primary.opacity(0.30), lineWidth: 1)
+                    .strokeBorder(
+                        PaddrStyle.textPrimary.opacity(
+                            appearance.hasIncreasedContrast ? 0.56 : 0.30
+                        ),
+                        lineWidth: appearance.strokeWidth
+                    )
             }
         }
         .opacity(mode == .disabled ? 0.45 : 1)
@@ -65,10 +76,10 @@ struct PadModePreview: View {
             height: bounds.height * deadzone
         )
         let tapArea = Path(ellipseIn: tapRect)
-        context.fill(tapArea, with: .color(PaddrStyle.accent.opacity(0.18)))
+        context.fill(tapArea, with: .color(PaddrStyle.selectedTapFill))
         context.stroke(
             tapArea,
-            with: .color(PaddrStyle.accent.opacity(0.85)),
+            with: .color(PaddrStyle.selectionBoundary),
             style: StrokeStyle(lineWidth: 1, dash: [3, 3])
         )
         if min(tapRect.width, tapRect.height) >= 26 {
@@ -98,7 +109,7 @@ struct PadModePreview: View {
             }
             context.stroke(
                 path,
-                with: .color(.secondary.opacity(0.55)),
+                with: .color(PaddrStyle.textTertiary.opacity(0.72)),
                 style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
             )
         }
@@ -108,7 +119,7 @@ struct PadModePreview: View {
         context.draw(
             Text(Image(systemName: systemImage))
                 .font(.title3.weight(.medium))
-                .foregroundStyle(.secondary.opacity(0.75)),
+                .foregroundStyle(PaddrStyle.textSecondary.opacity(0.82)),
             at: CGPoint(x: bounds.midX, y: bounds.midY)
         )
     }
