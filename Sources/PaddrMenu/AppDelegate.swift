@@ -33,6 +33,53 @@ enum PaddrMenuBarPalette {
 }
 
 @MainActor
+enum PaddrFamilyWindowChrome {
+    static let styleMask: NSWindow.StyleMask = [
+        .titled,
+        .closable,
+        .miniaturizable,
+        .resizable,
+        .fullSizeContentView
+    ]
+
+    static func apply(to window: NSWindow) {
+        window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
+    }
+
+    static func setMinimumUsableLayoutSize(_ size: NSSize, for window: NSWindow) {
+        window.contentMinSize = contentSize(forUsableLayoutSize: size, in: window)
+    }
+
+    static func setUsableLayoutSize(_ size: NSSize, for window: NSWindow) {
+        for _ in 0..<3 {
+            window.contentView?.layoutSubtreeIfNeeded()
+            guard !window.contentLayoutRect.size.isApproximatelyEqual(to: size) else { return }
+            window.setContentSize(contentSize(forUsableLayoutSize: size, in: window))
+        }
+    }
+
+    private static func contentSize(
+        forUsableLayoutSize size: NSSize,
+        in window: NSWindow
+    ) -> NSSize {
+        window.contentView?.layoutSubtreeIfNeeded()
+        return WindowFrameGeometry.contentSize(
+            forLayoutSize: size,
+            currentContentRect: window.contentRect(forFrameRect: window.frame),
+            currentLayoutRect: window.contentLayoutRect
+        )
+    }
+}
+
+private extension NSSize {
+    func isApproximatelyEqual(to other: NSSize, tolerance: CGFloat = 0.5) -> Bool {
+        abs(width - other.width) <= tolerance
+            && abs(height - other.height) <= tolerance
+    }
+}
+
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     private let model = PaddrMenuModel()
     private let onboardingPreferences = OnboardingPreferences()
@@ -461,7 +508,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: PaddrStyle.Metrics.defaultWindowSize),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: PaddrFamilyWindowChrome.styleMask,
             backing: .buffered,
             defer: false
         )
@@ -469,7 +516,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         window.appearance = NSAppearance(named: .darkAqua)
         window.titleVisibility = .visible
         window.toolbarStyle = .unifiedCompact
-        window.contentMinSize = PaddrStyle.Metrics.minimumWindowSize
         window.collectionBehavior.insert(.fullScreenNone)
         window.standardWindowButton(.zoomButton)?.isEnabled = false
         window.tabbingMode = .disallowed
@@ -478,11 +524,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         window.contentViewController = NSHostingController(
             rootView: ConfigurationView(model: model)
         )
-        let autosaveName = "PaddrConfigurationWindow.v4"
+        PaddrFamilyWindowChrome.apply(to: window)
+        let autosaveName = "PaddrConfigurationWindow.v5"
+        let legacyAutosaveName = "PaddrConfigurationWindow.v4"
         if !window.setFrameUsingName(autosaveName) {
-            window.setContentSize(PaddrStyle.Metrics.defaultWindowSize)
-            window.center()
+            if window.setFrameUsingName(legacyAutosaveName) {
+                let legacyUsableSize = window.contentRect(forFrameRect: window.frame).size
+                PaddrFamilyWindowChrome.setUsableLayoutSize(legacyUsableSize, for: window)
+            } else {
+                PaddrFamilyWindowChrome.setUsableLayoutSize(
+                    PaddrStyle.Metrics.defaultWindowSize,
+                    for: window
+                )
+                window.center()
+            }
         }
+        PaddrFamilyWindowChrome.setMinimumUsableLayoutSize(
+            PaddrStyle.Metrics.minimumWindowSize,
+            for: window
+        )
         window.setFrameAutosaveName(autosaveName)
 
         let controller = NSWindowController(window: window)
@@ -515,13 +575,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: PaddrStyle.Metrics.guideWindowSize),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: PaddrFamilyWindowChrome.styleMask,
             backing: .buffered,
             defer: false
         )
         window.title = String(localized: "Paddr Guide")
         window.appearance = NSAppearance(named: .darkAqua)
-        window.contentMinSize = PaddrStyle.Metrics.minimumGuideWindowSize
         window.collectionBehavior.insert(.fullScreenNone)
         window.standardWindowButton(.zoomButton)?.isEnabled = false
         window.tabbingMode = .disallowed
@@ -533,6 +592,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 onSkip: { [weak self] in self?.dismissGuide(as: .skipped) },
                 onComplete: { [weak self] in self?.dismissGuide(as: .completed) }
             )
+        )
+        PaddrFamilyWindowChrome.apply(to: window)
+        PaddrFamilyWindowChrome.setUsableLayoutSize(
+            PaddrStyle.Metrics.guideWindowSize,
+            for: window
+        )
+        PaddrFamilyWindowChrome.setMinimumUsableLayoutSize(
+            PaddrStyle.Metrics.minimumGuideWindowSize,
+            for: window
         )
         window.center()
 

@@ -31,6 +31,132 @@ final class MenuViewPresentationTests: XCTestCase {
         )
     }
 
+    func testFamilyWindowChromeUsesFullSizeTransparentSeparatorlessTitlebar() {
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: PaddrStyle.Metrics.defaultWindowSize),
+            styleMask: PaddrFamilyWindowChrome.styleMask,
+            backing: .buffered,
+            defer: false
+        )
+
+        PaddrFamilyWindowChrome.apply(to: window)
+
+        XCTAssertTrue(window.styleMask.contains(.titled))
+        XCTAssertTrue(window.styleMask.contains(.closable))
+        XCTAssertTrue(window.styleMask.contains(.miniaturizable))
+        XCTAssertTrue(window.styleMask.contains(.resizable))
+        XCTAssertTrue(window.styleMask.contains(.fullSizeContentView))
+        XCTAssertTrue(window.titlebarAppearsTransparent)
+        XCTAssertEqual(window.titlebarSeparatorStyle, .none)
+    }
+
+    func testConfigurationWindowMetricsDescribeUsableLayoutWithUnifiedCompactToolbar() {
+        let window = makeWindow(hasToolbar: true, usesFullSizeContent: true)
+        let delegate = WindowDelegateProbe()
+        window.delegate = delegate
+
+        PaddrFamilyWindowChrome.apply(to: window)
+        PaddrFamilyWindowChrome.setUsableLayoutSize(
+            PaddrStyle.Metrics.defaultWindowSize,
+            for: window
+        )
+        PaddrFamilyWindowChrome.setMinimumUsableLayoutSize(
+            PaddrStyle.Metrics.minimumWindowSize,
+            for: window
+        )
+        window.contentView?.layoutSubtreeIfNeeded()
+
+        XCTAssertNotNil(window.toolbar)
+        XCTAssertEqual(window.titleVisibility, .visible)
+        XCTAssertEqual(window.toolbarStyle, .unifiedCompact)
+        assertSize(window.contentLayoutRect.size, equals: PaddrStyle.Metrics.defaultWindowSize)
+
+        window.setContentSize(window.contentMinSize)
+        window.contentView?.layoutSubtreeIfNeeded()
+
+        assertSize(window.contentLayoutRect.size, equals: PaddrStyle.Metrics.minimumWindowSize)
+        XCTAssertFalse(window.isReleasedWhenClosed)
+        XCTAssertTrue(window.delegate === delegate)
+    }
+
+    func testGuideWindowMetricsDescribeUsableLayoutWithoutToolbar() {
+        let window = makeWindow(hasToolbar: false, usesFullSizeContent: true)
+
+        PaddrFamilyWindowChrome.apply(to: window)
+        PaddrFamilyWindowChrome.setUsableLayoutSize(
+            PaddrStyle.Metrics.guideWindowSize,
+            for: window
+        )
+        PaddrFamilyWindowChrome.setMinimumUsableLayoutSize(
+            PaddrStyle.Metrics.minimumGuideWindowSize,
+            for: window
+        )
+        window.contentView?.layoutSubtreeIfNeeded()
+
+        XCTAssertNil(window.toolbar)
+        assertSize(window.contentLayoutRect.size, equals: PaddrStyle.Metrics.guideWindowSize)
+
+        window.setContentSize(window.contentMinSize)
+        window.contentView?.layoutSubtreeIfNeeded()
+
+        assertSize(window.contentLayoutRect.size, equals: PaddrStyle.Metrics.minimumGuideWindowSize)
+    }
+
+    func testLegacyAutosavedPhysicalFrameRetainsUsableSizeAndPositionWithFamilyChrome() {
+        let autosaveName = "PaddrConfigurationWindow.v4.Tests.\(UUID().uuidString)"
+        defer { NSWindow.removeFrame(usingName: autosaveName) }
+
+        let legacyWindow = makeWindow(hasToolbar: true, usesFullSizeContent: false)
+        legacyWindow.setContentSize(PaddrStyle.Metrics.defaultWindowSize)
+        legacyWindow.center()
+        legacyWindow.contentView?.layoutSubtreeIfNeeded()
+        let legacyLayoutSize = legacyWindow.contentLayoutRect.size
+        let legacyFrame = legacyWindow.frame
+        legacyWindow.saveFrame(usingName: autosaveName)
+
+        let familyWindow = makeWindow(hasToolbar: true, usesFullSizeContent: true)
+        PaddrFamilyWindowChrome.apply(to: familyWindow)
+
+        XCTAssertTrue(familyWindow.setFrameUsingName(autosaveName))
+        let restoredLegacyUsableSize = familyWindow.contentRect(
+            forFrameRect: familyWindow.frame
+        ).size
+        PaddrFamilyWindowChrome.setUsableLayoutSize(
+            restoredLegacyUsableSize,
+            for: familyWindow
+        )
+        PaddrFamilyWindowChrome.setMinimumUsableLayoutSize(
+            PaddrStyle.Metrics.minimumWindowSize,
+            for: familyWindow
+        )
+        familyWindow.contentView?.layoutSubtreeIfNeeded()
+
+        XCTAssertTrue(familyWindow.frame.isApproximatelyEqual(to: legacyFrame))
+        assertSize(familyWindow.contentLayoutRect.size, equals: legacyLayoutSize)
+        assertSize(familyWindow.contentLayoutRect.size, equals: PaddrStyle.Metrics.defaultWindowSize)
+    }
+
+    func testWindowContentFitterTreatsTargetHeightAsUsableLayoutHeight() {
+        let window = makeWindow(hasToolbar: true, usesFullSizeContent: true)
+        PaddrFamilyWindowChrome.apply(to: window)
+        PaddrFamilyWindowChrome.setUsableLayoutSize(
+            PaddrStyle.Metrics.defaultWindowSize,
+            for: window
+        )
+        window.center()
+        let originalTopEdge = window.frame.maxY
+        let coordinator = WindowContentFitter.Coordinator()
+        coordinator.targetHeight = 600
+        coordinator.reduceMotion = true
+        defer { coordinator.detach() }
+
+        coordinator.attach(to: window)
+        window.contentView?.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(window.contentLayoutRect.height, 600, accuracy: 0.5)
+        XCTAssertEqual(window.frame.maxY, originalTopEdge, accuracy: 0.5)
+    }
+
     func testAccessibilityOnboardingPageFitsCompactWindowWithoutScrolling() throws {
         var pager = OnboardingPager()
         pager.advance()
@@ -554,6 +680,65 @@ final class MenuViewPresentationTests: XCTestCase {
             hostingView.layoutSubtreeIfNeeded()
             await Task.yield()
         }
+    }
+
+    private func makeWindow(
+        hasToolbar: Bool,
+        usesFullSizeContent: Bool
+    ) -> NSWindow {
+        var styleMask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
+        if usesFullSizeContent { styleMask.insert(.fullSizeContentView) }
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: PaddrStyle.Metrics.defaultWindowSize),
+            styleMask: styleMask,
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Paddr"
+        window.titleVisibility = .visible
+        window.toolbarStyle = .unifiedCompact
+        window.collectionBehavior.insert(.fullScreenNone)
+        window.tabbingMode = .disallowed
+        window.isReleasedWhenClosed = false
+        if hasToolbar {
+            window.contentViewController = NSHostingController(rootView: WindowToolbarProbe())
+        } else {
+            window.contentViewController = NSHostingController(rootView: Color.clear)
+        }
+        return window
+    }
+
+    private func assertSize(
+        _ actual: NSSize,
+        equals expected: NSSize,
+        accuracy: CGFloat = 0.5,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(actual.width, expected.width, accuracy: accuracy, file: file, line: line)
+        XCTAssertEqual(actual.height, expected.height, accuracy: accuracy, file: file, line: line)
+    }
+}
+
+private final class WindowDelegateProbe: NSObject, NSWindowDelegate {}
+
+private struct WindowToolbarProbe: View {
+    var body: some View {
+        Color.clear
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Refresh", systemImage: "arrow.clockwise") {}
+                }
+            }
+    }
+}
+
+private extension CGRect {
+    func isApproximatelyEqual(to other: CGRect, accuracy: CGFloat = 0.5) -> Bool {
+        abs(minX - other.minX) <= accuracy
+            && abs(minY - other.minY) <= accuracy
+            && abs(width - other.width) <= accuracy
+            && abs(height - other.height) <= accuracy
     }
 }
 

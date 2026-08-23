@@ -3,26 +3,46 @@ import XCTest
 @testable import PaddrAppSupport
 
 final class WindowFrameGeometryTests: XCTestCase {
-    func testContentHeightSubtractsWindowChromeFromVisibleHeight() {
-        let result = WindowFrameGeometry.fittedContentHeight(
+    func testLayoutHeightSubtractsWindowChromeFromVisibleHeight() {
+        let result = WindowFrameGeometry.fittedLayoutHeight(
             requestedHeight: 900,
             currentFrame: CGRect(x: 0, y: 0, width: 1_120, height: 632),
-            currentContentRect: CGRect(x: 0, y: 0, width: 1_120, height: 600),
+            currentLayoutRect: CGRect(x: 0, y: 0, width: 1_120, height: 600),
             visibleFrame: CGRect(x: 0, y: 0, width: 1_440, height: 800)
         )
 
         XCTAssertEqual(result, 768)
     }
 
-    func testContentHeightPreservesARequestThatFits() {
-        let result = WindowFrameGeometry.fittedContentHeight(
+    func testLayoutHeightPreservesARequestThatFits() {
+        let result = WindowFrameGeometry.fittedLayoutHeight(
             requestedHeight: 640,
             currentFrame: CGRect(x: 0, y: 0, width: 1_120, height: 632),
-            currentContentRect: CGRect(x: 0, y: 0, width: 1_120, height: 600),
+            currentLayoutRect: CGRect(x: 0, y: 0, width: 1_120, height: 600),
             visibleFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
         )
 
         XCTAssertEqual(result, 640)
+    }
+
+    func testFullSizeContentAddsTheTitlebarAndToolbarInsetToRequestedLayoutSize() {
+        let result = WindowFrameGeometry.contentSize(
+            forLayoutSize: CGSize(width: 868, height: 680),
+            currentContentRect: CGRect(x: 0, y: 0, width: 868, height: 720),
+            currentLayoutRect: CGRect(x: 0, y: 0, width: 868, height: 680)
+        )
+
+        XCTAssertEqual(result, CGSize(width: 868, height: 720))
+    }
+
+    func testTraditionalContentWithoutAnInternalChromeInsetKeepsRequestedLayoutSize() {
+        let result = WindowFrameGeometry.contentSize(
+            forLayoutSize: CGSize(width: 720, height: 480),
+            currentContentRect: CGRect(x: 0, y: 0, width: 720, height: 480),
+            currentLayoutRect: CGRect(x: 0, y: 0, width: 720, height: 480)
+        )
+
+        XCTAssertEqual(result, CGSize(width: 720, height: 480))
     }
 
     func testFramePreservesItsTopEdgeWhenItFits() {

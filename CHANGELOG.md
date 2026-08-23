@@ -15,6 +15,11 @@ User-visible changes to Paddr are recorded here. Release entries describe confir
   native macOS controls, stable `paddr.*` accessibility identifiers, and visible MIT
   attribution for the bounded source adaptation ([#76](https://github.com/zachspartofaday/Paddr/issues/76),
   [#78](https://github.com/zachspartofaday/Paddr/issues/78)).
+- Blended the configuration and guide titlebars into the dark family background with
+  full-size content, transparent titlebar backgrounds, and no separator. Window titles,
+  configuration-toolbar behavior, saved window position, sizing, and lifecycle remain
+  unchanged; existing v4 window frames migrate once without losing their usable size
+  or top-edge position.
 - Kept the Left and Right trackpad editors visible together in equal columns at the
   default window size, stacking the same two mounted editor subtrees only at genuinely
   narrow widths. Both configurations remain independent and every mapping behavior is

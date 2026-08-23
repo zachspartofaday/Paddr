@@ -71,7 +71,7 @@ means the authority expressly withholds it from the MIT grant.
 | `SCMenuSelector` | **Adapted only as menu chrome:** native Paddr `Picker` and `Menu` controls use `paddrMenuSelector()`. |
 | `SCPanelSection` | **Adapted:** `PaddrSectionContainer` and `PaddrSettingsGroup`; Paddr does not adopt the reference persistence behavior. |
 | `SCContextHelpCard` | **Adapted as tone/surface presentation:** `PermissionTile`; permission state and actions remain Paddr-owned. |
-| `SCWindowConfigurator` | **Adapted only as the window geometry contract:** `PaddrStyle.Metrics`, `WindowContentFitter`, and existing `AppDelegate` window setup retain Paddr's lifecycle behavior. |
+| `SCWindowConfigurator` | **Adapted only as the window geometry contract:** `PaddrStyle.Metrics` and `WindowContentFitter`. Paddr's `AppDelegate` adds product-local full-size, transparent, separatorless family chrome while retaining visible titles, its unified-compact configuration toolbar, usable-layout sizing, activation, and window lifecycle behavior. Legacy v4 autosaved geometry migrates once to the full-size v5 contract without losing its usable size or top-edge position. |
 
 ### `SCMapprAccessibility.swift`
 

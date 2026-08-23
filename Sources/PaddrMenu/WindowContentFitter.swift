@@ -61,19 +61,29 @@ struct WindowContentFitter: NSViewRepresentable {
             else { return }
 
             let contentRect = window.contentRect(forFrameRect: window.frame)
-            let fittedHeight = WindowFrameGeometry.fittedContentHeight(
+            let layoutRect = window.contentLayoutRect
+            let fittedLayoutHeight = WindowFrameGeometry.fittedLayoutHeight(
                 requestedHeight: targetHeight,
                 currentFrame: window.frame,
-                currentContentRect: contentRect,
+                currentLayoutRect: layoutRect,
                 visibleFrame: visibleFrame
+            )
+
+            let fittedContentSize = WindowFrameGeometry.contentSize(
+                forLayoutSize: CGSize(
+                    width: layoutRect.width,
+                    height: fittedLayoutHeight
+                ),
+                currentContentRect: contentRect,
+                currentLayoutRect: layoutRect
             )
 
             let topEdge = window.frame.maxY
             let fittedContentRect = NSRect(
                 x: contentRect.minX,
                 y: contentRect.minY,
-                width: contentRect.width,
-                height: fittedHeight
+                width: fittedContentSize.width,
+                height: fittedContentSize.height
             )
             let proposedFrame = window.frameRect(forContentRect: fittedContentRect)
             let fittedFrame = WindowFrameGeometry.constrainedFrame(
