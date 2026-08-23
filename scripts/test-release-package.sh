@@ -171,7 +171,8 @@ ditto -c -k --keepParent --norsrc \
 unstripped_verification_output="$unstripped_dir/verification-output.txt"
 if "$script_dir/verify-release.sh" \
     "$app_path" "$unstripped_dir/Paddr.zip" "$unstripped_dir/Paddr.zip.sha256" \
-    "$expected_version" "$expected_build" >"$unstripped_verification_output" 2>&1; then
+    "$expected_version" "$expected_build" "$expected_revision" \
+    >"$unstripped_verification_output" 2>&1; then
     echo "Release verification accepted an unstripped app binary." >&2
     exit 1
 fi
