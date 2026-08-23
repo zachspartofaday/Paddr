@@ -12,7 +12,8 @@ let package = Package(
     ],
     targets: [
         .target(name: "PaddrCore"),
-        .executableTarget(name: "PaddrCLI", dependencies: ["PaddrCore"]),
+        .target(name: "PaddrCLIKit", dependencies: ["PaddrCore"]),
+        .executableTarget(name: "PaddrCLI", dependencies: ["PaddrCore", "PaddrCLIKit"]),
         .target(
             name: "PaddrAppSupport",
             dependencies: ["PaddrCore"]
@@ -22,6 +23,7 @@ let package = Package(
             dependencies: ["PaddrCore", "PaddrAppSupport"]
         ),
         .testTarget(name: "PaddrTests", dependencies: ["PaddrCore"]),
+        .testTarget(name: "PaddrCLITests", dependencies: ["PaddrCLIKit"]),
         .testTarget(
             name: "PaddrAppSupportTests",
             dependencies: ["PaddrAppSupport", "PaddrCore", "PaddrMenu"]
