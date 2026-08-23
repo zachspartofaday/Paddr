@@ -722,7 +722,7 @@ final class MenuViewPresentationTests: XCTestCase {
         .background { PanelBackgroundView() }
     }
 
-    func testPadCardHeaderDoesNotRepeatTheSelectedBehavior() async {
+    func testPadCardHeaderOmitsVisibleBehaviorHeadingAndSelectedSummary() async throws {
         let hostingView = NSHostingView(
             rootView: PadConfigurationView(
                 side: .right,
@@ -737,9 +737,146 @@ final class MenuViewPresentationTests: XCTestCase {
         await settle(hostingView)
 
         let renderedText = descendants(of: NSTextField.self, in: hostingView).map(\.stringValue)
+        let selector = try XCTUnwrap(
+            descendants(of: NSSegmentedControl.self, in: hostingView).first {
+                $0.identifier?.rawValue == PaddrAccessibility.identifier("pad-mode", "right")
+            }
+        )
+
+        XCTAssertFalse(
+            renderedText.contains("Behavior"),
+            "Behavior remains the control's accessibility label, not a redundant visible heading"
+        )
         XCTAssertFalse(
             renderedText.contains("Pointer"),
             "The Behavior selector already communicates the selected mode"
+        )
+        XCTAssertEqual(selector.accessibilityLabel(), "Behavior")
+    }
+
+    func testAdaptivePadHeaderMovesTheSameSelectorBelowTitleOnlyWhenNeeded() throws {
+        let layout = PaddrAdaptiveHeaderLayout(
+            spacing: PaddrStyle.Spacing.s2,
+            layoutDirection: .leftToRight
+        ) {
+            SettingsControlEdgeProbe(identifier: "header-title")
+                .frame(width: 120, height: 28)
+            SettingsControlEdgeProbe(identifier: "header-selector")
+                .frame(width: PaddrStyle.behaviorPickerWidth, height: 24)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        let hostingView = NSHostingView(rootView: layout)
+        let defaultCardContentWidth = PaddrStyle.padColumnWidth
+            - (2 * PaddrStyle.Inset.card)
+        hostingView.frame = NSRect(
+            origin: .zero,
+            size: NSSize(width: defaultCardContentWidth, height: 120)
+        )
+        hostingView.layoutSubtreeIfNeeded()
+
+        let inlineTitle = try XCTUnwrap(
+            descendants(of: NSView.self, in: hostingView).first {
+                $0.identifier?.rawValue == "header-title"
+            }
+        )
+        let inlineSelector = try XCTUnwrap(
+            descendants(of: NSView.self, in: hostingView).first {
+                $0.identifier?.rawValue == "header-selector"
+            }
+        )
+        let inlineTitleFrame = inlineTitle.convert(inlineTitle.bounds, to: hostingView)
+        let inlineSelectorFrame = inlineSelector.convert(inlineSelector.bounds, to: hostingView)
+
+        XCTAssertEqual(inlineTitleFrame.midY, inlineSelectorFrame.midY, accuracy: 0.5)
+        XCTAssertEqual(inlineTitleFrame.minX, hostingView.bounds.minX, accuracy: 0.5)
+        XCTAssertEqual(inlineSelectorFrame.maxX, hostingView.bounds.maxX, accuracy: 0.5)
+        XCTAssertGreaterThanOrEqual(
+            inlineSelectorFrame.minX - inlineTitleFrame.maxX,
+            PaddrStyle.Spacing.s2,
+            "The inline header should protect the declared title-to-control gap"
+        )
+
+        let constrainedWidth = PaddrStyle.minimumPadColumnWidth
+            - (2 * PaddrStyle.Inset.card)
+        hostingView.frame.size.width = constrainedWidth
+        hostingView.layoutSubtreeIfNeeded()
+
+        let stackedTitle = try XCTUnwrap(
+            descendants(of: NSView.self, in: hostingView).first {
+                $0.identifier?.rawValue == "header-title"
+            }
+        )
+        let stackedSelector = try XCTUnwrap(
+            descendants(of: NSView.self, in: hostingView).first {
+                $0.identifier?.rawValue == "header-selector"
+            }
+        )
+        let stackedTitleFrame = stackedTitle.convert(stackedTitle.bounds, to: hostingView)
+        let stackedSelectorFrame = stackedSelector.convert(stackedSelector.bounds, to: hostingView)
+
+        XCTAssertTrue(inlineTitle === stackedTitle)
+        XCTAssertTrue(inlineSelector === stackedSelector)
+        XCTAssertGreaterThanOrEqual(
+            abs(stackedSelectorFrame.midY - stackedTitleFrame.midY),
+            ((stackedSelectorFrame.height + stackedTitleFrame.height) / 2)
+                + PaddrStyle.Spacing.s2 - 0.5,
+            "The constrained header should stack without overlapping title and selector"
+        )
+        XCTAssertEqual(stackedSelectorFrame.minX, stackedTitleFrame.minX, accuracy: 0.5)
+        XCTAssertGreaterThanOrEqual(stackedSelectorFrame.minX, hostingView.bounds.minX - 0.5)
+        XCTAssertLessThanOrEqual(stackedSelectorFrame.maxX, hostingView.bounds.maxX + 0.5)
+
+        let rightToLeftLayout = PaddrAdaptiveHeaderLayout(
+            spacing: PaddrStyle.Spacing.s2,
+            layoutDirection: .rightToLeft
+        ) {
+            SettingsControlEdgeProbe(identifier: "rtl-header-title")
+                .frame(width: 120, height: 28)
+            SettingsControlEdgeProbe(identifier: "rtl-header-selector")
+                .frame(width: PaddrStyle.behaviorPickerWidth, height: 24)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        let rightToLeftHost = NSHostingView(rootView: rightToLeftLayout)
+        rightToLeftHost.frame = NSRect(
+            origin: .zero,
+            size: NSSize(width: defaultCardContentWidth, height: 120)
+        )
+        rightToLeftHost.layoutSubtreeIfNeeded()
+
+        let rightToLeftTitle = try XCTUnwrap(
+            descendants(of: NSView.self, in: rightToLeftHost).first {
+                $0.identifier?.rawValue == "rtl-header-title"
+            }
+        )
+        let rightToLeftSelector = try XCTUnwrap(
+            descendants(of: NSView.self, in: rightToLeftHost).first {
+                $0.identifier?.rawValue == "rtl-header-selector"
+            }
+        )
+        let rightToLeftTitleFrame = rightToLeftTitle.convert(
+            rightToLeftTitle.bounds,
+            to: rightToLeftHost
+        )
+        let rightToLeftSelectorFrame = rightToLeftSelector.convert(
+            rightToLeftSelector.bounds,
+            to: rightToLeftHost
+        )
+
+        XCTAssertEqual(rightToLeftTitleFrame.midY, rightToLeftSelectorFrame.midY, accuracy: 0.5)
+        XCTAssertEqual(rightToLeftTitleFrame.maxX, rightToLeftHost.bounds.maxX, accuracy: 0.5)
+        XCTAssertEqual(rightToLeftSelectorFrame.minX, rightToLeftHost.bounds.minX, accuracy: 0.5)
+        XCTAssertGreaterThanOrEqual(
+            rightToLeftTitleFrame.minX - rightToLeftSelectorFrame.maxX,
+            PaddrStyle.Spacing.s2,
+            "The RTL inline header should protect the declared title-to-control gap"
+        )
+        XCTAssertGreaterThanOrEqual(
+            rightToLeftSelectorFrame.minX,
+            rightToLeftHost.bounds.minX - 0.5
+        )
+        XCTAssertLessThanOrEqual(
+            rightToLeftTitleFrame.maxX,
+            rightToLeftHost.bounds.maxX + 0.5
         )
     }
 

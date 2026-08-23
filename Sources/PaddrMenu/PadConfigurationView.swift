@@ -4,6 +4,7 @@ import PaddrCore
 
 struct PadConfigurationView: View {
     @Environment(\.paddrFillsEqualHeightColumn) private var fillsEqualHeightColumn
+    @Environment(\.layoutDirection) private var layoutDirection
 
     let side: PadSide
     @Binding var configuration: PadConfiguration
@@ -37,15 +38,14 @@ struct PadConfigurationView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
-            Text(title)
-                .paddrTypography(.cardTitle)
-                .foregroundStyle(PaddrStyle.textPrimary)
+            PaddrAdaptiveHeaderLayout(
+                spacing: PaddrStyle.Spacing.s2,
+                layoutDirection: layoutDirection
+            ) {
+                Text(title)
+                    .paddrTypography(.cardTitle)
+                    .foregroundStyle(PaddrStyle.textPrimary)
 
-            HStack(spacing: PaddrStyle.Spacing.s2) {
-                Text("Behavior")
-                    .paddrTypography(.sectionLabel)
-                    .foregroundStyle(PaddrStyle.textSecondary)
-                Spacer()
                 PadModePicker(
                     selection: $configuration.mode,
                     accessibilityIdentifier: PaddrAccessibility.identifier(
@@ -53,7 +53,7 @@ struct PadConfigurationView: View {
                         side.rawValue
                     )
                 )
-                    .frame(width: PaddrStyle.behaviorPickerWidth)
+                .frame(width: PaddrStyle.behaviorPickerWidth)
             }
             .frame(maxWidth: .infinity, minHeight: PaddrStyle.Metrics.row)
 
