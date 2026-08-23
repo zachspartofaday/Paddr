@@ -33,7 +33,6 @@ struct TopControlsView: View {
         .padding(PaddrStyle.Spacing.s3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .paddrCard()
-        .paddrAccessibilityID("profile-console")
         .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in
             guard width > 0 else { return }
             availableWidth = width

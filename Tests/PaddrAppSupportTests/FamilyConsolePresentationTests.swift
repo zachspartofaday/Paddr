@@ -34,21 +34,6 @@ final class FamilyConsolePresentationTests: XCTestCase {
         XCTAssertEqual(PaddrAccessibility.identifier("", "Status Item"), "paddr.status-item")
     }
 
-    func testSelectorSummariesExposeBothIndependentPadModes() {
-        var configuration = PaddrConfiguration.default
-        configuration.left.mode = .dpad
-        configuration.left.zoneLayout = .gridNine
-        configuration.right.mode = .mouse
-
-        let presentation = PadSelectorPresentation(
-            left: configuration.left,
-            right: configuration.right
-        )
-
-        XCTAssertEqual(presentation.leftTitle, "Left · 3 × 3 grid")
-        XCTAssertEqual(presentation.rightTitle, "Right · Pointer")
-    }
-
     func testReadinessResolverUsesDeterministicGatePriority() {
         let cases: [(PaddrReadinessInput, PaddrReadinessNextAction)] = [
             (input(isInitialized: false), .waitForInitialization),

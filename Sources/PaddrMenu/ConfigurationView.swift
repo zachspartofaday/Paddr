@@ -14,7 +14,7 @@ struct ConfigurationView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s3) {
                         TopControlsView(model: model)
-                        FocusedPadConfigurationView(
+                        DualPadConfigurationView(
                             configuration: $model.configuration,
                             appearsEnabled: model.activeProfileControlsAppearEnabled,
                             isEditable: model.canEditActiveProfile
@@ -54,7 +54,6 @@ struct ConfigurationView: View {
         .controlSize(.large)
         .tint(PaddrStyle.controlTint)
         .preferredColorScheme(.dark)
-        .paddrAccessibilityID("configuration")
         .background {
             if configurationContentHeight > 0 {
                 WindowContentFitter(

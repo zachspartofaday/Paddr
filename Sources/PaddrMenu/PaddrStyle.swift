@@ -59,6 +59,9 @@ enum PaddrStyle {
 
         static let contentMaxWidth: CGFloat = 820
         static let outerSpacing: CGFloat = 24
+        /// Below this content width, two complete pad editors no longer have
+        /// enough room for their native mode controls and stack vertically.
+        static let padEditorColumnsBreakpoint: CGFloat = 760
         static let defaultWindowSize = NSSize(width: 868, height: 680)
         static let minimumWindowSize = NSSize(width: 680, height: 520)
         static let guideWindowSize = NSSize(width: 720, height: 480)
@@ -149,10 +152,9 @@ enum PaddrStyle {
     static let permissionFillOpacity = 0.07
     static let permissionStrokeOpacity = 0.75
 
-    static let padColumnWidth = Metrics.contentMaxWidth
-    static let padConfigurationCardHeight: CGFloat = 470
+    static let padColumnWidth = (Metrics.contentMaxWidth - Spacing.s3) / 2
     static let zoneInspectorWidth: CGFloat = 480
-    static let behaviorPickerWidth: CGFloat = 320
+    static let behaviorPickerWidth: CGFloat = 272
     static let sliderMinimumWidth: CGFloat = 160
 }
 

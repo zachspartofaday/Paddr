@@ -55,7 +55,7 @@ means the authority expressly withholds it from the MIT grant.
 | `SCControlRow` | **Adapted:** `PaddrSettingsRow`. |
 | `BindingPresetPicker` | **Adapted:** `OutputBindingPicker`; Paddr's binding vocabulary and data remain unchanged. |
 | `AccentOptionItem` | **Not adapted:** Paddr uses its existing pad/profile presentation values. |
-| `AccentOptionSelector` | **Adapted only as focused-selector presentation:** `PadSideSelectorView` uses a native macOS segmented `Picker`, not the custom reference button implementation. |
+| `AccentOptionSelector` | **Not adapted:** Paddr keeps both trackpad editors visible and has no side selector. |
 | `SCActionButtonSize` | **Adapted as local geometry/role policy:** `PaddrButtonRole` and `PaddrStyle.Metrics.controlHeight`; no size enum was copied. |
 | `SCActionButton` | **Adapted:** `PaddrActionButtonModifier` and `paddrActionButton(_:)`; native button behavior remains authoritative. |
 | `SCButtonGroup` | **Not adapted.** |
@@ -98,11 +98,13 @@ means the authority expressly withholds it from the MIT grant.
 | --- | --- |
 | `PadPreviewView` | **Adapted only as family presentation:** `PadModePreview`; Paddr's existing zone geometry and runtime hit testing remain authoritative. |
 | `InputLayerContextBanner` | **Not adapted.** |
-| `PadsPane` | **Adapted:** focused Left/Right workflow in `FocusedPadConfigurationView` and `PadSideSelectorView`. |
-| `PadConfigurationCards` | **Adapted:** `PadConfigurationView` and `PaddrAdaptiveSplitView`; Paddr supports only its existing Off, Pointer, Scroll, and Zones modes. |
+| `PadsPane` | **Not adapted:** the pinned authority uses a focused `selectedPadSide` workflow; Paddr deliberately keeps simultaneous Left/Right editors instead. |
+| `PadConfigurationCards` | **Adapted:** `DualPadConfigurationView`, `PadConfigurationView`, and `PaddrAdaptiveSplitView`; Paddr supports only its existing Off, Pointer, Scroll, and Zones modes. |
 
-The selected side defaults to Left per window, is not persisted, survives profile switches in
-that window, and mounts one detail subtree.
+Paddr's simultaneous dual-editor behavior is a deliberate product-specific divergence. Both
+editors are visible in equal-height columns at the default window size and stack at their natural,
+independent heights only below the narrow-width breakpoint. `AnyLayout` moves the same mounted
+editor subtrees during reflow.
 
 ### `SCMapprPanes.swift`
 
@@ -140,8 +142,8 @@ pair them accessibly and are not additional claims of BottleRocket token parity:
 ## Required Paddr behavior
 
 - Left and Right configurations remain independent and keep their existing encoded form.
-- The selected side is view-local state, defaults to Left, survives profile switches in
-  the same window, and is never written to `UserDefaults` or a profile.
+- Both Left and Right editors stay mounted and independently bound to their existing
+  configuration values. There is no selected-side state or persistence seam.
 - Responsive pad and zone layouts use `AnyLayout` to move one mounted child tree;
   no stateful editor or control closure is duplicated under `ViewThatFits`.
 - Every status uses text and an SF Symbol as well as color. Increased Contrast,

@@ -7,9 +7,6 @@
     "Allow Input Monitoring": {
       "comment": "Readiness action requesting Input Monitoring permission."
     },
-    "Choose the trackpad whose settings are shown below.": {
-      "comment": "Accessibility hint for the focused Left/Right trackpad selector."
-    },
     "Controller: %arg": {
       "comment": "Status-menu summary for controller connection."
     },
@@ -24,9 +21,6 @@
     },
     "Enable Trackpad Output": {
       "comment": "Readiness action shown when setup is ready and output is off."
-    },
-    "Left · %arg": {
-      "comment": "Left trackpad selector option followed by its current mode."
     },
     "Open Source Notices": {
       "comment": "Accessibility description for the open-source notices command."
@@ -52,17 +46,8 @@
     "Puck not found": {
       "comment": "Status-menu value indicating that the puck transport is unavailable."
     },
-    "Right · %arg": {
-      "comment": "Right trackpad selector option followed by its current mode."
-    },
     "Release both trackpads": {
       "comment": "Readiness action shown while output waits for neutral trackpads."
-    },
-    "Trackpad": {
-      "comment": "Section heading above the focused Left/Right trackpad selector."
-    },
-    "Trackpad side": {
-      "comment": "Accessibility label for the focused Left/Right trackpad selector."
     },
     "Trackpad Output is unavailable until mapped keys and mouse buttons finish releasing.": {
       "comment": "Disabled reason for the output switch during release."

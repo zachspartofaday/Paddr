@@ -3,6 +3,8 @@ import SwiftUI
 import PaddrCore
 
 struct PadConfigurationView: View {
+    @Environment(\.paddrFillsEqualHeightColumn) private var fillsEqualHeightColumn
+
     let side: PadSide
     @Binding var configuration: PadConfiguration
 
@@ -63,7 +65,13 @@ struct PadConfigurationView: View {
                     .paddrTypography(.sectionLabel)
                     .foregroundStyle(PaddrStyle.textSecondary)
                 Spacer()
-                PadModePicker(selection: $configuration.mode)
+                PadModePicker(
+                    selection: $configuration.mode,
+                    accessibilityIdentifier: PaddrAccessibility.identifier(
+                        "pad-mode",
+                        side.rawValue
+                    )
+                )
                     .frame(width: PaddrStyle.behaviorPickerWidth)
             }
             .frame(maxWidth: .infinity, minHeight: PaddrStyle.Metrics.row)
@@ -74,6 +82,10 @@ struct PadConfigurationView: View {
         }
         .padding(PaddrStyle.Spacing.s3)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(
+            maxHeight: fillsEqualHeightColumn ? .infinity : nil,
+            alignment: .topLeading
+        )
         .paddrCard()
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
@@ -176,10 +188,9 @@ struct PadConfigurationView: View {
                 .paddrTypography(.sectionLabel)
                 .frame(minHeight: PaddrStyle.Metrics.row)
             PadModePreview(mode: configuration.mode, deadzone: configuration.mouseDeadzone)
-                .frame(maxWidth: PaddrStyle.Metrics.zoneMapWidth * 1.4)
                 .frame(
-                    minHeight: PaddrStyle.Metrics.zoneMapHeight,
-                    maxHeight: PaddrStyle.Metrics.zoneMapHeight
+                    width: PaddrStyle.Metrics.zoneMapWidth,
+                    height: PaddrStyle.Metrics.zoneMapHeight
                 )
                 .help("Mirrors how the trackpad will respond in this mode.")
         }
@@ -201,6 +212,7 @@ struct PadConfigurationView: View {
 
 private struct PadModePicker: NSViewRepresentable {
     @Binding var selection: PadMode
+    let accessibilityIdentifier: String
 
     private static let modes: [PadMode] = [.disabled, .mouse, .scroll, .dpad]
     private static let labels = [
@@ -241,8 +253,8 @@ private struct PadModePicker: NSViewRepresentable {
         )
         control.segmentDistribution = .fillEqually
         control.setAccessibilityLabel(String(localized: LocalizedStringResource("Behavior")))
-        control.setAccessibilityIdentifier(PaddrAccessibility.identifier("pad-mode"))
-        control.identifier = NSUserInterfaceItemIdentifier(PaddrAccessibility.identifier("pad-mode"))
+        control.setAccessibilityIdentifier(accessibilityIdentifier)
+        control.identifier = NSUserInterfaceItemIdentifier(accessibilityIdentifier)
         update(control, coordinator: context.coordinator)
         return control
     }

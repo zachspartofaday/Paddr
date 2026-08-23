@@ -15,10 +15,10 @@ User-visible changes to Paddr are recorded here. Release entries describe confir
   native macOS controls, stable `paddr.*` accessibility identifiers, and visible MIT
   attribution for the bounded source adaptation ([#76](https://github.com/zachspartofaday/Paddr/issues/76),
   [#78](https://github.com/zachspartofaday/Paddr/issues/78)).
-- Replaced the two simultaneous full trackpad editors with one Left/Right selector and
-  one mounted detail editor. The window defaults to Left, retains that choice across
-  profile switches without persisting it, and leaves both existing configurations and
-  every mapping behavior unchanged ([#77](https://github.com/zachspartofaday/Paddr/issues/77)).
+- Kept the Left and Right trackpad editors visible together in equal columns at the
+  default window size, stacking the same two mounted editor subtrees only at genuinely
+  narrow widths. Both configurations remain independent and every mapping behavior is
+  unchanged ([#77](https://github.com/zachspartofaday/Paddr/issues/77)).
 - Added a pure readiness resolver with deterministic next-action guidance and output
   disabled reasons. The menu-bar item now announces output, controller, puck transport,
   and active-profile semantics.

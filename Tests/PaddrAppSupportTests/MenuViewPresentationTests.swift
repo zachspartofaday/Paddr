@@ -60,8 +60,8 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertLessThanOrEqual(documentView.fittingSize.height, scrollView.contentSize.height + 0.5)
     }
 
-    func testFocusedWorkflowMountsOneSelectorAndOnePadModeControl() {
-        let view = FocusedPadConfigurationView(
+    func testDualPadWorkflowMountsTwoPadModeControls() {
+        let view = DualPadConfigurationView(
             configuration: .constant(.default),
             appearsEnabled: true,
             isEditable: true
@@ -77,7 +77,7 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertEqual(
             descendants(of: NSSegmentedControl.self, in: hostingView).count,
             2,
-            "The focused workflow must mount one side selector and one pad-mode selector"
+            "Both pad-mode editors must remain mounted together"
         )
     }
 
@@ -90,12 +90,14 @@ final class MenuViewPresentationTests: XCTestCase {
 
         let hostingView = NSHostingView(rootView: ConfigurationView(model: model))
         hostingView.frame = NSRect(origin: .zero, size: PaddrStyle.Metrics.defaultWindowSize)
-        hostingView.layoutSubtreeIfNeeded()
+        await settle(hostingView)
 
         XCTAssertEqual(hostingView.bounds.size, PaddrStyle.Metrics.defaultWindowSize)
         XCTAssertGreaterThan(descendants(of: NSControl.self, in: hostingView).count, 2)
         for control in descendants(of: NSControl.self, in: hostingView) {
-            assertControlFits(control, in: hostingView)
+            let frame = control.convert(control.bounds, to: hostingView)
+            XCTAssertGreaterThanOrEqual(frame.minX, hostingView.bounds.minX - 0.5)
+            XCTAssertLessThanOrEqual(frame.maxX, hostingView.bounds.maxX + 0.5)
         }
 
         if let snapshotPath = ProcessInfo.processInfo.environment["PADDR_UI_SNAPSHOT_PATH"] {
@@ -135,7 +137,7 @@ final class MenuViewPresentationTests: XCTestCase {
         }
     }
 
-    func testSettingsRowControlsStayWithinTheSharedRowHeightInEveryPadMode() {
+    func testSettingsRowControlsStayWithinTheSharedRowHeightInEveryPadMode() async {
         for mode in PadMode.allCases {
             for layout in PadZoneLayout.allCases {
                 var configuration = PadConfiguration(mode: mode)
@@ -151,10 +153,10 @@ final class MenuViewPresentationTests: XCTestCase {
                     origin: .zero,
                     size: NSSize(
                         width: PaddrStyle.padColumnWidth,
-                        height: PaddrStyle.padConfigurationCardHeight
+                        height: PaddrStyle.Metrics.defaultWindowSize.height
                     )
                 )
-                hostingView.layoutSubtreeIfNeeded()
+                await settle(hostingView)
 
                 for control in descendants(of: NSControl.self, in: hostingView) {
                     XCTAssertLessThanOrEqual(
@@ -330,7 +332,7 @@ final class MenuViewPresentationTests: XCTestCase {
         .background { PanelBackgroundView() }
     }
 
-    func testPointerTrackingToggleReflectsDefaultsAndLegacyBindingAtRadiusZero() throws {
+    func testPointerTrackingToggleReflectsDefaultsAndLegacyBindingAtRadiusZero() async throws {
         let defaultView = PadConfigurationView(
             side: .right,
             configuration: .constant(PadConfiguration(mode: .mouse))
@@ -344,7 +346,7 @@ final class MenuViewPresentationTests: XCTestCase {
                 height: 640
             )
         )
-        defaultHostingView.layoutSubtreeIfNeeded()
+        await settle(defaultHostingView)
 
         let defaultToggle = try XCTUnwrap(
             firstDescendant(of: NSSwitch.self, in: defaultHostingView)
@@ -377,10 +379,10 @@ final class MenuViewPresentationTests: XCTestCase {
             origin: .zero,
             size: NSSize(
                 width: PaddrStyle.padColumnWidth,
-                height: PaddrStyle.padConfigurationCardHeight
+                height: PaddrStyle.Metrics.defaultWindowSize.height
             )
         )
-        legacyHostingView.layoutSubtreeIfNeeded()
+        await settle(legacyHostingView)
 
         let legacyToggle = try XCTUnwrap(
             firstDescendant(of: NSSwitch.self, in: legacyHostingView)
@@ -391,7 +393,7 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertEqual(accessibilityIntegerValue(of: legacyToggle), 0)
         XCTAssertTrue(legacyToggle.isEnabled)
         legacyToggle.performClick(nil)
-        legacyHostingView.layoutSubtreeIfNeeded()
+        await settle(legacyHostingView)
         XCTAssertEqual(legacy.centerTapTrackingMode, .decoupled)
         XCTAssertEqual(legacyToggle.state, .on)
         XCTAssertEqual(accessibilityIntegerValue(of: legacyToggle), 1)
@@ -547,6 +549,12 @@ final class MenuViewPresentationTests: XCTestCase {
         )
     }
 
+    private func settle(_ hostingView: NSView) async {
+        for _ in 0..<6 {
+            hostingView.layoutSubtreeIfNeeded()
+            await Task.yield()
+        }
+    }
 }
 
 private struct InertSession: TrackpadSessionControlling {

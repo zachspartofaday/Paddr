@@ -40,9 +40,8 @@ struct ButtonZoneConfigurationView: View {
                 .paddrTypography(.sectionLabel)
                 .frame(minHeight: PaddrStyle.Metrics.row)
             padMap.frame(
-                maxWidth: .infinity,
-                minHeight: PaddrStyle.Metrics.zoneMapHeight,
-                maxHeight: PaddrStyle.Metrics.zoneMapHeight
+                width: PaddrStyle.Metrics.zoneMapWidth,
+                height: PaddrStyle.Metrics.zoneMapHeight
             )
         }
     }

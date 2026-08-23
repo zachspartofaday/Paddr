@@ -91,7 +91,6 @@ struct ProfileControlsView: View {
             .paddrAccessibilityID("profile", "actions")
         }
         .disabled(!model.canManageProfiles)
-        .paddrAccessibilityID("profile", "controls")
         .alert("Discard unsaved changes?", isPresented: $showsDiscardConfirmation) {
             Button("Cancel", role: .cancel) {
                 if let id = confirmationSelectionID {

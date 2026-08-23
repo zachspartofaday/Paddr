@@ -37,7 +37,6 @@ struct OnboardingGuideView: View {
         .background { PanelBackgroundView() }
         .foregroundStyle(PaddrStyle.textPrimary)
         .preferredColorScheme(.dark)
-        .paddrAccessibilityID("guide")
     }
 
     private var header: some View {
@@ -97,7 +96,6 @@ struct OnboardingGuideView: View {
             pageIndicator
         }
         .padding(PaddrStyle.Spacing.s5)
-        .paddrAccessibilityID("guide", "page", String(pager.pageNumber))
     }
 
     private func guidePage(

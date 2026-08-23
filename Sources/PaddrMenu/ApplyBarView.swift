@@ -50,7 +50,6 @@ struct ApplyBarView: View {
                     .frame(height: appearance.strokeWidth)
             }
         }
-        .paddrAccessibilityID("status-strip")
         .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in
             guard width > 0 else { return }
             availableWidth = width
