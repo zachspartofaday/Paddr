@@ -6,6 +6,28 @@ public enum OutputSource: String, CaseIterable, Hashable, Sendable {
 public enum HeldOutput: Hashable, Sendable {
     case key(KeyBinding)
     case mouseButton(MouseButtonBinding)
+
+    public static func == (lhs: HeldOutput, rhs: HeldOutput) -> Bool {
+        switch (lhs, rhs) {
+        case let (.key(left), .key(right)):
+            left.keyCode == right.keyCode
+        case let (.mouseButton(left), .mouseButton(right)):
+            left == right
+        case (.key, .mouseButton), (.mouseButton, .key):
+            false
+        }
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        switch self {
+        case let .key(key):
+            hasher.combine(0)
+            hasher.combine(key.keyCode)
+        case let .mouseButton(button):
+            hasher.combine(1)
+            hasher.combine(button)
+        }
+    }
 }
 
 public struct OutputArbiter: Sendable {

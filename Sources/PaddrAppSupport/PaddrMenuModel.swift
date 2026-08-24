@@ -779,6 +779,7 @@ public final class PaddrMenuModel {
         lifecycleEpoch &+= 1
 
         let priorConfigurationTask = configurationTask
+        let priorInitializationTask = initializationTask
         let priorStatusRefreshTask = statusRefreshTask
         let priorLifecycleTask = lifecycleTask
         let priorReconnectTask = reconnectTask
@@ -801,12 +802,16 @@ public final class PaddrMenuModel {
 
         terminationTask = Task { [self] in
             let stopOutcome = await dependencies.session.stop()
+            await priorInitializationTask?.value
             await priorConfigurationTask?.value
             await priorStatusRefreshTask?.value
             await priorLifecycleTask?.value
             await priorReconnectTask?.value
             await priorPermissionTask?.value
-            completeTermination(stopOutcome: stopOutcome)
+            await completeTermination(
+                stopOutcome: stopOutcome,
+                reloadProfiles: priorConfigurationTask != nil
+            )
         }
         statusDidChange?()
         return true
@@ -1436,8 +1441,51 @@ public final class PaddrMenuModel {
         statusDidChange?()
     }
 
-    private func completeTermination(stopOutcome: TrackpadSessionStopOutcome) {
+    private func completeTermination(
+        stopOutcome: TrackpadSessionStopOutcome,
+        reloadProfiles: Bool
+    ) async {
         guard terminationState == .stopping else { return }
+        let completions = terminationCompletions
+        terminationCompletions.removeAll()
+        let shouldTerminate: Bool
+        switch stopOutcome {
+        case .clean:
+            clearTerminationTaskState()
+            terminationState = .finished
+            terminationReleasePending = false
+            shouldTerminate = true
+        case let .failed(diagnostic):
+            if reloadProfiles {
+                await reloadProfilesAfterCancelledTermination()
+            }
+            clearTerminationTaskState()
+            terminationState = .idle
+            terminationReleasePending = true
+            publishStatus(.failure(.output(diagnostic: diagnostic)))
+            shouldTerminate = false
+        }
+        for completion in completions { completion(shouldTerminate) }
+        statusDidChange?()
+    }
+
+    private func reloadProfilesAfterCancelledTermination() async {
+        do {
+            let loaded = try await dependencies.loadProfiles()
+            let document = loaded.document
+            let configuration = document.activeProfile?.configuration ?? .default
+            publishProfileDocument(document)
+            publishConfiguration(configuration)
+            savedConfiguration = configuration
+            storageWriteBlocked = false
+            needsInitialSave = loaded.diagnostic != nil
+        } catch {
+            storageWriteBlocked = true
+            needsInitialSave = true
+        }
+    }
+
+    private func clearTerminationTaskState() {
         initializationTask = nil
         configurationTask = nil
         profileOperationInProgress = false
@@ -1453,22 +1501,6 @@ public final class PaddrMenuModel {
         terminationTask = nil
         sessionTeardownCount = 0
         pendingReleaseRevision = nil
-        let completions = terminationCompletions
-        terminationCompletions.removeAll()
-        let shouldTerminate: Bool
-        switch stopOutcome {
-        case .clean:
-            terminationState = .finished
-            terminationReleasePending = false
-            shouldTerminate = true
-        case let .failed(diagnostic):
-            terminationState = .idle
-            terminationReleasePending = true
-            publishStatus(.failure(.output(diagnostic: diagnostic)))
-            shouldTerminate = false
-        }
-        for completion in completions { completion(shouldTerminate) }
-        statusDidChange?()
     }
 
     private func isCurrent(_ operation: UInt64) -> Bool {

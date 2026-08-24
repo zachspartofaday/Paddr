@@ -1719,6 +1719,7 @@ final class MenuModelTests: XCTestCase {
         state.receiver = "Fake"
         model.isEnabled = true
         await waitUntil(model: model) { model.isRunning }
+        model.configuration.left.sensitivity = 4
         await session.setStopOutcome(.failed("Injected persistent release failure."))
 
         var replies: [Bool] = []
@@ -1731,6 +1732,8 @@ final class MenuModelTests: XCTestCase {
             .failure(.output(diagnostic: "Injected persistent release failure."))
         )
         XCTAssertTrue(model.hasPendingLifecycleWork)
+        XCTAssertEqual(model.configuration.left.sensitivity, 4)
+        XCTAssertTrue(model.hasUnsavedChanges)
         let failedStopCount = await session.stopCount
         XCTAssertEqual(failedStopCount, 2)
 
@@ -2608,6 +2611,46 @@ final class MenuModelTests: XCTestCase {
         await Task.yield()
         XCTAssertEqual(model.profileSelectionPresentation, .active(first.id))
         XCTAssertEqual(model.activeProfileID, first.id)
+    }
+
+    func testCancelledTerminationReloadsProfileCommittedByInFlightSelection() async throws {
+        let state = readyState(receiver: nil)
+        let (document, _, second) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = BoundedTestGate()
+        state.saveGate = saveGate
+        let session = GatedSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertEqual(
+            model.requestProfileSelection(id: second.id, source: .menu),
+            .accepted
+        )
+        await waitUntil { state.saveCallCount == 1 }
+
+        let reloadGate = BoundedTestGate()
+        state.loadGate = reloadGate
+        await session.setStopOutcome(.failed("Injected persistent release failure."))
+        var terminationReply: Bool?
+        XCTAssertTrue(model.stopForTermination { terminationReply = $0 })
+
+        saveGate.signal()
+        await waitUntil { state.savedProfileDocument?.activeProfileID == second.id }
+        state.loadedProfileDocument = state.savedProfileDocument
+        reloadGate.signal()
+        await waitUntil(model: model) { terminationReply != nil }
+
+        XCTAssertEqual(terminationReply, false)
+        XCTAssertEqual(model.activeProfileID, second.id)
+        XCTAssertEqual(model.configuration, second.configuration)
+        XCTAssertEqual(model.savedConfiguration, second.configuration)
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertFalse(model.isRunning)
+        guard case .failure(.output) = model.status else {
+            return XCTFail("Expected the held-output failure to remain authoritative")
+        }
     }
 
     func testEnabledProfileSelectionRejectsOldSessionEventsAndReestablishesLivenessAuthority() async throws {

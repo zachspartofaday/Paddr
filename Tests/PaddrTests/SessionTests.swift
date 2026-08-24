@@ -338,6 +338,34 @@ final class SessionTests: XCTestCase {
         ])
     }
 
+    func testConcurrentStopsShareOneTeardownOutcomeBeforeRetrying() async throws {
+        let space = try KeyCatalog.resolve("space")
+        let output = CountedReleaseOutput(failingReleaseCalls: 2)
+        let runtime = RetainedLedgerRuntime(
+            output: output,
+            key: space,
+            waitsForCompletionRelease: true
+        )
+        let session = TrackpadSession(runtime: runtime.run)
+        _ = await session.start(configuration: configuration(sensitivity: 1))
+        await runtime.waitForStartCount(1)
+
+        let firstStop = Task { await session.stop() }
+        let secondStop = Task { await session.stop() }
+        await waitForEpoch(3, session: session)
+        runtime.releaseCompletion()
+
+        let firstOutcome = await firstStop.value
+        let secondOutcome = await secondStop.value
+        guard case .failed = firstOutcome, case .failed = secondOutcome else {
+            return XCTFail("Concurrent callers must observe the same failed teardown attempt")
+        }
+
+        let retryOutcome = await session.stop()
+        XCTAssertEqual(retryOutcome, .clean)
+        XCTAssertEqual(output.releaseCallCount, 3)
+    }
+
     private func configuration(sensitivity: Double) -> PaddrConfiguration {
         var configuration = PaddrConfiguration.default
         configuration.left.sensitivity = sensitivity
@@ -554,15 +582,21 @@ private final class GatedRuntime: Sendable {
 }
 
 private final class RetainedLedgerRuntime: Sendable {
-    private let output: ToggleReleaseOutput
+    private let output: any TrackpadOutputDispatching
     private let key: KeyBinding
+    private let completionGate: BoundedTestGate?
     private let starts: AsyncStream<Int>
     private let startContinuation: AsyncStream<Int>.Continuation
     private let count = Mutex(0)
 
-    init(output: ToggleReleaseOutput, key: KeyBinding) {
+    init(
+        output: any TrackpadOutputDispatching,
+        key: KeyBinding,
+        waitsForCompletionRelease: Bool = false
+    ) {
         self.output = output
         self.key = key
+        completionGate = waitsForCompletionRelease ? BoundedTestGate() : nil
         (starts, startContinuation) = AsyncStream<Int>.makeStream(
             bufferingPolicy: .bufferingNewest(4)
         )
@@ -587,10 +621,15 @@ private final class RetainedLedgerRuntime: Sendable {
         }
         startContinuation.yield(started)
         while stopToken.shouldContinue {}
+        completionGate?.wait()
         return TrackpadRunResult(
             summary: .init(reportCount: 0, actionCount: 1),
             termination: .stopped
         )
+    }
+
+    func releaseCompletion() {
+        completionGate?.signal()
     }
 
     func waitForStartCount(_ expectedCount: Int) async {
@@ -598,6 +637,39 @@ private final class RetainedLedgerRuntime: Sendable {
         var iterator = starts.makeAsyncIterator()
         while let count = await iterator.next() {
             if count >= expectedCount { return }
+        }
+    }
+}
+
+private final class CountedReleaseOutput: TrackpadOutputDispatching, Sendable {
+    private struct State: ~Copyable {
+        var remainingFailures: Int
+        var releaseCallCount = 0
+    }
+
+    private let state: Mutex<State>
+
+    init(failingReleaseCalls: Int) {
+        state = Mutex(State(remainingFailures: failingReleaseCalls))
+    }
+
+    var releaseCallCount: Int { state.withLock { $0.releaseCallCount } }
+
+    func dispatch(_ actions: [TrackpadOutputAction]) throws {
+        for action in actions {
+            try state.withLock { state in
+                switch action {
+                case let .key(_, isPressed) where !isPressed,
+                     let .mouseButton(_, isPressed) where !isPressed:
+                    state.releaseCallCount += 1
+                    if state.remainingFailures > 0 {
+                        state.remainingFailures -= 1
+                        throw PaddrError.output("Injected counted release failure.")
+                    }
+                case .key, .mouseButton, .mouseMove, .scroll:
+                    break
+                }
+            }
         }
     }
 }

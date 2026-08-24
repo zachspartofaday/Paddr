@@ -35,6 +35,22 @@ final class HeldOutputLedgerTests: XCTestCase {
         XCTAssertEqual(sink.committed, [])
     }
 
+    func testKeyAliasesShareOnePhysicalReleaseObligation() throws {
+        let sink = DeterministicOutput()
+        let ledger = HeldOutputLedger(output: sink)
+        let namedReturn = try KeyCatalog.resolve("return")
+        let codedReturn = try KeyCatalog.resolve("code:36")
+
+        try ledger.dispatch([
+            .key(namedReturn, isPressed: true),
+            .key(codedReturn, isPressed: true)
+        ])
+
+        XCTAssertEqual(ledger.pendingOutputs, [.key(namedReturn)])
+        try ledger.dispatch([.key(codedReturn, isPressed: false)])
+        XCTAssertEqual(ledger.pendingOutputs, [])
+    }
+
     func testFailedUpRemainsPendingUntilRetrySucceeds() throws {
         let sink = DeterministicOutput(failingCalls: [2])
         let ledger = HeldOutputLedger(output: sink)

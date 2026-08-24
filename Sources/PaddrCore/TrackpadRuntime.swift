@@ -482,12 +482,20 @@ public actor TrackpadSession: TrackpadSessionControlling {
         let id: UInt64
         let stopToken: TrackpadStopToken
         let task: Task<Void, Never>
+        var teardown: TeardownRecord?
+    }
+
+    private struct TeardownRecord: Sendable {
+        let id: UInt64
+        let task: Task<TrackpadSessionStopOutcome, Never>
+        var waiterCount: Int
     }
 
     private let runtime: Runtime
     private let eventGate = SessionEventGate()
     private var activeWorker: WorkerRecord?
     private var requestEpoch: UInt64 = 0
+    private var teardownEpoch: UInt64 = 0
 
     public init(runtime: @escaping Runtime = TrackpadSession.liveRuntime) {
         self.runtime = runtime
@@ -560,7 +568,12 @@ public actor TrackpadSession: TrackpadSessionControlling {
             }
             if !delivered { eventBuffer.finish() }
         }
-        activeWorker = WorkerRecord(id: request, stopToken: token, task: task)
+        activeWorker = WorkerRecord(
+            id: request,
+            stopToken: token,
+            task: task,
+            teardown: nil
+        )
         continuation.onTermination = { @Sendable [weak token] _ in token?.requestStop() }
         return stream
     }
@@ -575,16 +588,54 @@ public actor TrackpadSession: TrackpadSessionControlling {
     @discardableResult
     private func teardownActiveWorker() async -> TrackpadSessionStopOutcome {
         guard let worker = activeWorker else { return .clean }
+        if let teardown = worker.teardown {
+            activeWorker?.teardown?.waiterCount += 1
+            let outcome = await teardown.task.value
+            return finishTeardown(
+                of: worker,
+                teardownID: teardown.id,
+                with: outcome
+            )
+        }
         worker.stopToken.requestStop()
-        await worker.task.value
-        if let releaseAttempt = worker.stopToken.releasePendingOutputs(maxPasses: 2),
-           !releaseAttempt.isDrained {
-            return .failed("Could not release held outputs: \(releaseAttempt.diagnostic).")
+        teardownEpoch &+= 1
+        let teardownID = teardownEpoch
+        let teardownTask = Task.detached {
+            await worker.task.value
+            if let releaseAttempt = worker.stopToken.releasePendingOutputs(maxPasses: 2),
+               !releaseAttempt.isDrained {
+                return TrackpadSessionStopOutcome.failed(
+                    "Could not release held outputs: \(releaseAttempt.diagnostic)."
+                )
+            }
+            return TrackpadSessionStopOutcome.clean
         }
-        if activeWorker?.id == worker.id {
+        activeWorker?.teardown = TeardownRecord(
+            id: teardownID,
+            task: teardownTask,
+            waiterCount: 1
+        )
+        let outcome = await teardownTask.value
+        return finishTeardown(of: worker, teardownID: teardownID, with: outcome)
+    }
+
+    private func finishTeardown(
+        of worker: WorkerRecord,
+        teardownID: UInt64,
+        with outcome: TrackpadSessionStopOutcome
+    ) -> TrackpadSessionStopOutcome {
+        guard activeWorker?.id == worker.id,
+              activeWorker?.teardown?.id == teardownID else { return outcome }
+        switch outcome {
+        case .clean:
             activeWorker = nil
+        case .failed:
+            activeWorker?.teardown?.waiterCount -= 1
+            if activeWorker?.teardown?.waiterCount == 0 {
+                activeWorker?.teardown = nil
+            }
         }
-        return .clean
+        return outcome
     }
 
     private static func finishedEventStream() -> AsyncStream<TrackpadSessionEvent> {
