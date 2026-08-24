@@ -1353,6 +1353,44 @@ final class RuntimeTests: XCTestCase {
         }
     }
 
+    func testPublicStopTokenClearsAPriorStopRequestWhenAReuseBegins() throws {
+        let stopToken = TrackpadStopToken()
+        let firstClock = ManualUptimeClock()
+        let firstHID = ScriptedHID(clock: firstClock, steps: [
+            .perform { stopToken.requestStop() },
+            .report(neutralReport(), at: 10)
+        ])
+        let firstResult = try TrackpadRuntime.run(
+            configuration: .default,
+            observeOnly: false,
+            stopToken: stopToken,
+            dependencies: TrackpadRuntimeDependencies(
+                openHID: { firstHID },
+                makeOutput: { RecordingOutput() },
+                uptimeNanoseconds: { firstClock.now }
+            )
+        )
+        XCTAssertEqual(firstResult.summary.reportCount, 0)
+
+        let secondClock = ManualUptimeClock()
+        let secondHID = ScriptedHID(clock: secondClock, steps: [
+            .report(neutralReport(), at: 20),
+            .stop
+        ])
+        let secondResult = try TrackpadRuntime.run(
+            configuration: .default,
+            observeOnly: false,
+            stopToken: stopToken,
+            dependencies: TrackpadRuntimeDependencies(
+                openHID: { secondHID },
+                makeOutput: { RecordingOutput() },
+                uptimeNanoseconds: { secondClock.now }
+            )
+        )
+
+        XCTAssertEqual(secondResult.summary.reportCount, 1)
+    }
+
     func testPublicStopTokenReuseRejectsAnUnresolvedPriorLedgerWithoutOpeningHID() throws {
         let stopToken = TrackpadStopToken()
         let firstClock = ManualUptimeClock()

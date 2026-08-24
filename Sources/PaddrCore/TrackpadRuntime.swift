@@ -26,6 +26,7 @@ public final class TrackpadStopToken: Sendable {
                 throw PaddrError.output("The stop token is already attached to an active run.")
             }
             state.hasActiveRun = true
+            state.isStopped = false
             return state.outputLedger
         }
 
