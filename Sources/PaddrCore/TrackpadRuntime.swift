@@ -3,7 +3,9 @@ import Synchronization
 
 public final class TrackpadStopToken: Sendable {
     private struct State: ~Copyable {
-        var isStopped = false
+        var nextStopGeneration: UInt64 = 0
+        var pendingStopGeneration: UInt64?
+        var consumedStopGeneration: UInt64?
         var outputLedger: HeldOutputLedger?
         var hasActiveRun = false
     }
@@ -13,11 +15,20 @@ public final class TrackpadStopToken: Sendable {
     public init() {}
 
     public func requestStop() {
-        state.withLock { $0.isStopped = true }
+        state.withLock { state in
+            state.nextStopGeneration &+= 1
+            state.pendingStopGeneration = state.nextStopGeneration
+        }
     }
 
     public var shouldContinue: Bool {
-        state.withLock { !$0.isStopped }
+        state.withLock { state in
+            guard let pendingStopGeneration = state.pendingStopGeneration else { return true }
+            if state.hasActiveRun {
+                state.consumedStopGeneration = pendingStopGeneration
+            }
+            return false
+        }
     }
 
     func beginRun(retaining ledger: HeldOutputLedger) throws {
@@ -26,7 +37,7 @@ public final class TrackpadStopToken: Sendable {
                 throw PaddrError.output("The stop token is already attached to an active run.")
             }
             state.hasActiveRun = true
-            state.isStopped = false
+            state.consumedStopGeneration = nil
             return state.outputLedger
         }
 
@@ -48,7 +59,13 @@ public final class TrackpadStopToken: Sendable {
     }
 
     func finishRun() {
-        state.withLock { $0.hasActiveRun = false }
+        state.withLock { state in
+            if state.pendingStopGeneration == state.consumedStopGeneration {
+                state.pendingStopGeneration = nil
+            }
+            state.consumedStopGeneration = nil
+            state.hasActiveRun = false
+        }
     }
 
     var hasPendingOutputs: Bool {

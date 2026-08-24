@@ -1391,6 +1391,62 @@ final class RuntimeTests: XCTestCase {
         XCTAssertEqual(secondResult.summary.reportCount, 1)
     }
 
+    func testPublicStopTokenPreservesAStopQueuedBeforeItsFirstRun() throws {
+        let stopToken = TrackpadStopToken()
+        stopToken.requestStop()
+        let clock = ManualUptimeClock()
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 10)
+        ])
+
+        let result = try TrackpadRuntime.run(
+            configuration: .default,
+            observeOnly: false,
+            stopToken: stopToken,
+            dependencies: TrackpadRuntimeDependencies(
+                openHID: { hid },
+                makeOutput: { RecordingOutput() },
+                uptimeNanoseconds: { clock.now }
+            )
+        )
+
+        XCTAssertEqual(result.summary.reportCount, 0)
+    }
+
+    func testPublicStopTokenPreservesAStopQueuedBetweenRuns() throws {
+        let stopToken = TrackpadStopToken()
+        let firstClock = ManualUptimeClock()
+        let firstHID = ScriptedHID(clock: firstClock, steps: [.stop])
+        _ = try TrackpadRuntime.run(
+            configuration: .default,
+            observeOnly: false,
+            stopToken: stopToken,
+            dependencies: TrackpadRuntimeDependencies(
+                openHID: { firstHID },
+                makeOutput: { RecordingOutput() },
+                uptimeNanoseconds: { firstClock.now }
+            )
+        )
+
+        stopToken.requestStop()
+        let secondClock = ManualUptimeClock()
+        let secondHID = ScriptedHID(clock: secondClock, steps: [
+            .report(neutralReport(), at: 20)
+        ])
+        let secondResult = try TrackpadRuntime.run(
+            configuration: .default,
+            observeOnly: false,
+            stopToken: stopToken,
+            dependencies: TrackpadRuntimeDependencies(
+                openHID: { secondHID },
+                makeOutput: { RecordingOutput() },
+                uptimeNanoseconds: { secondClock.now }
+            )
+        )
+
+        XCTAssertEqual(secondResult.summary.reportCount, 0)
+    }
+
     func testPublicStopTokenReuseRejectsAnUnresolvedPriorLedgerWithoutOpeningHID() throws {
         let stopToken = TrackpadStopToken()
         let firstClock = ManualUptimeClock()
