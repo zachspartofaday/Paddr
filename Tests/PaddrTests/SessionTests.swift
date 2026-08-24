@@ -282,17 +282,18 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(outcome, .clean)
     }
 
-    func testStopReportsWorkerTeardownFailure() async {
-        let session = TrackpadSession { _, _, _, stopToken, _ in
-            while stopToken.shouldContinue {}
-            throw PaddrError.output("Could not release held outputs: injected.")
+    func testStopTreatsOutputErrorsWithoutPendingReleaseAsCleanTeardown() async {
+        let diagnostic = "Injected output failure without a held release obligation."
+        let session = TrackpadSession { _, _, _, _, _ in
+            throw PaddrError.output(diagnostic)
         }
-        _ = await session.start(configuration: configuration(sensitivity: 1))
+
+        let stream = await session.start(configuration: configuration(sensitivity: 1))
+        let deliveredEvents = await events(in: stream)
         let outcome = await session.stop()
-        guard case let .failed(diagnostic) = outcome else {
-            return XCTFail("Expected the teardown failure to propagate through stop()")
-        }
-        XCTAssertTrue(diagnostic.contains("Could not release held outputs"))
+
+        XCTAssertEqual(deliveredEvents, [.connecting, .failed(diagnostic)])
+        XCTAssertEqual(outcome, .clean)
     }
 
     func testPendingPhysicalReleaseBlocksReplacementUntilLaterRetryDrainsIt() async throws {

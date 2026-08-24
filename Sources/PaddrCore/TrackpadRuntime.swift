@@ -140,6 +140,7 @@ public enum TrackpadSessionEvent: Equatable, Sendable {
 
 public enum TrackpadSessionStopOutcome: Equatable, Sendable {
     case clean
+    /// A held key or mouse button still requires its matching physical release event.
     case failed(String)
 }
 
@@ -462,7 +463,7 @@ public actor TrackpadSession: TrackpadSessionControlling {
     private struct WorkerRecord: Sendable {
         let id: UInt64
         let stopToken: TrackpadStopToken
-        let task: Task<TrackpadSessionStopOutcome, Never>
+        let task: Task<Void, Never>
     }
 
     private let runtime: Runtime
@@ -507,7 +508,7 @@ public actor TrackpadSession: TrackpadSessionControlling {
         let runtime = self.runtime
         let eventGate = self.eventGate
 
-        let task = Task.detached(priority: .userInitiated) { () -> TrackpadSessionStopOutcome in
+        let task = Task.detached(priority: .userInitiated) {
             let outcome = Result {
                 try runtime(
                     configuration,
@@ -540,17 +541,6 @@ public actor TrackpadSession: TrackpadSessionControlling {
                 eventBuffer.finish()
             }
             if !delivered { eventBuffer.finish() }
-            switch outcome {
-            case .success:
-                return .clean
-            case let .failure(error as PaddrError):
-                if case .output = error {
-                    return .failed(error.description)
-                }
-                return .clean
-            case let .failure(error):
-                return .failed(String(describing: error))
-            }
         }
         activeWorker = WorkerRecord(id: request, stopToken: token, task: task)
         continuation.onTermination = { @Sendable [weak token] _ in token?.requestStop() }
@@ -568,8 +558,7 @@ public actor TrackpadSession: TrackpadSessionControlling {
     private func teardownActiveWorker() async -> TrackpadSessionStopOutcome {
         guard let worker = activeWorker else { return .clean }
         worker.stopToken.requestStop()
-        let runtimeOutcome = await worker.task.value
-        let hadPendingOutputs = worker.stopToken.hasPendingOutputs
+        await worker.task.value
         if let releaseAttempt = worker.stopToken.releasePendingOutputs(maxPasses: 2),
            !releaseAttempt.isDrained {
             return .failed("Could not release held outputs: \(releaseAttempt.diagnostic).")
@@ -577,7 +566,7 @@ public actor TrackpadSession: TrackpadSessionControlling {
         if activeWorker?.id == worker.id {
             activeWorker = nil
         }
-        return hadPendingOutputs ? .clean : runtimeOutcome
+        return .clean
     }
 
     private static func finishedEventStream() -> AsyncStream<TrackpadSessionEvent> {
