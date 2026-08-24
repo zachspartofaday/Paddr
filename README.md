@@ -7,7 +7,7 @@
 
 See [CHANGELOG.md](CHANGELOG.md) for release history and current compatibility notes.
 
-![Paddr configuration window showing the World of Warcraft profile, the left trackpad Zones in Four-way radial mode, the right trackpad set to Pointer, and status showing Puck Connected, Controller Not found, Output Idle, and Access Ready](docs/images/paddr-profile-overview.png)
+![Paddr configuration window showing the World of Warcraft profile with left Scroll and right Pointer trackpads, plus compact green Access, Puck, Controller, and Output indicators and a 97 percent Battery status](docs/images/paddr-profile-overview.png)
 
 ## What Paddr adds
 
@@ -21,7 +21,9 @@ Apple's HID service continues to provide native buttons, sticks, triggers, and c
 
 The interactive squircle map mirrors runtime hit-testing. Select a region on the map or with the **Selected area** pop-up, then assign its action. Radial, corner, and two-way layouts support an adjustable neutral region; the 3×3 layout dedicates the full pad to nine actions.
 
-Paddr does not send controller feature reports or alter lizard mode, firmware, IMU, haptics, rumble, or Apple's native gamepad mappings. The status bar reports the receiver and the controller separately: **Puck Connected** reflects passive receiver discovery alone, while **Controller Connected** reflects fresh reports from the controller. Both stay accurate while Trackpad Output is off — the toggle controls mapped mouse, scroll, and keyboard emission only, never controller observation. Disabling output releases held mapped keys and mouse buttons before **Output** reads **Idle**, and if controller reports stop, Paddr releases held mapped input and waits for neutral pad input before resuming after reconnect.
+Paddr does not send controller feature reports or alter lizard mode, firmware, IMU, haptics, rumble, or Apple's native gamepad mappings. The status bar reports access, receiver, controller, output, and battery in setup order. Ready states collapse to compact green icons, while battery percentage remains visible and shifts from green at 60% or higher, to amber at 20–59%, to red below 20%. **Puck** reflects passive receiver discovery alone, while **Controller** reflects fresh reports from the controller. Both stay accurate while Trackpad Output is off — the toggle controls mapped mouse, scroll, and keyboard emission only, never controller observation.
+
+Disabling output or losing the controller releases held mapped keys and mouse buttons before Paddr becomes idle. Release obligations remain tracked until the matching up events succeed, and reconnect waits for neutral pad input before safely resuming.
 
 ## Use the trackpads without Steam Input
 
@@ -35,7 +37,8 @@ Requirements:
 
 - macOS 27 Developer Beta 5 with `SteamControllerHIDServicePlugin.plugin` (confirmed); macOS 27 Public Beta 3 is likely compatible but remains unconfirmed;
 - Steam Controller 2 connected through the puck; and
-- Accessibility permission to read trackpad reports and emit mapped mouse and keyboard events.
+- Input Monitoring permission to receive puck reports; and
+- Accessibility permission to emit mapped mouse and keyboard events.
 
 Puck mode is the only confirmed connection. Bluetooth and direct USB remain unvalidated.
 
@@ -44,7 +47,8 @@ Puck mode is the only confirmed connection. Bluetooth and direct USB remain unva
 
 ![Paddr Guide welcome page, step 1 of 4, explaining trackpad mouse, scrolling, and keyboard mappings without Steam Input](docs/images/paddr-onboarding.png)
 
-3. Grant Accessibility when prompted.
+3. Grant Input Monitoring and Accessibility when prompted. Input Monitoring lets Paddr see the
+   puck reports; Accessibility lets it emit your mapped mouse and keyboard actions.
 
 ![Paddr Guide Accessibility page, step 3 of 4, showing Access needed with Request and Open Settings buttons](docs/images/paddr-permissions.png)
 

@@ -2,62 +2,52 @@
 
 User-visible changes to Paddr are recorded here. Release entries describe confirmed behavior at the time of each release; later entries may supersede earlier limitations.
 
-## 0.11.0 — In development
-
-- Local and release app bundles now record their exact Git source revision and tracked, staged,
-  or untracked checkout state (excluding designated root build artifacts).
-- Release packaging requires a checkout without tracked, staged, or untracked source changes at
-  an annotated version tag, and verifies that the tag, source plist, staged app, archive, version,
-  build, and source revision agree.
-
 ## Unreleased
 
-- Rebuilt the configuration, guide, status, permission, and menu surfaces as a compact
-  dark family console shared with Paddr's sister application, using Paddr-local tokens,
-  native macOS controls, stable `paddr.*` accessibility identifiers, and visible MIT
-  attribution for the bounded source adaptation ([#76](https://github.com/zachspartofaday/Paddr/issues/76),
+## 0.11.0 — 2026-08-24
+
+### New family interface
+
+- Rebuilt the configuration window, setup guide, status bar, permissions, and menu as a polished
+  dark console shared with Paddr's sister application. The blended macOS titlebar, consistent card
+  spacing, stronger type hierarchy, and native controls now read as one intentional system
+  ([#76](https://github.com/zachspartofaday/Paddr/issues/76),
   [#78](https://github.com/zachspartofaday/Paddr/issues/78)).
-- Blended the configuration and guide titlebars into the dark family background with
-  full-size content, transparent titlebar backgrounds, and no separator. The configuration
-  window keeps the compact titlebar height and presents its name as a plain 16-point semibold
-  leading label rather than a toolbar control, while retaining the native window title for system
-  identity. Minimum usable sizes, saved window position, and lifecycle remain unchanged; fresh
-  configuration windows now open at a 1280×700-point usable size, while existing v4, v5, and
-  short-lived regular-unified v6 frames migrate to v7 without losing their usable size or top-edge
-  position. Refresh remains the sole trailing titlebar action; the Trackpad Output switch now sits
-  at the trailing edge of the bottom status bar beside the persistent readiness feedback.
-- Kept the Left and Right trackpad editors visible together in equal columns at the
-  wider default window size, with each pad preview and settings inspector also visible in
-  columns and separated by whitespace instead of a rule. Pointer tracking, zone mode, and
-  selected-area rows now carry icons and consistent trailing alignment; region headings have
-  a deliberate native type ladder; every primary card and inset panel shares a 16-point content
-  margin and 16-point sibling rhythm; compact tiles share a 12-point horizontal inset; redundant
-  mode summaries have been removed from the pad-card headers; selected-zone outlines now retain a
-  uniform white stroke along both internal dividers and rounded exterior pad edges; and status
-  pills use uniform type, stronger side padding, and whole-pill wrapping at narrow widths and
-  Accessibility text sizes.
-  The status sequence is Access, Puck, Controller, Output, then Battery. Completed non-battery
-  steps collapse to compact green icon pills, while incomplete states retain their text. Battery
-  always retains its percentage and uses green at 60% or higher, amber from 20–59%, red below 20%,
-  and a neutral unavailable state.
-  The same mounted editor subtrees stack at genuinely narrow widths and Accessibility text sizes.
-  Both configurations remain independent and every mapping behavior is unchanged. Wider restored
-  windows use their available width, fixed trackpad maps are centered, and inset controls remain
-  inside their card boundaries; document overflow scrolls without taking over the saved window
-  height ([#77](https://github.com/zachspartofaday/Paddr/issues/77)).
-- Added a pure readiness resolver with deterministic next-action guidance and output
-  disabled reasons. The menu-bar item now announces output, controller, puck transport,
-  and active-profile semantics. While a profile operation temporarily disables output, the
-  guidance now asks the user to wait instead of advertising an unavailable enable action.
-- Kept **Open Source Notices…** available in both packaged applications and supported
-  `swift run Paddr` development launches. Packaged applications prefer the installed notice;
-  source-checkout launches fall back to canonical `THIRD_PARTY_NOTICES.md` only from a validated
-  checkout root.
-- Superseded the 0.9.11 **Center tap radius** known issue ([#50](https://github.com/zachspartofaday/Paddr/issues/50)): Pointer mode can now track across the full pad while the radius continues to define the tap area. Each pad has a **Track pointer inside tap radius** switch for choosing full-pad tracking or the former coupled tracking dead zone. Fresh profile stores and newly created configurations use full-pad tracking; existing canonical and raw configurations preserve coupled behavior until changed, including the built-in Default synthesized for an existing canonical document. Duplicating Default preserves that source document’s behavior.
-- Added the controller's passively reported battery percentage and charge state to a reserved **Battery** status pill and the native status menu, with stale battery state cleared whenever the active controller is lost or replaced ([#54](https://github.com/zachspartofaday/Paddr/issues/54)).
-- Fixed the controller staying **Not found** on some pucks even though macOS saw the controller ([#52](https://github.com/zachspartofaday/Paddr/issues/52)). Paddr now listens on all four controller slots the puck exposes (USB interfaces 2–5) instead of a single heuristically chosen interface, accepts the shorter controller-state report variants some firmware emits instead of requiring exactly 54-byte reports, and reacts to the puck's explicit wireless connect/disconnect events so controller status updates immediately.
-- The bottom-bar puck description now lists every opened puck interface and the observed report sizes, which makes future connectivity reports easier to diagnose.
-- Paddr now requests **Input Monitoring** at first launch and surfaces its state ahead of Accessibility in the permissions row, the onboarding guide, and PaddrCLI — it is the grant that makes the controller visible at all, so it leads every permission surface. Without that grant macOS can withhold puck reports, which also presents as **Controller · Not found**.
+- Kept both trackpad editors visible side by side at the default window size. Each card puts its
+  mode selector beside the trackpad title, keeps the pad preview and settings together, and adapts
+  cleanly to narrow windows and Accessibility text sizes
+  ([#77](https://github.com/zachspartofaday/Paddr/issues/77)).
+- Redesigned the bottom status bar around a clear setup sequence: Access, Puck, Controller, Output,
+  and Battery. Ready states collapse to compact green icons; battery percentage remains visible and
+  changes from green to amber to red as charge falls.
+
+### Trackpads and controller
+
+- Decoupled pointer tracking from the center tap radius. Pointer mode now tracks across the full pad
+  by default while taps remain confined to the chosen radius; **Track pointer inside tap radius**
+  restores the former dead-zone behavior when desired
+  ([#50](https://github.com/zachspartofaday/Paddr/issues/50)).
+- Added the controller's reported battery percentage and charging state to the configuration window
+  and status menu ([#54](https://github.com/zachspartofaday/Paddr/issues/54)).
+- Fixed controllers that remained **Not found** on some pucks by listening to all four exposed
+  controller slots, accepting the shorter reports used by some firmware, and responding immediately
+  to wireless connect and disconnect events
+  ([#52](https://github.com/zachspartofaday/Paddr/issues/52)).
+- Added **Input Monitoring** to first-run setup ahead of Accessibility. macOS can withhold puck
+  reports without it, which previously looked like a missing controller.
+
+### Safety and reliability
+
+- Hardened held key and mouse-button cleanup. Paddr now keeps release obligations until macOS
+  accepts the matching up events, retries cleanup after output is disabled or a controller is lost,
+  and prevents a replacement output session or app quit from abandoning unresolved input.
+- Added deterministic readiness guidance and clearer disabled reasons throughout the window and
+  menu, including a wait state while profile operations temporarily pause output.
+- Kept **Open Source Notices…** available in packaged and supported source-checkout launches, with
+  validation around the source fallback.
+- Release bundles now record their exact Git revision and source state. Packaging requires a clean
+  annotated version tag and verifies the tag, source plist, app, archive, version, build, and source
+  revision before publishing.
 
 ## 0.9.11 — 2026-08-14
 
