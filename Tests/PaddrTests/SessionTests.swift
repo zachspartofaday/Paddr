@@ -282,17 +282,88 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(outcome, .clean)
     }
 
-    func testStopReportsWorkerTeardownFailure() async {
-        let session = TrackpadSession { _, _, _, stopToken, _ in
-            while stopToken.shouldContinue {}
-            throw PaddrError.output("Could not release held outputs: injected.")
+    func testStopTreatsOutputErrorsWithoutPendingReleaseAsCleanTeardown() async {
+        let diagnostic = "Injected output failure without a held release obligation."
+        let session = TrackpadSession { _, _, _, _, _ in
+            throw PaddrError.output(diagnostic)
         }
-        _ = await session.start(configuration: configuration(sensitivity: 1))
+
+        let stream = await session.start(configuration: configuration(sensitivity: 1))
+        let deliveredEvents = await events(in: stream)
         let outcome = await session.stop()
-        guard case let .failed(diagnostic) = outcome else {
-            return XCTFail("Expected the teardown failure to propagate through stop()")
+
+        XCTAssertEqual(deliveredEvents, [.connecting, .failed(diagnostic)])
+        XCTAssertEqual(outcome, .clean)
+    }
+
+    func testPendingPhysicalReleaseBlocksReplacementUntilLaterRetryDrainsIt() async throws {
+        let space = try KeyCatalog.resolve("space")
+        let output = ToggleReleaseOutput()
+        let runtime = RetainedLedgerRuntime(output: output, key: space)
+        let session = TrackpadSession(runtime: runtime.run)
+
+        let firstStream = await session.start(configuration: configuration(sensitivity: 1))
+        await runtime.waitForStartCount(1)
+
+        let blockedStream = await session.start(configuration: configuration(sensitivity: 2))
+        let blockedEvents = await events(in: blockedStream)
+        XCTAssertEqual(blockedEvents.count, 1)
+        guard case let .failed(diagnostic) = blockedEvents.first else {
+            return XCTFail("Expected replacement to fail closed while a physical hold remains")
         }
-        XCTAssertTrue(diagnostic.contains("Could not release held outputs"))
+        XCTAssertTrue(diagnostic.contains("pending key space up"))
+        XCTAssertEqual(runtime.startCount, 1)
+        let firstEvents = await events(in: firstStream)
+        XCTAssertEqual(firstEvents, [.connecting])
+
+        let repeatedStop = await session.stop()
+        guard case .failed = repeatedStop else {
+            return XCTFail("Expected repeated stop to keep reporting the persistent release failure")
+        }
+
+        output.allowReleases()
+        let replacementStream = await session.start(configuration: configuration(sensitivity: 3))
+        await runtime.waitForStartCount(2)
+        XCTAssertEqual(runtime.startCount, 2)
+
+        let finalOutcome = await session.stop()
+        XCTAssertEqual(finalOutcome, .clean)
+        let replacementEvents = await events(in: replacementStream)
+        XCTAssertEqual(replacementEvents, [.connecting])
+        XCTAssertEqual(output.committed, [
+            .key(space, isPressed: true),
+            .key(space, isPressed: false),
+            .key(space, isPressed: true),
+            .key(space, isPressed: false)
+        ])
+    }
+
+    func testConcurrentStopsShareOneTeardownOutcomeBeforeRetrying() async throws {
+        let space = try KeyCatalog.resolve("space")
+        let output = CountedReleaseOutput(failingReleaseCalls: 2)
+        let runtime = RetainedLedgerRuntime(
+            output: output,
+            key: space,
+            waitsForCompletionRelease: true
+        )
+        let session = TrackpadSession(runtime: runtime.run)
+        _ = await session.start(configuration: configuration(sensitivity: 1))
+        await runtime.waitForStartCount(1)
+
+        let firstStop = Task { await session.stop() }
+        let secondStop = Task { await session.stop() }
+        await waitForEpoch(3, session: session)
+        runtime.releaseCompletion()
+
+        let firstOutcome = await firstStop.value
+        let secondOutcome = await secondStop.value
+        guard case .failed = firstOutcome, case .failed = secondOutcome else {
+            return XCTFail("Concurrent callers must observe the same failed teardown attempt")
+        }
+
+        let retryOutcome = await session.stop()
+        XCTAssertEqual(retryOutcome, .clean)
+        XCTAssertEqual(output.releaseCallCount, 3)
     }
 
     private func configuration(sensitivity: Double) -> PaddrConfiguration {
@@ -506,6 +577,129 @@ private final class GatedRuntime: Sendable {
         if startCount >= expectedCount { return }
         await starts.wait { events, _ in
             events.contains { $0 >= expectedCount }
+        }
+    }
+}
+
+private final class RetainedLedgerRuntime: Sendable {
+    private let output: any TrackpadOutputDispatching
+    private let key: KeyBinding
+    private let completionGate: BoundedTestGate?
+    private let starts: AsyncStream<Int>
+    private let startContinuation: AsyncStream<Int>.Continuation
+    private let count = Mutex(0)
+
+    init(
+        output: any TrackpadOutputDispatching,
+        key: KeyBinding,
+        waitsForCompletionRelease: Bool = false
+    ) {
+        self.output = output
+        self.key = key
+        completionGate = waitsForCompletionRelease ? BoundedTestGate() : nil
+        (starts, startContinuation) = AsyncStream<Int>.makeStream(
+            bufferingPolicy: .bufferingNewest(4)
+        )
+    }
+
+    var startCount: Int { count.withLock { $0 } }
+
+    func run(
+        configuration: PaddrConfiguration,
+        observeOnly: Bool,
+        outputGate: OutputGate?,
+        stopToken: TrackpadStopToken,
+        event: @escaping @Sendable (TrackpadSessionEvent) -> Void
+    ) throws -> TrackpadRunResult {
+        let ledger = HeldOutputLedger(output: output)
+        try stopToken.beginRun(retaining: ledger)
+        defer { stopToken.finishRun() }
+        try ledger.dispatch([.key(key, isPressed: true)])
+        let started = count.withLock { count in
+            count += 1
+            return count
+        }
+        startContinuation.yield(started)
+        while stopToken.shouldContinue {}
+        completionGate?.wait()
+        return TrackpadRunResult(
+            summary: .init(reportCount: 0, actionCount: 1),
+            termination: .stopped
+        )
+    }
+
+    func releaseCompletion() {
+        completionGate?.signal()
+    }
+
+    func waitForStartCount(_ expectedCount: Int) async {
+        if startCount >= expectedCount { return }
+        var iterator = starts.makeAsyncIterator()
+        while let count = await iterator.next() {
+            if count >= expectedCount { return }
+        }
+    }
+}
+
+private final class CountedReleaseOutput: TrackpadOutputDispatching, Sendable {
+    private struct State: ~Copyable {
+        var remainingFailures: Int
+        var releaseCallCount = 0
+    }
+
+    private let state: Mutex<State>
+
+    init(failingReleaseCalls: Int) {
+        state = Mutex(State(remainingFailures: failingReleaseCalls))
+    }
+
+    var releaseCallCount: Int { state.withLock { $0.releaseCallCount } }
+
+    func dispatch(_ actions: [TrackpadOutputAction]) throws {
+        for action in actions {
+            try state.withLock { state in
+                switch action {
+                case let .key(_, isPressed) where !isPressed,
+                     let .mouseButton(_, isPressed) where !isPressed:
+                    state.releaseCallCount += 1
+                    if state.remainingFailures > 0 {
+                        state.remainingFailures -= 1
+                        throw PaddrError.output("Injected counted release failure.")
+                    }
+                case .key, .mouseButton, .mouseMove, .scroll:
+                    break
+                }
+            }
+        }
+    }
+}
+
+private final class ToggleReleaseOutput: TrackpadOutputDispatching, Sendable {
+    private struct State: ~Copyable {
+        var releasesAllowed = false
+        var committed: [TrackpadOutputAction] = []
+    }
+
+    private let state = Mutex(State())
+    var committed: [TrackpadOutputAction] { state.withLock { $0.committed } }
+
+    func allowReleases() {
+        state.withLock { $0.releasesAllowed = true }
+    }
+
+    func dispatch(_ actions: [TrackpadOutputAction]) throws {
+        for action in actions {
+            try state.withLock { state in
+                switch action {
+                case let .key(_, isPressed), let .mouseButton(_, isPressed):
+                    if !isPressed, !state.releasesAllowed {
+                        throw PaddrError.output("Injected persistent release failure.")
+                    }
+                case .mouseMove, .scroll:
+                    break
+                }
+                state.committed.append(action)
+            }
         }
     }
 }

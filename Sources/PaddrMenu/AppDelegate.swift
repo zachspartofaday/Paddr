@@ -187,8 +187,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        let waitsForOutputRelease = model.stopForTermination {
-            sender.reply(toApplicationShouldTerminate: true)
+        let waitsForOutputRelease = model.stopForTermination { shouldTerminate in
+            sender.reply(toApplicationShouldTerminate: shouldTerminate)
         }
         return waitsForOutputRelease ? .terminateLater : .terminateNow
     }

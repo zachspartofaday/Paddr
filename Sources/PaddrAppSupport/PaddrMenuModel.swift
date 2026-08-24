@@ -53,7 +53,8 @@ public final class PaddrMenuModel {
     public var isEnabled = false {
         didSet {
             guard !isRejectingEnabledChange, isEnabled != oldValue else { return }
-            guard isInitialized,
+            guard terminationState == .idle,
+                  isInitialized,
                   isEnabled == false
                       || ((!profileDocumentSaveInProgress || replacesActiveConfiguration)
                           && !isReleasingOutput)
@@ -92,6 +93,7 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var lifecycleEpoch: UInt64 = 0
     @ObservationIgnored private var initializationTask: Task<Void, Never>?
     @ObservationIgnored private var configurationTask: Task<Void, Never>?
+    @ObservationIgnored private var configurationTaskOutcomes: [UInt64: ConfigurationTaskOutcome] = [:]
     @ObservationIgnored private var configurationEpoch: UInt64 = 0
     @ObservationIgnored private var draftRevision: UInt64 = 0
     @ObservationIgnored private var statusGeneration: UInt64 = 0
@@ -116,7 +118,8 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var permissionRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var terminationTask: Task<Void, Never>?
     @ObservationIgnored private var terminationState = TerminationState.idle
-    @ObservationIgnored private var terminationCompletions: [@MainActor () -> Void] = []
+    @ObservationIgnored private var terminationEpoch: UInt64 = 0
+    @ObservationIgnored private var terminationCompletions: [@MainActor (Bool) -> Void] = []
     @ObservationIgnored public var statusDidChange: (@MainActor () -> Void)?
 
     public var hasUnsavedChanges: Bool { needsInitialSave || configuration != savedConfiguration }
@@ -144,14 +147,18 @@ public final class PaddrMenuModel {
             isInitialized && activeProfileID != .default
         }
     }
-    public var canManageProfiles: Bool { isInitialized && !profileOperationInProgress }
+    public var canManageProfiles: Bool {
+        terminationState == .idle && isInitialized && !profileOperationInProgress
+    }
     public var canToggleOutput: Bool {
-        isInitialized
+        terminationState == .idle
+            && isInitialized
             && (!profileDocumentSaveInProgress || replacesActiveConfiguration || isEnabled)
             && (isEnabled || !isReleasingOutput)
     }
     public var canSaveAndApply: Bool {
-        isInitialized
+        terminationState == .idle
+            && isInitialized
             && !storageWriteBlocked
             && !profileDocumentSaveInProgress
             && !replacesActiveConfiguration
@@ -159,7 +166,8 @@ public final class PaddrMenuModel {
             && hasUnsavedChanges
     }
     public var canSelectProfileFromMenu: Bool {
-        isInitialized
+        terminationState == .idle
+            && isInitialized
             && !hasUnsavedChanges
             && configurationTask == nil
             && !profileDocumentSaveInProgress
@@ -209,6 +217,7 @@ public final class PaddrMenuModel {
     }
 
     public func refreshStatus() {
+        guard terminationState == .idle else { return }
         let initiatingStatusGeneration = currentStatusGeneration
         statusRefreshEpoch &+= 1
         let operation = statusRefreshEpoch
@@ -265,6 +274,7 @@ public final class PaddrMenuModel {
 
         configurationEpoch &+= 1
         let operation = configurationEpoch
+        configurationTaskOutcomes[operation] = .pending
         let priorTask = configurationTask
         profileOperationInProgress = true
         configurationTask = Task { [weak self] in
@@ -375,11 +385,18 @@ public final class PaddrMenuModel {
             var document = profileDocument
             try document.replaceConfiguration(for: activeProfileID, with: validated)
             try await dependencies.saveProfiles(document)
+            recordConfigurationCommit(
+                ConfigurationCommit(
+                    document: document,
+                    savedConfiguration: validated,
+                    publishDraftRevision: initiatingDraftRevision,
+                    replacesDraft: false,
+                    clearsInitialSave: true
+                ),
+                operation: operation
+            )
             guard terminationState == .idle else { return }
-            publishProfileDocument(document)
-            if draftRevision == initiatingDraftRevision { publishConfiguration(validated) }
-            savedConfiguration = validated
-            needsInitialSave = false
+            reconcileConfigurationCommit(operation: operation)
             let resultingStatusGeneration = withStatusPublicationGeneration(
                 initiatingStatusGeneration
             ) {
@@ -397,6 +414,7 @@ public final class PaddrMenuModel {
                 )
             }
         } catch {
+            recordConfigurationDidNotCommit(operation: operation)
             guard terminationState == .idle else { return }
             withStatusPublicationGeneration(initiatingStatusGeneration) {
                 publishStatus(.failure(.configurationSave(diagnostic: String(describing: error))))
@@ -417,7 +435,7 @@ public final class PaddrMenuModel {
         id: ConfigurationProfileID,
         source: ProfileSelectionSource
     ) -> ProfileSelectionRequestResult {
-        guard isInitialized else { return .operationInProgress }
+        guard terminationState == .idle, isInitialized else { return .operationInProgress }
         guard profileDocument.profile(id: id) != nil else { return .profileNotFound }
         guard !storageWriteBlocked else { return .storageUnavailable }
         guard configurationTask == nil,
@@ -437,7 +455,7 @@ public final class PaddrMenuModel {
         id: ConfigurationProfileID,
         discardChanges: Bool
     ) -> ProfileSelectionRequestResult {
-        guard isInitialized else { return .operationInProgress }
+        guard terminationState == .idle, isInitialized else { return .operationInProgress }
         guard discardChanges else { return .cancelled }
         guard profileDocument.profile(id: id) != nil else { return .profileNotFound }
         guard !storageWriteBlocked else { return .storageUnavailable }
@@ -636,6 +654,7 @@ public final class PaddrMenuModel {
 
         configurationEpoch &+= 1
         let operation = configurationEpoch
+        configurationTaskOutcomes[operation] = .pending
         profileOperationInProgress = true
         pendingProfileActivation = profileActivation
         profileDocumentSaveInProgress = true
@@ -670,6 +689,7 @@ public final class PaddrMenuModel {
             guard let self else { return }
             await initializationTask?.value
             guard configurationEpoch == operation, terminationState == .idle else {
+                recordConfigurationDidNotCommit(operation: operation)
                 clearConfigurationTask(operation: operation)
                 return
             }
@@ -679,6 +699,7 @@ public final class PaddrMenuModel {
                 sessionTeardownCount -= 1
                 guard configurationEpoch == operation,
                       terminationState == .idle else {
+                    recordConfigurationDidNotCommit(operation: operation)
                     clearConfigurationTask(operation: operation)
                     return
                 }
@@ -690,17 +711,22 @@ public final class PaddrMenuModel {
             }
             do {
                 try await dependencies.saveProfiles(document)
+                let selected = document.activeProfile?.configuration ?? .default
+                recordConfigurationCommit(
+                    ConfigurationCommit(
+                        document: document,
+                        savedConfiguration: replacingActiveConfiguration ? selected : nil,
+                        publishDraftRevision: nil,
+                        replacesDraft: replacingActiveConfiguration,
+                        clearsInitialSave: replacingActiveConfiguration || clearsInitialSave
+                    ),
+                    operation: operation
+                )
                 guard configurationEpoch == operation, terminationState == .idle else {
                     clearConfigurationTask(operation: operation)
                     return
                 }
-                publishProfileDocument(document)
-                if replacingActiveConfiguration {
-                    let selected = document.activeProfile?.configuration ?? .default
-                    publishConfiguration(selected)
-                    savedConfiguration = selected
-                }
-                if replacingActiveConfiguration || clearsInitialSave { needsInitialSave = false }
+                reconcileConfigurationCommit(operation: operation)
                 if shouldRestart {
                     withStatusPublicationGeneration(operationStatusGeneration) {
                         publishStatus(.configurationSaved)
@@ -721,6 +747,7 @@ public final class PaddrMenuModel {
                     )
                 }
             } catch {
+                recordConfigurationDidNotCommit(operation: operation)
                 clearConfigurationTask(operation: operation)
                 if replacingActiveConfiguration, isEnabled {
                     isEnabled = false
@@ -755,14 +782,14 @@ public final class PaddrMenuModel {
         statusDidChange?()
     }
 
-    public func stopForTermination(completion: @escaping @MainActor () -> Void) -> Bool {
+    public func stopForTermination(completion: @escaping @MainActor (Bool) -> Void) -> Bool {
         switch terminationState {
         case .stopping:
             terminationCompletions.append(completion)
             return true
         case .finished:
             return false
-        case .idle:
+        case .idle, .releasePending:
             break
         }
 
@@ -776,8 +803,14 @@ public final class PaddrMenuModel {
         terminationCompletions = [completion]
         publishStatus(.releasingOutputs)
         lifecycleEpoch &+= 1
+        terminationEpoch &+= 1
+        let terminationOperation = terminationEpoch
 
         let priorConfigurationTask = configurationTask
+        let priorConfigurationOperation = priorConfigurationTask == nil
+            ? nil
+            : configurationEpoch
+        let priorInitializationTask = initializationTask
         let priorStatusRefreshTask = statusRefreshTask
         let priorLifecycleTask = lifecycleTask
         let priorReconnectTask = reconnectTask
@@ -787,25 +820,30 @@ public final class PaddrMenuModel {
         priorReconnectTask?.cancel()
         priorPermissionTask?.cancel()
 
+        let releaseRevision = outputGate.setEnabled(false)
+        isRejectingEnabledChange = true
         isEnabled = false
+        isRejectingEnabledChange = false
         activationCommitPending = false
-        statusRefreshTask = nil
-        reconnectTask = nil
-        reconnectStatusGeneration = nil
-        permissionRefreshTask = nil
+        isReleasingOutput = true
+        pendingReleaseRevision = releaseRevision
         sessionID = nil
         clearControllerPresence()
         isRunning = false
-        resolvePendingRelease()
 
         terminationTask = Task { [self] in
-            await dependencies.session.stop()
+            let stopOutcome = await dependencies.session.stop()
+            await priorInitializationTask?.value
             await priorConfigurationTask?.value
             await priorStatusRefreshTask?.value
             await priorLifecycleTask?.value
             await priorReconnectTask?.value
             await priorPermissionTask?.value
-            completeTermination()
+            completeTermination(
+                stopOutcome: stopOutcome,
+                configurationOperation: priorConfigurationOperation,
+                terminationOperation: terminationOperation
+            )
         }
         statusDidChange?()
         return true
@@ -1417,10 +1455,14 @@ public final class PaddrMenuModel {
 
     var hasPendingLifecycleWork: Bool {
         isEnabled || sessionID != nil || isRunning || configurationTask != nil
-            || lifecycleTask != nil || reconnectTask != nil
+            || lifecycleTask != nil || reconnectTask != nil || terminationTask != nil
+            || terminationState == .stopping || terminationState == .releasePending
     }
 
     private func clearConfigurationTask(operation: UInt64) {
+        if terminationState == .idle {
+            configurationTaskOutcomes[operation] = nil
+        }
         guard configurationEpoch == operation else { return }
         configurationTask = nil
         profileOperationInProgress = false
@@ -1435,9 +1477,38 @@ public final class PaddrMenuModel {
         statusDidChange?()
     }
 
-    private func completeTermination() {
-        guard terminationState == .stopping else { return }
-        terminationState = .finished
+    private func completeTermination(
+        stopOutcome: TrackpadSessionStopOutcome,
+        configurationOperation: UInt64?,
+        terminationOperation: UInt64
+    ) {
+        guard terminationState == .stopping,
+              terminationEpoch == terminationOperation else { return }
+        let shouldTerminate: Bool
+        switch stopOutcome {
+        case .clean:
+            clearTerminationTaskState()
+            terminationState = .finished
+            shouldTerminate = true
+        case let .failed(diagnostic):
+            if let configurationOperation {
+                reconcileConfigurationCommits(through: configurationOperation)
+            }
+            clearTerminationTaskState()
+            terminationState = .releasePending
+            publishStatus(.failure(.output(diagnostic: diagnostic)))
+            shouldTerminate = false
+        }
+        let completions = terminationCompletions
+        terminationCompletions.removeAll()
+        for completion in completions { completion(shouldTerminate) }
+        statusDidChange?()
+        if terminationEpoch == terminationOperation {
+            terminationTask = nil
+        }
+    }
+
+    private func clearTerminationTaskState() {
         initializationTask = nil
         configurationTask = nil
         profileOperationInProgress = false
@@ -1450,14 +1521,52 @@ public final class PaddrMenuModel {
         reconnectTask = nil
         reconnectStatusGeneration = nil
         permissionRefreshTask = nil
-        terminationTask = nil
+        configurationTaskOutcomes.removeAll()
         sessionTeardownCount = 0
         pendingReleaseRevision = nil
-        let completions = terminationCompletions
-        terminationCompletions.removeAll()
-        for completion in completions { completion() }
-        statusDidChange?()
     }
+
+    private func recordConfigurationCommit(
+        _ commit: ConfigurationCommit,
+        operation: UInt64
+    ) {
+        guard configurationTaskOutcomes[operation] != nil else { return }
+        configurationTaskOutcomes[operation] = .committed(commit)
+    }
+
+    private func recordConfigurationDidNotCommit(operation: UInt64) {
+        guard configurationTaskOutcomes[operation] != nil else { return }
+        configurationTaskOutcomes[operation] = .notCommitted
+    }
+
+    private func reconcileConfigurationCommit(operation: UInt64) {
+        guard case let .committed(commit) = configurationTaskOutcomes[operation] else { return }
+        publishProfileDocument(commit.document)
+        if let committedConfiguration = commit.savedConfiguration {
+            savedConfiguration = committedConfiguration
+            if commit.replacesDraft || commit.publishDraftRevision == draftRevision {
+                publishConfiguration(committedConfiguration)
+            }
+        }
+        if commit.clearsInitialSave {
+            needsInitialSave = false
+        }
+        configurationTaskOutcomes[operation] = nil
+    }
+
+    private func reconcileConfigurationCommits(through operation: UInt64) {
+        for recordedOperation in configurationTaskOutcomes.keys
+            .filter({ $0 <= operation })
+            .sorted() {
+            reconcileConfigurationCommit(operation: recordedOperation)
+        }
+    }
+
+    #if DEBUG
+    var outputGateSnapshotForTesting: OutputGateSnapshot {
+        outputGate.snapshot
+    }
+    #endif
 
     private func isCurrent(_ operation: UInt64) -> Bool {
         !Task.isCancelled && terminationState == .idle && lifecycleEpoch == operation
@@ -1467,5 +1576,20 @@ public final class PaddrMenuModel {
 private enum TerminationState {
     case idle
     case stopping
+    case releasePending
     case finished
+}
+
+private struct ConfigurationCommit {
+    let document: ConfigurationProfileDocument
+    let savedConfiguration: PaddrConfiguration?
+    let publishDraftRevision: UInt64?
+    let replacesDraft: Bool
+    let clearsInitialSave: Bool
+}
+
+private enum ConfigurationTaskOutcome {
+    case pending
+    case notCommitted
+    case committed(ConfigurationCommit)
 }

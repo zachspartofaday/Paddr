@@ -47,6 +47,8 @@ public enum InputMonitoringAccess: Equatable, Sendable {
 }
 
 public protocol TrackpadOutputDispatching: Sendable {
+    /// For a singleton input, throws before posting that action. A successful singleton return
+    /// means the action was posted. Callers that need partial-batch accounting dispatch singly.
     func dispatch(_ actions: [TrackpadOutputAction]) throws
 }
 
