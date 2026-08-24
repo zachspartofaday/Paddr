@@ -1719,11 +1719,13 @@ final class MenuModelTests: XCTestCase {
         state.receiver = "Fake"
         model.isEnabled = true
         await waitUntil(model: model) { model.isRunning }
+        XCTAssertTrue(model.outputGateSnapshotForTesting.isEnabled)
         model.configuration.left.sensitivity = 4
         await session.setStopOutcome(.failed("Injected persistent release failure."))
 
         var replies: [Bool] = []
         XCTAssertTrue(model.stopForTermination { replies.append($0) })
+        XCTAssertFalse(model.outputGateSnapshotForTesting.isEnabled)
         await waitUntil(model: model) { replies.count == 1 }
 
         XCTAssertEqual(replies, [false])
@@ -1732,10 +1734,18 @@ final class MenuModelTests: XCTestCase {
             .failure(.output(diagnostic: "Injected persistent release failure."))
         )
         XCTAssertTrue(model.hasPendingLifecycleWork)
+        XCTAssertFalse(model.canToggleOutput)
         XCTAssertEqual(model.configuration.left.sensitivity, 4)
         XCTAssertTrue(model.hasUnsavedChanges)
         let failedStopCount = await session.stopCount
+        let failedStartCount = await session.startCount
         XCTAssertEqual(failedStopCount, 2)
+
+        model.isEnabled = true
+        XCTAssertFalse(model.isEnabled)
+        await Task.yield()
+        let rejectedStartCount = await session.startCount
+        XCTAssertEqual(rejectedStartCount, failedStartCount)
 
         await session.setStopOutcome(.clean)
         XCTAssertTrue(model.stopForTermination { replies.append($0) })
@@ -1745,6 +1755,32 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.hasPendingLifecycleWork)
         let recoveredStopCount = await session.stopCount
         XCTAssertEqual(recoveredStopCount, 3)
+    }
+
+    func testCallbackDrivenCleanupRetryKeepsNewTerminationCoordinatorAlive() async {
+        let state = readyState(receiver: "Fake puck")
+        let session = SequencedStopSession(outcomes: [
+            .failed("Injected persistent release failure."),
+            .clean
+        ])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+
+        var replies: [Bool] = []
+        XCTAssertTrue(model.stopForTermination { firstReply in
+            replies.append(firstReply)
+            if !firstReply {
+                XCTAssertTrue(model.stopForTermination { replies.append($0) })
+            }
+        })
+        await waitUntil(model: model) { replies.count == 2 }
+
+        XCTAssertEqual(replies, [false, true])
+        let stopCount = await session.stopCount
+        XCTAssertEqual(stopCount, 2)
+        XCTAssertFalse(model.hasPendingLifecycleWork)
     }
 
     func testTerminationCannotBeSupersededAndRepliesToEveryWaitingRequestOnce() async {
@@ -1875,6 +1911,34 @@ final class MenuModelTests: XCTestCase {
         let startCount = await session.startCount
         XCTAssertEqual(startCount, 1)
         XCTAssertEqual(state.savedConfiguration?.right.sensitivity, 6)
+    }
+
+    func testTerminationDuringReplacementFailureKeepsReleaseStatusFailClosed() async {
+        let state = readyState(receiver: nil)
+        let session = GatedSession(blockedStops: [2])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        state.receiver = "Fake"
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+
+        model.configuration.right.sensitivity = 6
+        model.saveAndApply()
+        await session.waitForStop(2)
+        await session.setStopOutcome(.failed("Injected persistent release failure."))
+        var terminationReply: Bool?
+        XCTAssertTrue(model.stopForTermination { terminationReply = $0 })
+        await session.waitForStop(3)
+
+        XCTAssertTrue(model.isReleasingOutput)
+        XCTAssertEqual(model.readiness.output, .releasing)
+        await session.releaseStop(2)
+        await waitUntil(model: model) { terminationReply != nil }
+
+        XCTAssertEqual(terminationReply, false)
+        XCTAssertTrue(model.isReleasingOutput)
+        XCTAssertEqual(model.readiness.output, .releasing)
+        XCTAssertFalse(model.canToggleOutput)
     }
 
     func testCompletedDisableLeavesNoDeferredTerminationWork() async {
@@ -2613,7 +2677,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.activeProfileID, first.id)
     }
 
-    func testCancelledTerminationReloadsProfileCommittedByInFlightSelection() async throws {
+    func testCancelledTerminationReconcilesProfileCommittedByInFlightSelection() async throws {
         let state = readyState(receiver: nil)
         let (document, _, second) = try twoProfileDocument()
         state.loadedProfileDocument = document
@@ -2629,19 +2693,17 @@ final class MenuModelTests: XCTestCase {
         )
         await waitUntil { state.saveCallCount == 1 }
 
-        let reloadGate = BoundedTestGate()
-        state.loadGate = reloadGate
+        state.loadFailure = "Reload must not be required after a known commit."
         await session.setStopOutcome(.failed("Injected persistent release failure."))
-        var terminationReply: Bool?
-        XCTAssertTrue(model.stopForTermination { terminationReply = $0 })
+        var terminationReplies: [Bool] = []
+        XCTAssertTrue(model.stopForTermination { terminationReplies.append($0) })
+        XCTAssertTrue(model.stopForTermination { terminationReplies.append($0) })
 
         saveGate.signal()
         await waitUntil { state.savedProfileDocument?.activeProfileID == second.id }
-        state.loadedProfileDocument = state.savedProfileDocument
-        reloadGate.signal()
-        await waitUntil(model: model) { terminationReply != nil }
+        await waitUntil(model: model) { terminationReplies.count == 2 }
 
-        XCTAssertEqual(terminationReply, false)
+        XCTAssertEqual(terminationReplies, [false, false])
         XCTAssertEqual(model.activeProfileID, second.id)
         XCTAssertEqual(model.configuration, second.configuration)
         XCTAssertEqual(model.savedConfiguration, second.configuration)
@@ -2651,6 +2713,94 @@ final class MenuModelTests: XCTestCase {
         guard case .failure(.output) = model.status else {
             return XCTFail("Expected the held-output failure to remain authoritative")
         }
+    }
+
+    func testCancelledTerminationReconcilesCommitWithoutOverwritingNewerDraft() async {
+        let state = readyState(receiver: nil)
+        let saveGate = BoundedTestGate()
+        state.saveGate = saveGate
+        let session = GatedSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.configuration.left.sensitivity = 3
+        model.saveAndApply()
+        await waitUntil { state.saveCallCount == 1 }
+        await session.setStopOutcome(.failed("Injected persistent release failure."))
+        var terminationReply: Bool?
+        XCTAssertTrue(model.stopForTermination { terminationReply = $0 })
+
+        model.configuration.left.sensitivity = 4
+        saveGate.signal()
+        await waitUntil(model: model) { terminationReply != nil }
+
+        XCTAssertEqual(terminationReply, false)
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 3)
+        XCTAssertEqual(model.configuration.left.sensitivity, 4)
+        XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 3)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertFalse(model.canToggleOutput)
+    }
+
+    func testCancelledTerminationReconcilesMetadataCommitWithoutDiscardingDraft() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = BoundedTestGate()
+        state.saveGate = saveGate
+        let session = GatedSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.configuration.left.sensitivity = 4
+        XCTAssertTrue(model.renameProfile(id: first.id, to: "Renamed profile"))
+        await waitUntil { state.saveCallCount == 1 }
+        await session.setStopOutcome(.failed("Injected persistent release failure."))
+        var terminationReply: Bool?
+        XCTAssertTrue(model.stopForTermination { terminationReply = $0 })
+
+        saveGate.signal()
+        await waitUntil(model: model) { terminationReply != nil }
+
+        XCTAssertEqual(terminationReply, false)
+        XCTAssertEqual(model.activeProfile.name, "Renamed profile")
+        XCTAssertEqual(state.savedProfileDocument?.profile(id: first.id)?.name, "Renamed profile")
+        XCTAssertEqual(model.configuration.left.sensitivity, 4)
+        XCTAssertEqual(model.savedConfiguration, first.configuration)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertFalse(model.canToggleOutput)
+    }
+
+    func testCancelledTerminationReconcilesEarlierQueuedCommitWhenLaterSaveFails() async {
+        let state = readyState(receiver: nil)
+        let saveGate = BoundedTestGate()
+        state.saveGate = saveGate
+        state.saveFailuresByCall = [2: "Injected second save failure."]
+        let session = GatedSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.configuration.left.sensitivity = 3
+        model.saveAndApply()
+        await waitUntil { state.saveCallCount == 1 }
+        model.configuration.left.sensitivity = 5
+        model.saveAndApply()
+        await session.setStopOutcome(.failed("Injected persistent release failure."))
+        var terminationReply: Bool?
+        XCTAssertTrue(model.stopForTermination { terminationReply = $0 })
+
+        state.saveGate = nil
+        saveGate.signal()
+        await waitUntil(model: model) { terminationReply != nil }
+
+        XCTAssertEqual(terminationReply, false)
+        XCTAssertEqual(state.saveCallCount, 2)
+        XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 3)
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 3)
+        XCTAssertEqual(model.configuration.left.sensitivity, 5)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertFalse(model.canSaveAndApply)
+        XCTAssertFalse(model.canSelectProfileFromMenu)
     }
 
     func testEnabledProfileSelectionRejectsOldSessionEventsAndReestablishesLivenessAuthority() async throws {
@@ -3694,6 +3844,10 @@ final class MenuModelTests: XCTestCase {
                 state.saveCallCount += 1
                 defer { state.saveCompletionCount += 1 }
                 state.saveGate?.wait()
+                let call = state.saveCallCount
+                if let failure = state.saveFailuresByCall[call] {
+                    throw PaddrError.configuration(failure)
+                }
                 if let failure = state.saveFailure {
                     throw PaddrError.configuration(failure)
                 }
@@ -3968,6 +4122,38 @@ private actor GatedSession: TrackpadSessionControlling {
     }
 }
 
+private actor SequencedStopSession: TrackpadSessionControlling {
+    private var stopOutcomes: [TrackpadSessionStopOutcome]
+    private var continuation: AsyncStream<TrackpadSessionEvent>.Continuation?
+    private(set) var stopCount = 0
+
+    init(outcomes: [TrackpadSessionStopOutcome]) {
+        stopOutcomes = outcomes
+    }
+
+    func start(
+        configuration: PaddrConfiguration,
+        observeOnly: Bool,
+        outputGate: OutputGate?
+    ) async -> AsyncStream<TrackpadSessionEvent> {
+        let (stream, continuation) = AsyncStream<TrackpadSessionEvent>.makeStream()
+        self.continuation = continuation
+        continuation.yield(.waitingForController("Fake puck"))
+        continuation.yield(.controllerConnected)
+        continuation.yield(.outputArmed)
+        return stream
+    }
+
+    @discardableResult
+    func stop() async -> TrackpadSessionStopOutcome {
+        stopCount += 1
+        continuation?.finish()
+        continuation = nil
+        guard !stopOutcomes.isEmpty else { return .clean }
+        return stopOutcomes.removeFirst()
+    }
+}
+
 private actor IndexedStopGate {
     private var released: Set<Int> = []
     private var waiters: [Int: [UUID: CheckedContinuation<Bool, Never>]] = [:]
@@ -4038,6 +4224,7 @@ private final class ModelDependencyState: Sendable {
         var loadGate: BoundedTestGate?
         var loadRanOnMainThread: Bool?
         var saveFailure: String?
+        var saveFailuresByCall: [Int: String] = [:]
         var saveGate: BoundedTestGate?
         var saveCallCount = 0
         var saveCompletionCount = 0
@@ -4107,6 +4294,10 @@ private final class ModelDependencyState: Sendable {
     var saveFailure: String? {
         get { state.withLock { $0.saveFailure } }
         set { state.withLock { $0.saveFailure = newValue } }
+    }
+    var saveFailuresByCall: [Int: String] {
+        get { state.withLock { $0.saveFailuresByCall } }
+        set { state.withLock { $0.saveFailuresByCall = newValue } }
     }
     var saveGate: BoundedTestGate? {
         get { state.withLock { $0.saveGate } }
