@@ -435,7 +435,8 @@ final class PaddrTests: XCTestCase {
                 mode: .mouse,
                 mouseDeadzone: 0.5,
                 centerTapTrackingMode: .decoupled,
-                tapKey: "space"
+                tapKey: "space",
+                tapStabilizationEnabled: false
             )
         )
         _ = try decoupledAtBoundary.process(sample(touched: true, x: 15_684, time: 1))
@@ -458,7 +459,8 @@ final class PaddrTests: XCTestCase {
                 mode: .mouse,
                 mouseDeadzone: 0.5,
                 centerTapTrackingMode: .decoupled,
-                tapKey: "space"
+                tapKey: "space",
+                tapStabilizationEnabled: false
             )
         )
         _ = try decoupledCrossing.process(sample(touched: true, x: 15_685, time: 1))
@@ -524,6 +526,7 @@ final class PaddrTests: XCTestCase {
                 mouseDeadzone: 0.5,
                 centerTapTrackingMode: .decoupled,
                 tapKey: "space",
+                tapStabilizationEnabled: false,
                 tapMaximumMovement: 100
             )
         )
@@ -595,7 +598,8 @@ final class PaddrTests: XCTestCase {
                 mode: .mouse,
                 mouseDeadzone: 0.2,
                 centerTapTrackingMode: .decoupled,
-                tapKey: "space"
+                tapKey: "space",
+                tapStabilizationEnabled: false
             )
         )
 
@@ -617,6 +621,7 @@ final class PaddrTests: XCTestCase {
                 mouseDeadzone: 0,
                 centerTapTrackingMode: .decoupled,
                 tapKey: "space",
+                tapStabilizationEnabled: false,
                 tapMaximumMovement: 100
             )
         )

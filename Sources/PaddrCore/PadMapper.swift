@@ -7,6 +7,120 @@ public enum DPadDirection: String, CaseIterable, Hashable, Sendable {
     case left
 }
 
+private struct PointerMotionFilter: Sendable {
+    private static let rawUnitsPerPoint = 700.0
+    private static let derivativeCutoffHz = 1.0
+    private static let speedCoefficient = 0.08
+    private static let longestIntervalNanoseconds: UInt64 = 100_000_000
+
+    private var filteredX: Double?
+    private var filteredY: Double?
+    private var filteredDerivativeX = 0.0
+    private var filteredDerivativeY = 0.0
+    private var rawX: Double?
+    private var rawY: Double?
+    private var timestamp: UInt64?
+
+    mutating func reset(anchor: TrackpadSample? = nil) {
+        guard let anchor else {
+            filteredX = nil
+            filteredY = nil
+            filteredDerivativeX = 0
+            filteredDerivativeY = 0
+            rawX = nil
+            rawY = nil
+            timestamp = nil
+            return
+        }
+        let x = Double(anchor.x)
+        let y = Double(anchor.y)
+        filteredX = x
+        filteredY = y
+        filteredDerivativeX = 0
+        filteredDerivativeY = 0
+        rawX = x
+        rawY = y
+        timestamp = anchor.timestampNanoseconds
+    }
+
+    mutating func filteredDelta(
+        to sample: TrackpadSample,
+        strength: Double
+    ) -> (dx: Double, dy: Double, previousTimestamp: UInt64)? {
+        guard let previousTimestamp = timestamp,
+              let previousRawX = rawX,
+              let previousRawY = rawY,
+              let previousFilteredX = filteredX,
+              let previousFilteredY = filteredY,
+              sample.timestampNanoseconds > previousTimestamp,
+              sample.timestampNanoseconds - previousTimestamp <= Self.longestIntervalNanoseconds
+        else {
+            reset(anchor: sample)
+            return nil
+        }
+
+        let intervalNanoseconds = sample.timestampNanoseconds - previousTimestamp
+        let intervalSeconds = Double(intervalNanoseconds) / 1_000_000_000
+        let nextRawX = Double(sample.x)
+        let nextRawY = Double(sample.y)
+        let derivativeAlpha = Self.alpha(
+            cutoffHz: Self.derivativeCutoffHz,
+            intervalSeconds: intervalSeconds
+        )
+        filteredDerivativeX = Self.lowPass(
+            value: (nextRawX - previousRawX) / Self.rawUnitsPerPoint / intervalSeconds,
+            previous: filteredDerivativeX,
+            alpha: derivativeAlpha
+        )
+        filteredDerivativeY = Self.lowPass(
+            value: (nextRawY - previousRawY) / Self.rawUnitsPerPoint / intervalSeconds,
+            previous: filteredDerivativeY,
+            alpha: derivativeAlpha
+        )
+
+        let boundedStrength = min(max(strength, 0), 1)
+        let minimumCutoffHz = 20 - 19 * boundedStrength
+        let nextFilteredX = Self.lowPass(
+            value: nextRawX,
+            previous: previousFilteredX,
+            alpha: Self.alpha(
+                cutoffHz: minimumCutoffHz
+                    + Self.speedCoefficient * abs(filteredDerivativeX),
+                intervalSeconds: intervalSeconds
+            )
+        )
+        let nextFilteredY = Self.lowPass(
+            value: nextRawY,
+            previous: previousFilteredY,
+            alpha: Self.alpha(
+                cutoffHz: minimumCutoffHz
+                    + Self.speedCoefficient * abs(filteredDerivativeY),
+                intervalSeconds: intervalSeconds
+            )
+        )
+
+        filteredX = nextFilteredX
+        filteredY = nextFilteredY
+        rawX = nextRawX
+        rawY = nextRawY
+        timestamp = sample.timestampNanoseconds
+        return (
+            dx: nextFilteredX - previousFilteredX,
+            dy: nextFilteredY - previousFilteredY,
+            previousTimestamp: previousTimestamp
+        )
+    }
+
+    private static func alpha(cutoffHz: Double, intervalSeconds: Double) -> Double {
+        let timeConstant = 1 / (2 * Double.pi * cutoffHz)
+        return 1 / (1 + timeConstant / intervalSeconds)
+    }
+
+    private static func lowPass(value: Double, previous: Double, alpha: Double) -> Double {
+        alpha * value + (1 - alpha) * previous
+    }
+}
+
 public enum MouseButtonBinding: String, Equatable, Hashable, Sendable {
     case left
     case right
@@ -50,6 +164,7 @@ public struct PadMapper: Sendable {
     private static let mouseAccelerationHighSpeed = 120_000.0
     private static let mouseAccelerationMinimumGain = 1.0
     private static let mouseAccelerationMaximumGain = 4.0
+    private static let mouseRawUnitsPerPoint = 700.0
     // A 100 ms pause starts a fresh motion sequence instead of amplifying resumed movement.
     private static let mouseAccelerationLongGapNanoseconds: UInt64 = 100_000_000
 
@@ -57,6 +172,8 @@ public struct PadMapper: Sendable {
     private var activeZones: Set<ButtonZone> = []
     private var tapOrigin: (x: Int16, y: Int16, timestamp: UInt64)?
     private var tapEligible = false
+    private var tapStabilizing = false
+    private var pointerFilter = PointerMotionFilter()
 
     public init(side: PadSide, configuration: PadConfiguration) {
         self.side = side
@@ -72,7 +189,15 @@ public struct PadMapper: Sendable {
             tapEligible = configuration.mode == .scroll
                 || configuration.mouseDeadzone == 0
                 || Self.isInsideMouseDeadzone(sample, deadzone: configuration.mouseDeadzone)
+            tapStabilizing = configuration.mode == .mouse
+                && configuration.tapKey != nil
+                && configuration.tapStabilizationEnabled
+                && tapEligible
         }
+        if configuration.mode == .mouse, sample.isTouched, !wasTouched {
+            pointerFilter.reset(anchor: sample)
+        }
+        let wasTapStabilizing = tapStabilizing
         updateTapEligibility(with: sample)
 
         switch configuration.mode {
@@ -81,31 +206,36 @@ public struct PadMapper: Sendable {
         case .mouse:
             if sample.isTouched,
                let previous,
-               previous.isTouched,
-               shouldTrackMouse(from: previous, to: sample) {
-                if configuration.mouseAcceleration == 0 {
-                    let dx = Double(Int(sample.x) - Int(previous.x)) / 700.0 * configuration.sensitivity
-                    let dy = -Double(Int(sample.y) - Int(previous.y)) / 700.0 * configuration.sensitivity
-                    if abs(dx) >= 0.05 || abs(dy) >= 0.05 {
-                        actions.append(.mouseMove(dx: dx, dy: dy))
+               previous.isTouched {
+                if tapStabilizing {
+                    // Keep the filter anchored at touch-down so lift jitter never reaches the cursor.
+                } else if wasTapStabilizing {
+                    // Discard the configured movement slop and begin normal tracking from here.
+                    pointerFilter.reset(anchor: sample)
+                } else if shouldTrackMouse(from: previous, to: sample) {
+                    if configuration.pointerSmoothingEnabled,
+                       configuration.pointerSmoothingStrength > 0 {
+                        if let delta = pointerFilter.filteredDelta(
+                            to: sample,
+                            strength: configuration.pointerSmoothingStrength
+                        ) {
+                            actions += mouseMoveActions(
+                                rawDX: delta.dx,
+                                rawDY: delta.dy,
+                                previousTimestamp: delta.previousTimestamp,
+                                timestamp: sample.timestampNanoseconds
+                            )
+                        }
+                    } else {
+                        actions += mouseMoveActions(
+                            rawDX: Double(Int(sample.x) - Int(previous.x)),
+                            rawDY: Double(Int(sample.y) - Int(previous.y)),
+                            previousTimestamp: previous.timestampNanoseconds,
+                            timestamp: sample.timestampNanoseconds
+                        )
                     }
                 } else {
-                    let rawDX = Double(Int(sample.x) - Int(previous.x))
-                    let rawDY = -Double(Int(sample.y) - Int(previous.y))
-                    let baseDX = rawDX / 700.0
-                    let baseDY = rawDY / 700.0
-                    let gain = Self.mouseAccelerationGain(
-                        rawDX: rawDX,
-                        rawDY: rawDY,
-                        previousTimestamp: previous.timestampNanoseconds,
-                        timestamp: sample.timestampNanoseconds,
-                        amount: configuration.mouseAcceleration
-                    )
-                    let dx = baseDX * gain * configuration.sensitivity
-                    let dy = baseDY * gain * configuration.sensitivity
-                    if abs(dx) >= 0.05 || abs(dy) >= 0.05 {
-                        actions.append(.mouseMove(dx: dx, dy: dy))
-                    }
+                    pointerFilter.reset(anchor: sample)
                 }
             }
         case .scroll:
@@ -149,6 +279,8 @@ public struct PadMapper: Sendable {
             }
             tapOrigin = nil
             tapEligible = false
+            tapStabilizing = false
+            pointerFilter.reset()
         }
 
         previous = sample
@@ -161,6 +293,8 @@ public struct PadMapper: Sendable {
             previous = nil
             tapOrigin = nil
             tapEligible = false
+            tapStabilizing = false
+            pointerFilter.reset()
         }
         return try activeZones
             .sorted { Self.sortOrder($0) < Self.sortOrder($1) }
@@ -238,15 +372,50 @@ public struct PadMapper: Sendable {
         guard sample.isTouched, tapEligible, let origin = tapOrigin else { return }
         let dx = Double(Int(sample.x) - Int(origin.x))
         let dy = Double(Int(sample.y) - Int(origin.y))
+        let elapsed = sample.timestampNanoseconds >= origin.timestamp
+            ? sample.timestampNanoseconds - origin.timestamp
+            : UInt64.max
+        let maximumMilliseconds = min(
+            max(configuration.tapMaximumMilliseconds, ConfigurationLimits.tapMaximumMilliseconds.lowerBound),
+            ConfigurationLimits.tapMaximumMilliseconds.upperBound
+        )
+        let timedOut = elapsed > UInt64(maximumMilliseconds * 1_000_000)
         let usesCenterTapZone = configuration.mode == .mouse && configuration.mouseDeadzone > 0
-        let movedTooFar = !usesCenterTapZone
-            && (dx * dx + dy * dy).squareRoot() > configuration.tapMaximumMovement
+        let rawDistance = hypot(dx, dy)
+        let stabilizationDistance = rawDistance
+            / Self.mouseRawUnitsPerPoint
+            * configuration.sensitivity
+        let exceededStabilizationThreshold = tapStabilizing
+            && stabilizationDistance > configuration.tapStabilizationThresholdPoints
+        let movedTooFar = !tapStabilizing
+            && !usesCenterTapZone
+            && rawDistance > configuration.tapMaximumMovement
         let leftMouseTapZone = configuration.mode == .mouse
             && configuration.mouseDeadzone > 0
             && !Self.isInsideMouseDeadzone(sample, deadzone: configuration.mouseDeadzone)
-        if movedTooFar || leftMouseTapZone {
+        if timedOut || exceededStabilizationThreshold || movedTooFar || leftMouseTapZone {
             tapEligible = false
+            tapStabilizing = false
         }
+    }
+
+    private func mouseMoveActions(
+        rawDX: Double,
+        rawDY: Double,
+        previousTimestamp: UInt64,
+        timestamp: UInt64
+    ) -> [TrackpadOutputAction] {
+        let gain = Self.mouseAccelerationGain(
+            rawDX: rawDX,
+            rawDY: rawDY,
+            previousTimestamp: previousTimestamp,
+            timestamp: timestamp,
+            amount: configuration.mouseAcceleration
+        )
+        let dx = rawDX / Self.mouseRawUnitsPerPoint * gain * configuration.sensitivity
+        let dy = -rawDY / Self.mouseRawUnitsPerPoint * gain * configuration.sensitivity
+        guard abs(dx) >= 0.05 || abs(dy) >= 0.05 else { return [] }
+        return [.mouseMove(dx: dx, dy: dy)]
     }
 
     private mutating func updateButtonZones(to next: Set<ButtonZone>) throws -> [TrackpadOutputAction] {

@@ -896,9 +896,9 @@ final class MenuViewPresentationTests: XCTestCase {
         )
         await settle(defaultHostingView)
 
-        let defaultToggle = try XCTUnwrap(
-            firstDescendant(of: NSSwitch.self, in: defaultHostingView)
-        )
+        let defaultSwitches = descendants(of: NSSwitch.self, in: defaultHostingView)
+        XCTAssertEqual(defaultSwitches.count, 3)
+        let defaultToggle = try XCTUnwrap(defaultSwitches.dropFirst().first)
         XCTAssertEqual(defaultToggle.state, .on)
         XCTAssertEqual(defaultToggle.accessibilityRoleDescription(), "switch")
         XCTAssertEqual(accessibilityIntegerValue(of: defaultToggle), 1)
@@ -932,9 +932,9 @@ final class MenuViewPresentationTests: XCTestCase {
         )
         await settle(legacyHostingView)
 
-        let legacyToggle = try XCTUnwrap(
-            firstDescendant(of: NSSwitch.self, in: legacyHostingView)
-        )
+        let legacySwitches = descendants(of: NSSwitch.self, in: legacyHostingView)
+        XCTAssertEqual(legacySwitches.count, 3)
+        let legacyToggle = try XCTUnwrap(legacySwitches.dropFirst().first)
         XCTAssertEqual(legacy.centerTapTrackingMode, .coupled)
         XCTAssertEqual(legacyToggle.state, .off)
         XCTAssertEqual(legacyToggle.accessibilityRoleDescription(), "switch")
@@ -946,6 +946,42 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertEqual(legacyToggle.state, .on)
         XCTAssertEqual(accessibilityIntegerValue(of: legacyToggle), 1)
         assertControlFits(legacyToggle, in: legacyHostingView)
+    }
+
+    func testPointerStabilityControlsExposePerPadDefaultsAndBindings() async throws {
+        var configuration = PadConfiguration(mode: .mouse)
+        let view = PadConfigurationView(
+            side: .right,
+            configuration: Binding(
+                get: { configuration },
+                set: { configuration = $0 }
+            )
+        )
+        .frame(width: PaddrStyle.padColumnWidth)
+        let hostingView = NSHostingView(rootView: view)
+        hostingView.frame = NSRect(
+            origin: .zero,
+            size: NSSize(
+                width: PaddrStyle.padColumnWidth,
+                height: PaddrStyle.Metrics.defaultWindowSize.height
+            )
+        )
+        await settle(hostingView)
+
+        let switches = descendants(of: NSSwitch.self, in: hostingView)
+        XCTAssertEqual(switches.count, 3)
+        let smoothing = try XCTUnwrap(switches.first)
+        let stabilization = try XCTUnwrap(switches.last)
+
+        XCTAssertEqual(smoothing.state, .off)
+        XCTAssertEqual(stabilization.state, .on)
+
+        smoothing.performClick(nil)
+        stabilization.performClick(nil)
+        await settle(hostingView)
+
+        XCTAssertTrue(configuration.pointerSmoothingEnabled)
+        XCTAssertFalse(configuration.tapStabilizationEnabled)
     }
 
     func testProfilePickerPresentsPendingCreatedProfile() async throws {

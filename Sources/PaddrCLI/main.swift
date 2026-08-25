@@ -44,6 +44,9 @@ private func help() -> String {
       --right-sensitivity N         Right pointer sensitivity, 0.1...20.
       --left-mouse-acceleration N   Left pointer acceleration, 0...1.
       --right-mouse-acceleration N  Right pointer acceleration, 0...1.
+      --left-pointer-smoothing on|off
+                                    Enable left adaptive pointer smoothing; likewise --right-pointer-smoothing.
+      --left-smoothing-strength N   Left smoothing strength, 0...1; likewise --right-smoothing-strength.
       --left-scroll-sensitivity N   Left scroll sensitivity, 0...1.
       --right-scroll-sensitivity N  Right scroll sensitivity, 0...1.
       --left-tap ACTION|none        Tap a key, mouse-left, or mouse-right; likewise --right-tap.
@@ -52,6 +55,9 @@ private func help() -> String {
                                     Left coupled uses the radius as a dead zone; decoupled tracks inside it.
       --right-center-tap-tracking MODE
                                     Right coupled uses the radius as a dead zone; decoupled tracks inside it.
+      --left-tap-stabilization on|off
+                                    Hold the cursor steady for left touch taps; likewise --right-tap-stabilization.
+      --left-tap-tolerance N        Left stabilization tolerance, 1...24 points; likewise --right-tap-tolerance.
       --left-up ACTION              Left D-pad up-zone action; likewise --left-right/--left-down/--left-left.
       --right-up ACTION             Right D-pad up-zone action; likewise --right-right/--right-down/--right-left.
       --left-deadzone N             Left D-pad center deadzone from 0..<1.
@@ -170,6 +176,14 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
         return value
     }
 
+    func parseToggle(_ raw: String, option: String) throws -> Bool {
+        switch raw.lowercased() {
+        case "on": true
+        case "off": false
+        default: throw PaddrError.configuration("\(option) requires on or off.")
+        }
+    }
+
     func setPad(_ side: PadSide, _ update: (inout PadConfiguration) -> Void) {
         if side == .left { update(&options.configuration.left) }
         else { update(&options.configuration.right) }
@@ -219,6 +233,14 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
             let side: PadSide = argument.hasPrefix("--left") ? .left : .right
             let value = try parseDouble(nextValue(), option: argument)
             setPad(side) { $0.mouseAcceleration = value }
+        case "--left-pointer-smoothing", "--right-pointer-smoothing":
+            let side: PadSide = argument.hasPrefix("--left") ? .left : .right
+            let value = try parseToggle(nextValue(), option: argument)
+            setPad(side) { $0.pointerSmoothingEnabled = value }
+        case "--left-smoothing-strength", "--right-smoothing-strength":
+            let side: PadSide = argument.hasPrefix("--left") ? .left : .right
+            let value = try parseDouble(nextValue(), option: argument)
+            setPad(side) { $0.pointerSmoothingStrength = value }
         case "--left-scroll-sensitivity", "--right-scroll-sensitivity":
             let side: PadSide = argument.hasPrefix("--left") ? .left : .right
             let value = try parseDouble(nextValue(), option: argument)
@@ -238,6 +260,14 @@ private func parse(_ rawArguments: [String]) throws -> CLIOptions {
                 )
             }
             setPad(side) { $0.centerTapTrackingMode = mode }
+        case "--left-tap-stabilization", "--right-tap-stabilization":
+            let side: PadSide = argument.hasPrefix("--left") ? .left : .right
+            let value = try parseToggle(nextValue(), option: argument)
+            setPad(side) { $0.tapStabilizationEnabled = value }
+        case "--left-tap-tolerance", "--right-tap-tolerance":
+            let side: PadSide = argument.hasPrefix("--left") ? .left : .right
+            let value = try parseDouble(nextValue(), option: argument)
+            setPad(side) { $0.tapStabilizationThresholdPoints = value }
         case "--left-deadzone", "--right-deadzone":
             let side: PadSide = argument.hasPrefix("--left") ? .left : .right
             let value = try parseDouble(nextValue(), option: argument)
@@ -344,8 +374,8 @@ private func run(_ options: CLIOptions) throws {
         throw PaddrError.device("No Steam Controller 2 puck interface was found.")
     }
     print("Selected device: \(deviceSummary.description)")
-    print("Left pad: \(options.configuration.left.mode.rawValue), pointer sensitivity \(options.configuration.left.sensitivity), pointer acceleration \(options.configuration.left.mouseAcceleration), scroll sensitivity \(options.configuration.left.scrollSensitivity), center tap tracking \(options.configuration.left.centerTapTrackingMode.rawValue), tap \(options.configuration.left.tapKey ?? "none")")
-    print("Right pad: \(options.configuration.right.mode.rawValue), pointer sensitivity \(options.configuration.right.sensitivity), pointer acceleration \(options.configuration.right.mouseAcceleration), scroll sensitivity \(options.configuration.right.scrollSensitivity), center tap tracking \(options.configuration.right.centerTapTrackingMode.rawValue), tap \(options.configuration.right.tapKey ?? "none")")
+    print("Left pad: \(padSummary(options.configuration.left))")
+    print("Right pad: \(padSummary(options.configuration.right))")
     print("Controller feature reports: unavailable by design")
 
     if options.dryRun {
@@ -383,6 +413,18 @@ private func run(_ options: CLIOptions) throws {
     )
     let summary = result.summary
     print("Summary: reports=\(summary.reportCount), actions=\(summary.actionCount), featureReports=0")
+}
+
+private func padSummary(_ configuration: PadConfiguration) -> String {
+    "\(configuration.mode.rawValue), pointer sensitivity \(configuration.sensitivity), "
+        + "pointer acceleration \(configuration.mouseAcceleration), pointer smoothing "
+        + "\(configuration.pointerSmoothingEnabled ? "on" : "off") at "
+        + "\(configuration.pointerSmoothingStrength), scroll sensitivity "
+        + "\(configuration.scrollSensitivity), center tap tracking "
+        + "\(configuration.centerTapTrackingMode.rawValue), tap "
+        + "\(configuration.tapKey ?? "none"), tap stabilization "
+        + "\(configuration.tapStabilizationEnabled ? "on" : "off") at "
+        + "\(configuration.tapStabilizationThresholdPoints) points"
 }
 
 do {
