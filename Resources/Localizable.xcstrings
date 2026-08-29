@@ -25,6 +25,9 @@
     "Enable Trackpad Output": {
       "comment": "Readiness action shown when setup is ready and output is off."
     },
+    "Keeps the cursor fixed during a tap. Moving beyond the tolerance cancels the tap and resumes pointer tracking.": {
+      "comment": "Help text for pointer-mode tap stabilization."
+    },
     "Open Source Notices": {
       "comment": "Accessibility description for the open-source notices command."
     },
@@ -33,6 +36,9 @@
     },
     "Output: %arg": {
       "comment": "Status-menu summary for mapped output."
+    },
+    "Pointer smoothing": {
+      "comment": "Per-trackpad control for adaptive pointer smoothing."
     },
     "Paddr. %arg. %arg. %arg. %arg.": {
       "comment": "Menu-bar status item summary in output, controller, transport, profile order."
@@ -51,6 +57,12 @@
     },
     "Release both trackpads": {
       "comment": "Readiness action shown while output waits for neutral trackpads."
+    },
+    "Smooths slow pointer jitter while preserving fast movement. The slider controls smoothing strength.": {
+      "comment": "Help text for adaptive pointer smoothing."
+    },
+    "Tap stabilization": {
+      "comment": "Per-trackpad control that keeps the cursor steady during a touch tap."
     },
     "Trackpad Output is unavailable until mapped keys and mouse buttons finish releasing.": {
       "comment": "Disabled reason for the output switch during release."

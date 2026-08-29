@@ -174,6 +174,8 @@ enum PaddrStyle {
     static let cardSpacing = Spacing.s4
     static let padColumnWidth = (Metrics.defaultContentWidth - cardSpacing) / 2
     static let sliderMinimumWidth: CGFloat = 120
+    /// Combined toggle-and-slider rows retain the same inline width budget as a standard slider row.
+    static let toggleSliderMinimumWidth: CGFloat = 72
     static let minimumPadSectionWidth = Width.labelColumnWide
         + Spacing.s3
         + sliderMinimumWidth

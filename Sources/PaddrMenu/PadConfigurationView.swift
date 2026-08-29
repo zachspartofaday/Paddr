@@ -96,6 +96,23 @@ struct PadConfigurationView: View {
                         )
                     )
                     .help("Zero is linear. Higher values increase fast-motion gain.")
+                    ToggleValueSliderRow(
+                        title: "Pointer smoothing",
+                        systemImage: "waveform.path",
+                        isEnabled: $configuration.pointerSmoothingEnabled,
+                        value: $configuration.pointerSmoothingStrength,
+                        range: ConfigurationLimits.pointerSmoothingStrength,
+                        step: 0.05,
+                        valueText: configuration.pointerSmoothingStrength.formatted(
+                            .percent.precision(.fractionLength(0))
+                        ),
+                        accessibilityIdentifier: PaddrAccessibility.identifier(
+                            "pad",
+                            side.rawValue,
+                            "pointer-smoothing"
+                        )
+                    )
+                    .help("Smooths slow pointer jitter while preserving fast movement. The slider controls smoothing strength.")
                     ValueSliderRow(
                         title: "Center tap radius",
                         systemImage: "scope",
@@ -126,6 +143,23 @@ struct PadConfigurationView: View {
                         .paddrAccessibilityID("pad", side.rawValue, "pointer-tracking")
                     }
                     TapActionPicker(selection: $configuration.tapKey)
+                    ToggleValueSliderRow(
+                        title: "Tap stabilization",
+                        systemImage: "hand.tap",
+                        isEnabled: $configuration.tapStabilizationEnabled,
+                        value: $configuration.tapStabilizationThresholdPoints,
+                        range: ConfigurationLimits.tapStabilizationThresholdPoints,
+                        step: 1,
+                        valueText: configuration.tapStabilizationThresholdPoints.formatted(
+                            .number.precision(.fractionLength(0))
+                        ) + " pt",
+                        accessibilityIdentifier: PaddrAccessibility.identifier(
+                            "pad",
+                            side.rawValue,
+                            "tap-stabilization"
+                        )
+                    )
+                    .help("Keeps the cursor fixed during a tap. Moving beyond the tolerance cancels the tap and resumes pointer tracking.")
                 }
             }
 

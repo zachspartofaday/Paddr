@@ -25,6 +25,8 @@ public enum ConfigurationLimits {
     public static let sensitivity = 0.1...20.0
     public static let scrollSensitivity = 0.0...1.0
     public static let mouseAcceleration = 0.0...1.0
+    public static let pointerSmoothingStrength = 0.0...1.0
+    public static let tapStabilizationThresholdPoints = 1.0...24.0
     public static let tapMaximumMilliseconds = 1.0...5_000.0
     public static let tapMaximumMovement = 0.0...100_000.0
     public static let mouseDeadzone = 0.0...1.0
@@ -134,9 +136,13 @@ public struct PadConfiguration: Codable, Equatable, Sendable {
     public var sensitivity: Double
     public var scrollSensitivity: Double
     public var mouseAcceleration: Double
+    public var pointerSmoothingEnabled: Bool
+    public var pointerSmoothingStrength: Double
     public var mouseDeadzone: Double
     public var centerTapTrackingMode: CenterTapTrackingMode
     public var tapKey: String?
+    public var tapStabilizationEnabled: Bool
+    public var tapStabilizationThresholdPoints: Double
     public var tapMaximumMilliseconds: Double
     public var tapMaximumMovement: Double
     public var dpadDeadzone: Double
@@ -149,9 +155,13 @@ public struct PadConfiguration: Codable, Equatable, Sendable {
         sensitivity: Double = 1,
         scrollSensitivity: Double = 1,
         mouseAcceleration: Double = 0,
+        pointerSmoothingEnabled: Bool = false,
+        pointerSmoothingStrength: Double = 0.35,
         mouseDeadzone: Double = 0,
         centerTapTrackingMode: CenterTapTrackingMode = .decoupled,
         tapKey: String? = nil,
+        tapStabilizationEnabled: Bool = true,
+        tapStabilizationThresholdPoints: Double = 6,
         tapMaximumMilliseconds: Double = 250,
         tapMaximumMovement: Double = 2_200,
         dpadDeadzone: Double = 0.22,
@@ -163,9 +173,13 @@ public struct PadConfiguration: Codable, Equatable, Sendable {
         self.sensitivity = sensitivity
         self.scrollSensitivity = scrollSensitivity
         self.mouseAcceleration = mouseAcceleration
+        self.pointerSmoothingEnabled = pointerSmoothingEnabled
+        self.pointerSmoothingStrength = pointerSmoothingStrength
         self.mouseDeadzone = mouseDeadzone
         self.centerTapTrackingMode = centerTapTrackingMode
         self.tapKey = tapKey
+        self.tapStabilizationEnabled = tapStabilizationEnabled
+        self.tapStabilizationThresholdPoints = tapStabilizationThresholdPoints
         self.tapMaximumMilliseconds = tapMaximumMilliseconds
         self.tapMaximumMovement = tapMaximumMovement
         self.dpadDeadzone = dpadDeadzone
@@ -223,8 +237,11 @@ public struct PadConfiguration: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case mode, sensitivity, scrollSensitivity, mouseAcceleration, mouseDeadzone, centerTapTrackingMode
-        case tapKey, tapMaximumMilliseconds, tapMaximumMovement, dpadDeadzone, zoneLayout, dpadKeys, gridKeys
+        case mode, sensitivity, scrollSensitivity, mouseAcceleration
+        case pointerSmoothingEnabled, pointerSmoothingStrength
+        case mouseDeadzone, centerTapTrackingMode, tapKey
+        case tapStabilizationEnabled, tapStabilizationThresholdPoints
+        case tapMaximumMilliseconds, tapMaximumMovement, dpadDeadzone, zoneLayout, dpadKeys, gridKeys
     }
 
     public init(from decoder: Decoder) throws {
@@ -236,12 +253,28 @@ public struct PadConfiguration: Codable, Equatable, Sendable {
             scrollSensitivity: try values.decodeIfPresent(Double.self, forKey: .scrollSensitivity)
                 ?? min(sensitivity, ConfigurationLimits.scrollSensitivity.upperBound),
             mouseAcceleration: try values.decodeIfPresent(Double.self, forKey: .mouseAcceleration) ?? 0,
+            pointerSmoothingEnabled: try values.decodeIfPresent(
+                Bool.self,
+                forKey: .pointerSmoothingEnabled
+            ) ?? false,
+            pointerSmoothingStrength: try values.decodeIfPresent(
+                Double.self,
+                forKey: .pointerSmoothingStrength
+            ) ?? 0.35,
             mouseDeadzone: try values.decodeIfPresent(Double.self, forKey: .mouseDeadzone) ?? 0,
             centerTapTrackingMode: try values.decodeIfPresent(
                 CenterTapTrackingMode.self,
                 forKey: .centerTapTrackingMode
             ) ?? .coupled,
             tapKey: try values.decodeIfPresent(String.self, forKey: .tapKey),
+            tapStabilizationEnabled: try values.decodeIfPresent(
+                Bool.self,
+                forKey: .tapStabilizationEnabled
+            ) ?? true,
+            tapStabilizationThresholdPoints: try values.decodeIfPresent(
+                Double.self,
+                forKey: .tapStabilizationThresholdPoints
+            ) ?? 6,
             tapMaximumMilliseconds: try values.decodeIfPresent(Double.self, forKey: .tapMaximumMilliseconds) ?? 250,
             tapMaximumMovement: try values.decodeIfPresent(Double.self, forKey: .tapMaximumMovement) ?? 2_200,
             dpadDeadzone: try values.decodeIfPresent(Double.self, forKey: .dpadDeadzone) ?? 0.22,
@@ -301,6 +334,18 @@ public struct PaddrConfiguration: Codable, Equatable, Sendable {
         guard pad.mouseAcceleration.isFinite,
               ConfigurationLimits.mouseAcceleration.contains(pad.mouseAcceleration) else {
             throw PaddrError.configuration("\(side.rawValue) mouseAcceleration must be between 0 and 1.")
+        }
+        guard pad.pointerSmoothingStrength.isFinite,
+              ConfigurationLimits.pointerSmoothingStrength.contains(pad.pointerSmoothingStrength) else {
+            throw PaddrError.configuration("\(side.rawValue) pointerSmoothingStrength must be between 0 and 1.")
+        }
+        guard pad.tapStabilizationThresholdPoints.isFinite,
+              ConfigurationLimits.tapStabilizationThresholdPoints.contains(
+                pad.tapStabilizationThresholdPoints
+              ) else {
+            throw PaddrError.configuration(
+                "\(side.rawValue) tapStabilizationThresholdPoints must be between 1 and 24."
+            )
         }
         guard pad.mouseDeadzone.isFinite, ConfigurationLimits.mouseDeadzone.contains(pad.mouseDeadzone) else {
             throw PaddrError.configuration("\(side.rawValue) mouseDeadzone must be between 0 and 1.")

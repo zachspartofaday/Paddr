@@ -77,12 +77,34 @@ fi
 "$cli_path" --config "$input_path" \
     --left-mouse-acceleration 0.25 \
     --right-mouse-acceleration 0.75 \
+    --left-pointer-smoothing on \
+    --right-pointer-smoothing off \
+    --left-smoothing-strength 0.4 \
+    --right-smoothing-strength 0.8 \
     --left-center-tap-tracking coupled \
     --right-center-tap-tracking decoupled \
+    --left-tap-stabilization off \
+    --right-tap-stabilization on \
+    --left-tap-tolerance 4 \
+    --right-tap-tolerance 12 \
     --show-config >"$stdout_path" 2>"$stderr_path"
 if ! grep -Fq '"mouseAcceleration" : 0.25' "$stdout_path" \
     || ! grep -Fq '"mouseAcceleration" : 0.75' "$stdout_path"; then
     echo "Mouse acceleration flags did not persist independent values." >&2
+    exit 1
+fi
+if [ "$(plutil -extract left.pointerSmoothingEnabled raw -o - "$stdout_path")" != true ] \
+    || [ "$(plutil -extract right.pointerSmoothingEnabled raw -o - "$stdout_path")" != false ] \
+    || [ "$(plutil -extract left.pointerSmoothingStrength raw -o - "$stdout_path")" != 0.400000 ] \
+    || [ "$(plutil -extract right.pointerSmoothingStrength raw -o - "$stdout_path")" != 0.800000 ]; then
+    echo "Pointer smoothing flags did not set independent values." >&2
+    exit 1
+fi
+if [ "$(plutil -extract left.tapStabilizationEnabled raw -o - "$stdout_path")" != false ] \
+    || [ "$(plutil -extract right.tapStabilizationEnabled raw -o - "$stdout_path")" != true ] \
+    || [ "$(plutil -extract left.tapStabilizationThresholdPoints raw -o - "$stdout_path")" != 4 ] \
+    || [ "$(plutil -extract right.tapStabilizationThresholdPoints raw -o - "$stdout_path")" != 12 ]; then
+    echo "Tap stabilization flags did not set independent values." >&2
     exit 1
 fi
 if [ "$(plutil -extract left.centerTapTrackingMode raw -o - "$stdout_path")" != coupled ] \
@@ -128,6 +150,13 @@ if ! grep -Fq -- '--left-center-tap-tracking' "$stdout_path" \
     echo "Center tap tracking flags or values are missing from CLI help." >&2
     exit 1
 fi
+if ! grep -Fq -- '--left-pointer-smoothing' "$stdout_path" \
+    || ! grep -Fq -- '--right-pointer-smoothing' "$stdout_path" \
+    || ! grep -Fq -- '--left-tap-stabilization' "$stdout_path" \
+    || ! grep -Fq -- '--right-tap-stabilization' "$stdout_path"; then
+    echo "Pointer smoothing or tap stabilization flags are missing from CLI help." >&2
+    exit 1
+fi
 
 set +e
 "$cli_path" --config "$input_path" --left-mouse-acceleration 1.01 --show-config \
@@ -137,6 +166,28 @@ set -e
 if [ "$status" -ne 2 ] \
     || ! grep -Fq 'left mouseAcceleration must be between 0 and 1.' "$stderr_path"; then
     echo "Invalid mouse acceleration did not use central configuration validation." >&2
+    exit 1
+fi
+
+set +e
+"$cli_path" --config "$input_path" --left-pointer-smoothing maybe --show-config \
+    >"$stdout_path" 2>"$stderr_path"
+status=$?
+set -e
+if [ "$status" -ne 2 ] \
+    || ! grep -Fq -- '--left-pointer-smoothing requires on or off.' "$stderr_path"; then
+    echo "Invalid pointer smoothing toggle did not return a strict-value error." >&2
+    exit 1
+fi
+
+set +e
+"$cli_path" --config "$input_path" --right-tap-tolerance 25 --show-config \
+    >"$stdout_path" 2>"$stderr_path"
+status=$?
+set -e
+if [ "$status" -ne 2 ] \
+    || ! grep -Fq 'right tapStabilizationThresholdPoints must be between 1 and 24.' "$stderr_path"; then
+    echo "Invalid tap stabilization tolerance did not use central configuration validation." >&2
     exit 1
 fi
 

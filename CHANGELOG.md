@@ -4,6 +4,15 @@ User-visible changes to Paddr are recorded here. Release entries describe confir
 
 ## Unreleased
 
+### Trackpad feel
+
+- Added per-trackpad tap stabilization. It is enabled by default and holds the cursor steady through
+  small lift motion, while deliberate movement beyond the adjustable tolerance cancels the tap and
+  transitions to normal pointer tracking without a catch-up jump
+  ([#83](https://github.com/zachspartofaday/Paddr/issues/83)).
+- Added optional, adjustable pointer smoothing. The speed-adaptive filter reduces slow jitter while
+  retaining fast response, remains off by default, and can be tuned independently for each pad.
+
 ## 0.11.0 — 2026-08-24
 
 ### New family interface

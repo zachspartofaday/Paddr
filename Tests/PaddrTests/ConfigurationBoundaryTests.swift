@@ -306,6 +306,27 @@ final class ConfigurationBoundaryTests: XCTestCase {
         }
     }
 
+    func testPointerStabilitySettingsRoundTripIndependentlyAndAcceptBoundaries() throws {
+        var expected = PaddrConfiguration.default
+        expected.left.pointerSmoothingEnabled = true
+        expected.left.pointerSmoothingStrength = 0
+        expected.left.tapStabilizationEnabled = false
+        expected.left.tapStabilizationThresholdPoints = 1
+        expected.right.pointerSmoothingEnabled = false
+        expected.right.pointerSmoothingStrength = 1
+        expected.right.tapStabilizationEnabled = true
+        expected.right.tapStabilizationThresholdPoints = 24
+
+        let validated = try expected.validated()
+        XCTAssertEqual(
+            try JSONDecoder().decode(
+                PaddrConfiguration.self,
+                from: ConfigurationStore.encoded(validated)
+            ),
+            expected
+        )
+    }
+
     func testAdjacentInvalidConfigurationValuesAreRejected() {
         assertInvalid(\.sensitivity, 0.1.nextDown)
         assertInvalid(\.sensitivity, 20.nextUp)
@@ -315,6 +336,12 @@ final class ConfigurationBoundaryTests: XCTestCase {
         assertInvalid(\.mouseAcceleration, 1.nextUp)
         assertInvalid(\.mouseAcceleration, .nan)
         assertInvalid(\.mouseAcceleration, .infinity)
+        assertInvalid(\.pointerSmoothingStrength, -Double.leastNonzeroMagnitude)
+        assertInvalid(\.pointerSmoothingStrength, 1.nextUp)
+        assertInvalid(\.pointerSmoothingStrength, .nan)
+        assertInvalid(\.tapStabilizationThresholdPoints, 1.nextDown)
+        assertInvalid(\.tapStabilizationThresholdPoints, 24.nextUp)
+        assertInvalid(\.tapStabilizationThresholdPoints, .infinity)
         assertInvalid(\.tapMaximumMilliseconds, 1.nextDown)
         assertInvalid(\.tapMaximumMilliseconds, 5_000.nextUp)
         assertInvalid(\.tapMaximumMovement, -Double.leastNonzeroMagnitude)
@@ -354,9 +381,13 @@ final class ConfigurationBoundaryTests: XCTestCase {
         XCTAssertEqual(pad.mode, mode, file: file, line: line)
         XCTAssertEqual(pad.sensitivity, sensitivity, file: file, line: line)
         XCTAssertEqual(pad.mouseAcceleration, 0, file: file, line: line)
+        XCTAssertFalse(pad.pointerSmoothingEnabled, file: file, line: line)
+        XCTAssertEqual(pad.pointerSmoothingStrength, 0.35, file: file, line: line)
         XCTAssertEqual(pad.mouseDeadzone, 0, file: file, line: line)
         XCTAssertEqual(pad.centerTapTrackingMode, .coupled, file: file, line: line)
         XCTAssertNil(pad.tapKey, file: file, line: line)
+        XCTAssertTrue(pad.tapStabilizationEnabled, file: file, line: line)
+        XCTAssertEqual(pad.tapStabilizationThresholdPoints, 6, file: file, line: line)
         XCTAssertEqual(pad.tapMaximumMilliseconds, 250, file: file, line: line)
         XCTAssertEqual(pad.tapMaximumMovement, 2_200, file: file, line: line)
         XCTAssertEqual(pad.dpadDeadzone, 0.22, file: file, line: line)
