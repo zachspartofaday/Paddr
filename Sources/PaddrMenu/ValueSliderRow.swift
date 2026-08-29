@@ -52,6 +52,8 @@ struct ToggleValueSliderRow: View {
     let valueText: String
     let accessibilityIdentifier: String
 
+    var sliderAccessibilityValue: String { valueText }
+
     var body: some View {
         PaddrSettingsRow(
             title: title,
@@ -74,7 +76,7 @@ struct ToggleValueSliderRow: View {
                     .layoutPriority(1)
                     .disabled(!isEnabled)
                     .accessibilityLabel(title)
-                    .accessibilityValue(valueText)
+                    .accessibilityValue(sliderAccessibilityValue)
                     .accessibilityIdentifier(accessibilityIdentifier + ".strength")
                 Text(valueText)
                     .paddrTypography(.value)
