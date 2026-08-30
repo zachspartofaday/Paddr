@@ -786,17 +786,17 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertEqual(selector.accessibilityLabel(), "Behavior")
     }
 
-    func testPointerSettingsFollowResponseThenTapWorkflowOrder() async throws {
+    func testPointerSettingsFollowConfiguredWorkflowOrder() async throws {
         XCTAssertEqual(
             PointerSetting.allCases,
             [
                 .sensitivity,
                 .acceleration,
                 .smoothing,
-                .tapAction,
-                .tapRadius,
-                .pointerTracking,
                 .tapStabilization,
+                .tapRadius,
+                .tapAction,
+                .pointerTracking,
             ]
         )
     }

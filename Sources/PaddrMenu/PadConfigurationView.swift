@@ -24,10 +24,10 @@ enum PointerSetting: CaseIterable {
     case sensitivity
     case acceleration
     case smoothing
-    case tapAction
-    case tapRadius
-    case pointerTracking
     case tapStabilization
+    case tapRadius
+    case tapAction
+    case pointerTracking
 }
 
 struct PadConfigurationView: View {
