@@ -114,6 +114,7 @@ enum PaddrFamilyWindowChrome {
         window.contentView?.layoutSubtreeIfNeeded()
         let restoredSize = window.contentLayoutRect.size
         let topLeft = NSPoint(x: window.frame.minX, y: window.frame.maxY)
+        let targetVisibleFrame = window.screen?.visibleFrame
         let migratedSize = WindowFrameGeometry.migratedUsableSize(
             restoredSize: restoredSize,
             legacyDefaultSize: legacyDefaultSize,
@@ -123,6 +124,15 @@ enum PaddrFamilyWindowChrome {
         if !restoredSize.isApproximatelyEqual(to: migratedSize) {
             setUsableLayoutSize(migratedSize, for: window)
             window.setFrameTopLeftPoint(topLeft)
+            if let targetVisibleFrame {
+                window.setFrame(
+                    WindowFrameGeometry.constrainedFrame(
+                        window.frame,
+                        to: targetVisibleFrame
+                    ),
+                    display: false
+                )
+            }
         }
         return true
     }

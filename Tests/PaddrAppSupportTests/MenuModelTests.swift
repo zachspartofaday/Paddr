@@ -1741,6 +1741,27 @@ final class MenuModelTests: XCTestCase {
         XCTAssertTrue(diagnostic.contains("Injected quit save failure."))
     }
 
+    func testSaveBeforeTerminationKeepsLoadRecoveryGuidanceWhenStorageIsBlocked() async {
+        let state = readyState(receiver: nil)
+        state.loadFailure = "Saved settings are unreadable."
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        let didSave = await model.saveBeforeTermination()
+
+        XCTAssertFalse(didSave)
+        XCTAssertFalse(model.canSaveAndApply)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        guard case let .failure(.configurationLoad(diagnostic)) = model.status else {
+            return XCTFail("Expected the actionable load-recovery failure to remain visible")
+        }
+        XCTAssertEqual(diagnostic, "Saved settings are unreadable.")
+        XCTAssertEqual(
+            String(localized: model.status.message),
+            "Saved settings couldn’t be loaded. Repair or move ~/.config/Paddr/config.json, then reopen Paddr."
+        )
+    }
+
     func testSaveBeforeTerminationWaitsForEarlierSaveThenPersistsNewerEdits() async throws {
         let state = readyState(receiver: nil)
         let (document, first, _) = try twoProfileDocument()
@@ -1829,6 +1850,61 @@ final class MenuModelTests: XCTestCase {
             state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
             6
         )
+    }
+
+    func testTerminationDecisionWaitsForOutputActivationPersistence() async {
+        let state = readyState(receiver: "Fake puck")
+        let session = ScriptedSession(events: [.controllerConnected, .outputArmed])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        model.configuration.left.sensitivity = 6
+        let saveGate = BoundedTestGate()
+        state.saveGate = saveGate
+
+        model.isEnabled = true
+        await waitUntil { state.saveCallCount == 1 }
+        XCTAssertTrue(model.hasPendingConfigurationPersistence)
+        let decision = Task { await model.hasUnsavedChangesAfterPendingPersistence() }
+        state.saveGate = nil
+        saveGate.signal()
+
+        let hasUnsavedChanges = await decision.value
+        XCTAssertFalse(hasUnsavedChanges)
+        XCTAssertFalse(model.hasPendingConfigurationPersistence)
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertEqual(state.saveCallCount, 1)
+        XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 6)
+    }
+
+    func testDeferredTerminationRejectsEditsWhileOutputReleaseIsInFlight() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, _, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let session = GatedSession(blockedStops: [1])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await waitUntil(model: model) { model.isRunning }
+        model.configuration.left.sensitivity = 6
+        let didSave = await model.saveBeforeTermination()
+        XCTAssertTrue(didSave)
+
+        var terminationReply: Bool?
+        XCTAssertTrue(model.stopForTermination { terminationReply = $0 })
+        await session.waitForStop(1)
+        XCTAssertFalse(model.canEditActiveProfile)
+
+        model.configuration.left.sensitivity = 9
+
+        XCTAssertEqual(model.configuration.left.sensitivity, 6)
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertNil(terminationReply)
+
+        await session.releaseStop(1)
+        await waitUntil(model: model) { terminationReply != nil }
+        XCTAssertEqual(terminationReply, true)
     }
 
     func testTerminationAwaitsSessionStop() async {
@@ -2853,7 +2929,7 @@ final class MenuModelTests: XCTestCase {
         }
     }
 
-    func testCancelledTerminationReconcilesCommitWithoutOverwritingNewerDraft() async {
+    func testCancelledTerminationReconcilesCommitAndRejectsNewerDraft() async {
         let state = readyState(receiver: nil)
         let saveGate = BoundedTestGate()
         state.saveGate = saveGate
@@ -2868,15 +2944,16 @@ final class MenuModelTests: XCTestCase {
         var terminationReply: Bool?
         XCTAssertTrue(model.stopForTermination { terminationReply = $0 })
 
+        XCTAssertFalse(model.canEditActiveProfile)
         model.configuration.left.sensitivity = 4
         saveGate.signal()
         await waitUntil(model: model) { terminationReply != nil }
 
         XCTAssertEqual(terminationReply, false)
         XCTAssertEqual(model.savedConfiguration.left.sensitivity, 3)
-        XCTAssertEqual(model.configuration.left.sensitivity, 4)
+        XCTAssertEqual(model.configuration.left.sensitivity, 3)
         XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 3)
-        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertFalse(model.hasUnsavedChanges)
         XCTAssertFalse(model.canToggleOutput)
     }
 

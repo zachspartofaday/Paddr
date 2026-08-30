@@ -35,7 +35,9 @@ public final class PaddrMenuModel {
     public var configuration: PaddrConfiguration {
         didSet {
             guard !isPublishingConfiguration, !isRejectingConfigurationEdit else { return }
-            guard isInitialized, !replacesActiveConfiguration else {
+            guard isInitialized,
+                  terminationState == .idle,
+                  !replacesActiveConfiguration else {
                 isRejectingConfigurationEdit = true
                 configuration = oldValue
                 isRejectingConfigurationEdit = false
@@ -105,7 +107,15 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var isRejectingEnabledChange = false
     private var profileOperationInProgress = false
     private var pendingProfileActivation: ConfigurationProfile?
-    private var profileDocumentSaveInProgress = false
+    private var profileDocumentSaveInProgress = false {
+        didSet {
+            guard oldValue, !profileDocumentSaveInProgress else { return }
+            let waiters = profilePersistenceWaiters
+            profilePersistenceWaiters.removeAll()
+            for waiter in waiters { waiter.resume() }
+        }
+    }
+    @ObservationIgnored private var profilePersistenceWaiters: [CheckedContinuation<Void, Never>] = []
     private var replacesActiveConfiguration = false
     @ObservationIgnored private var activationCommitPending = false
     @ObservationIgnored private var statusRefreshTask: Task<Void, Never>?
@@ -123,13 +133,18 @@ public final class PaddrMenuModel {
     @ObservationIgnored public var statusDidChange: (@MainActor () -> Void)?
 
     public var hasUnsavedChanges: Bool { needsInitialSave || configuration != savedConfiguration }
-    public var hasPendingConfigurationPersistence: Bool { configurationTask != nil }
+    public var hasPendingConfigurationPersistence: Bool {
+        configurationTask != nil || profileDocumentSaveInProgress
+    }
     public var hasSystemAccess: Bool { accessibilityTrusted && inputMonitoringGranted }
     public var activeProfile: ConfigurationProfile {
         profiles.first { $0.id == activeProfileID } ?? .default
     }
     public var canEditActiveProfile: Bool {
-        isInitialized && !replacesActiveConfiguration && activeProfileID != .default
+        terminationState == .idle
+            && isInitialized
+            && !replacesActiveConfiguration
+            && activeProfileID != .default
     }
     public var profileSelectionPresentation: ProfileSelectionPresentation {
         if let pendingProfileActivation {
@@ -215,6 +230,7 @@ public final class PaddrMenuModel {
         statusRefreshTask?.cancel()
         permissionRefreshTask?.cancel()
         terminationTask?.cancel()
+        for waiter in profilePersistenceWaiters { waiter.resume() }
     }
 
     public func refreshStatus() {
@@ -296,10 +312,26 @@ public final class PaddrMenuModel {
     /// Waits for saves that were already requested, without persisting newer draft edits,
     /// then reports whether a quit decision is still required.
     public func hasUnsavedChangesAfterPendingPersistence() async -> Bool {
-        while terminationState == .idle, let pendingTask = configurationTask {
-            await pendingTask.value
+        while terminationState == .idle {
+            if let pendingTask = configurationTask {
+                await pendingTask.value
+                continue
+            }
+            guard profileDocumentSaveInProgress else { break }
+            await waitForProfilePersistence()
         }
         return terminationState == .idle && hasUnsavedChanges
+    }
+
+    private func waitForProfilePersistence() async {
+        guard profileDocumentSaveInProgress else { return }
+        await withCheckedContinuation { continuation in
+            guard profileDocumentSaveInProgress else {
+                continuation.resume()
+                return
+            }
+            profilePersistenceWaiters.append(continuation)
+        }
     }
 
     /// Persists the newest draft before application termination without replacing the
@@ -316,13 +348,6 @@ public final class PaddrMenuModel {
         guard hasUnsavedChanges else { return true }
         guard !profileDocumentSaveInProgress else { return false }
         guard !storageWriteBlocked else {
-            publishStatus(
-                .failure(
-                    .configurationSave(
-                        diagnostic: "Profile storage is unavailable."
-                    )
-                )
-            )
             statusDidChange?()
             return false
         }
