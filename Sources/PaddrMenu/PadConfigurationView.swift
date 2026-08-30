@@ -2,9 +2,28 @@ import AppKit
 import SwiftUI
 import PaddrCore
 
+enum TapStabilizationPresentation {
+    static func toleranceValue(
+        points: Double,
+        locale: Locale = .current
+    ) -> String {
+        let pointsText = points.formatted(
+            .number
+                .precision(.fractionLength(0))
+                .locale(locale)
+        )
+        return String(
+            localized: "\(pointsText) pt",
+            locale: locale,
+            comment: "Tap-stabilization tolerance value; the argument is a distance in points."
+        )
+    }
+}
+
 struct PadConfigurationView: View {
     @Environment(\.paddrFillsEqualHeightColumn) private var fillsEqualHeightColumn
     @Environment(\.layoutDirection) private var layoutDirection
+    @Environment(\.locale) private var locale
 
     let side: PadSide
     @Binding var configuration: PadConfiguration
@@ -150,9 +169,10 @@ struct PadConfigurationView: View {
                         value: $configuration.tapStabilizationThresholdPoints,
                         range: ConfigurationLimits.tapStabilizationThresholdPoints,
                         step: 1,
-                        valueText: configuration.tapStabilizationThresholdPoints.formatted(
-                            .number.precision(.fractionLength(0))
-                        ) + " pt",
+                        valueText: TapStabilizationPresentation.toleranceValue(
+                            points: configuration.tapStabilizationThresholdPoints,
+                            locale: locale
+                        ),
                         accessibilityIdentifier: PaddrAccessibility.identifier(
                             "pad",
                             side.rawValue,

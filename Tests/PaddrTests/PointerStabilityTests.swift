@@ -126,42 +126,164 @@ final class PointerStabilityTests: XCTestCase {
         )
         let slowDistance = try totalPointerDistance(
             configuration: configuration,
-            positions: [70, 140, 210, 280],
+            positions: [70, 140, 210, 280, 350, 420],
             intervalNanoseconds: 4_000_000
         )
         let fastDistance = try totalPointerDistance(
             configuration: configuration,
-            positions: [7_000, 14_000, 21_000, 28_000],
+            positions: [7_000, 14_000, 21_000, 28_000, 32_000, 32_767],
             intervalNanoseconds: 4_000_000
         )
 
-        XCTAssertGreaterThan(fastDistance / 40, slowDistance / 0.4)
+        XCTAssertGreaterThan(slowDistance, 0)
+        XCTAssertGreaterThan(fastDistance / (32_767.0 / 700), slowDistance / 0.6)
     }
 
-    func testPointerFilterResetsAcrossLiftAndReleaseAll() throws {
+    func testSustainedSlowPointerMotionCrossesRetainedNoiseGateByTwentyFourMilliseconds() throws {
         let configuration = PadConfiguration(
             mode: .mouse,
             pointerSmoothingEnabled: true,
-            pointerSmoothingStrength: 0.5
+            pointerSmoothingStrength: 1
         )
         var mapper = PadMapper(side: .right, configuration: configuration)
 
         _ = try mapper.process(sample(touched: true, time: 1_000_000))
-        let firstMove = try mapper.process(sample(touched: true, x: 700, time: 5_000_000))
-        _ = try mapper.process(sample(touched: false, x: 700, time: 6_000_000))
-        _ = try mapper.process(sample(touched: true, x: 20_000, time: 7_000_000))
-        let afterLift = try mapper.process(sample(touched: true, x: 20_700, time: 11_000_000))
+        for report in 1...5 {
+            XCTAssertTrue(
+                try mapper.process(
+                    sample(
+                        touched: true,
+                        x: Int16(report * 70),
+                        time: 1_000_000 + UInt64(report) * 4_000_000
+                    )
+                ).isEmpty,
+                "Report \(report) should remain below the retained 0.05-point noise gate"
+            )
+        }
 
-        XCTAssertEqual(try mouseDX(in: afterLift), try mouseDX(in: firstMove), accuracy: 0.000_000_000_001)
-        XCTAssertTrue(try mapper.releaseAll().isEmpty)
-        _ = try mapper.process(sample(touched: true, x: -20_000, time: 12_000_000))
-        let afterReleaseAll = try mapper.process(
-            sample(touched: true, x: -19_300, time: 16_000_000)
+        let actions = try mapper.process(
+            sample(touched: true, x: 420, time: 25_000_000)
         )
+        let move = try mouseMove(in: actions)
+        XCTAssertGreaterThanOrEqual(move.dx, 0.05)
+        XCTAssertEqual(move.dy, 0, accuracy: 0.000_000_000_001)
+    }
+
+    func testSmoothedResidualsIncludeBothAxesAndCancelSignedReversals() throws {
+        let configuration = PadConfiguration(
+            mode: .mouse,
+            pointerSmoothingEnabled: true,
+            pointerSmoothingStrength: 1
+        )
+        var bothAxes = PadMapper(side: .right, configuration: configuration)
+        _ = try bothAxes.process(sample(touched: true, time: 1_000_000))
+        var bothAxesActions: [TrackpadOutputAction] = []
+        for report in 1...6 {
+            bothAxesActions += try bothAxes.process(
+                sample(
+                    touched: true,
+                    x: Int16(report * 70),
+                    y: Int16(report * 35),
+                    time: 1_000_000 + UInt64(report) * 4_000_000
+                )
+            )
+        }
+        let bothAxesMove = try mouseMove(in: bothAxesActions)
+        XCTAssertGreaterThan(bothAxesMove.dx, 0)
+        XCTAssertLessThan(bothAxesMove.dy, 0)
+
+        var reversing = PadMapper(side: .right, configuration: configuration)
+        _ = try reversing.process(sample(touched: true, time: 1_000_000))
+        let yPositions: [Int16] = [70, 140, 210, 140, 70, 0, -70, -140, -210]
+        var reversalActions: [TrackpadOutputAction] = []
+        for (index, y) in yPositions.enumerated() {
+            reversalActions += try reversing.process(
+                sample(
+                    touched: true,
+                    x: Int16((index + 1) * 35),
+                    y: y,
+                    time: 5_000_000 + UInt64(index) * 4_000_000
+                )
+            )
+        }
+        let reversalMove = try mouseMove(in: reversalActions)
+        XCTAssertGreaterThanOrEqual(reversalMove.dx, 0.05)
+        XCTAssertLessThan(
+            abs(reversalMove.dy),
+            0.01,
+            "Signed Y residuals should cancel instead of accumulating absolute distance"
+        )
+    }
+
+    func testPendingSmoothedMotionResetsAcrossLiftReleaseAllAndLongReportGaps() throws {
+        let configuration = PadConfiguration(
+            mode: .mouse,
+            pointerSmoothingEnabled: true,
+            pointerSmoothingStrength: 1
+        )
+
+        var afterLift = try mapperWithPendingSlowMotion(configuration: configuration)
+        XCTAssertTrue(
+            try afterLift.process(sample(touched: false, x: 350, time: 22_000_000)).isEmpty
+        )
+        XCTAssertTrue(
+            try afterLift.process(sample(touched: true, x: 10_000, time: 23_000_000)).isEmpty
+        )
+        XCTAssertTrue(
+            try afterLift.process(sample(touched: true, x: 10_070, time: 27_000_000)).isEmpty
+        )
+
+        var afterReleaseAll = try mapperWithPendingSlowMotion(configuration: configuration)
+        XCTAssertTrue(try afterReleaseAll.releaseAll().isEmpty)
+        XCTAssertTrue(
+            try afterReleaseAll.process(sample(touched: true, x: 20_000, time: 23_000_000)).isEmpty
+        )
+        XCTAssertTrue(
+            try afterReleaseAll.process(sample(touched: true, x: 20_070, time: 27_000_000)).isEmpty
+        )
+
+        var afterLongGap = try mapperWithPendingSlowMotion(configuration: configuration)
+        XCTAssertTrue(
+            try afterLongGap.process(sample(touched: true, x: 350, time: 122_000_000)).isEmpty
+        )
+        XCTAssertTrue(
+            try afterLongGap.process(sample(touched: true, x: 420, time: 126_000_000)).isEmpty
+        )
+    }
+
+    func testSmoothingDisabledAndZeroStrengthPreservePerReportMotionExactly() throws {
+        let samples = [
+            sample(touched: true, time: 1_000_000),
+            sample(touched: true, x: 700, y: 350, time: 5_000_000),
+            sample(touched: true, x: 770, y: 385, time: 9_000_000),
+            sample(touched: true, x: 1_470, y: -315, time: 13_000_000),
+            sample(touched: false, x: 1_470, y: -315, time: 17_000_000)
+        ]
+        let disabled = try actions(
+            for: samples,
+            configuration: PadConfiguration(
+                mode: .mouse,
+                pointerSmoothingEnabled: false,
+                pointerSmoothingStrength: 1
+            )
+        )
+        let zeroStrength = try actions(
+            for: samples,
+            configuration: PadConfiguration(
+                mode: .mouse,
+                pointerSmoothingEnabled: true,
+                pointerSmoothingStrength: 0
+            )
+        )
+
+        XCTAssertEqual(disabled, zeroStrength)
         XCTAssertEqual(
-            try mouseDX(in: afterReleaseAll),
-            try mouseDX(in: firstMove),
-            accuracy: 0.000_000_000_001
+            disabled,
+            [
+                .mouseMove(dx: 1, dy: -0.5),
+                .mouseMove(dx: 0.1, dy: -0.05),
+                .mouseMove(dx: 1, dy: 1)
+            ]
         )
     }
 
@@ -186,12 +308,41 @@ final class PointerStabilityTests: XCTestCase {
         return distance
     }
 
-    private func mouseDX(in actions: [TrackpadOutputAction]) throws -> Double {
-        guard case let .mouseMove(dx, _)? = actions.first else {
-            XCTFail("Expected a mouse move action")
-            return 0
+    private func mapperWithPendingSlowMotion(
+        configuration: PadConfiguration
+    ) throws -> PadMapper {
+        var mapper = PadMapper(side: .right, configuration: configuration)
+        _ = try mapper.process(sample(touched: true, time: 1_000_000))
+        for report in 1...5 {
+            XCTAssertTrue(
+                try mapper.process(
+                    sample(
+                        touched: true,
+                        x: Int16(report * 70),
+                        time: 1_000_000 + UInt64(report) * 4_000_000
+                    )
+                ).isEmpty
+            )
         }
-        return dx
+        return mapper
+    }
+
+    private func actions(
+        for samples: [TrackpadSample],
+        configuration: PadConfiguration
+    ) throws -> [TrackpadOutputAction] {
+        var mapper = PadMapper(side: .right, configuration: configuration)
+        return try samples.flatMap { try mapper.process($0) }
+    }
+
+    private func mouseMove(
+        in actions: [TrackpadOutputAction]
+    ) throws -> (dx: Double, dy: Double) {
+        guard case let .mouseMove(dx, dy)? = actions.first else {
+            XCTFail("Expected a mouse move action")
+            return (0, 0)
+        }
+        return (dx, dy)
     }
 
     private func sample(

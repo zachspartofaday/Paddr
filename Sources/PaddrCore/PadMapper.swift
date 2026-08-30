@@ -174,6 +174,8 @@ public struct PadMapper: Sendable {
     private var tapEligible = false
     private var tapStabilizing = false
     private var pointerFilter = PointerMotionFilter()
+    private var pendingSmoothedDX = 0.0
+    private var pendingSmoothedDY = 0.0
 
     public init(side: PadSide, configuration: PadConfiguration) {
         self.side = side
@@ -195,7 +197,7 @@ public struct PadMapper: Sendable {
                 && tapEligible
         }
         if configuration.mode == .mouse, sample.isTouched, !wasTouched {
-            pointerFilter.reset(anchor: sample)
+            resetPointerMotion(anchor: sample)
         }
         let wasTapStabilizing = tapStabilizing
         updateTapEligibility(with: sample)
@@ -211,7 +213,7 @@ public struct PadMapper: Sendable {
                     // Keep the filter anchored at touch-down so lift jitter never reaches the cursor.
                 } else if wasTapStabilizing {
                     // Discard the configured movement slop and begin normal tracking from here.
-                    pointerFilter.reset(anchor: sample)
+                    resetPointerMotion(anchor: sample)
                 } else if shouldTrackMouse(from: previous, to: sample) {
                     if configuration.pointerSmoothingEnabled,
                        configuration.pointerSmoothingStrength > 0 {
@@ -219,12 +221,14 @@ public struct PadMapper: Sendable {
                             to: sample,
                             strength: configuration.pointerSmoothingStrength
                         ) {
-                            actions += mouseMoveActions(
+                            actions += smoothedMouseMoveActions(
                                 rawDX: delta.dx,
                                 rawDY: delta.dy,
                                 previousTimestamp: delta.previousTimestamp,
                                 timestamp: sample.timestampNanoseconds
                             )
+                        } else {
+                            clearPendingSmoothedMotion()
                         }
                     } else {
                         actions += mouseMoveActions(
@@ -235,7 +239,7 @@ public struct PadMapper: Sendable {
                         )
                     }
                 } else {
-                    pointerFilter.reset(anchor: sample)
+                    resetPointerMotion(anchor: sample)
                 }
             }
         case .scroll:
@@ -280,7 +284,7 @@ public struct PadMapper: Sendable {
             tapOrigin = nil
             tapEligible = false
             tapStabilizing = false
-            pointerFilter.reset()
+            resetPointerMotion()
         }
 
         previous = sample
@@ -294,7 +298,7 @@ public struct PadMapper: Sendable {
             tapOrigin = nil
             tapEligible = false
             tapStabilizing = false
-            pointerFilter.reset()
+            resetPointerMotion()
         }
         return try activeZones
             .sorted { Self.sortOrder($0) < Self.sortOrder($1) }
@@ -416,6 +420,47 @@ public struct PadMapper: Sendable {
         let dy = -rawDY / Self.mouseRawUnitsPerPoint * gain * configuration.sensitivity
         guard abs(dx) >= 0.05 || abs(dy) >= 0.05 else { return [] }
         return [.mouseMove(dx: dx, dy: dy)]
+    }
+
+    private mutating func smoothedMouseMoveActions(
+        rawDX: Double,
+        rawDY: Double,
+        previousTimestamp: UInt64,
+        timestamp: UInt64
+    ) -> [TrackpadOutputAction] {
+        let gain = Self.mouseAccelerationGain(
+            rawDX: rawDX,
+            rawDY: rawDY,
+            previousTimestamp: previousTimestamp,
+            timestamp: timestamp,
+            amount: configuration.mouseAcceleration
+        )
+        pendingSmoothedDX += rawDX / Self.mouseRawUnitsPerPoint
+            * gain
+            * configuration.sensitivity
+        pendingSmoothedDY += -rawDY / Self.mouseRawUnitsPerPoint
+            * gain
+            * configuration.sensitivity
+        guard abs(pendingSmoothedDX) >= 0.05 || abs(pendingSmoothedDY) >= 0.05 else {
+            return []
+        }
+
+        let action = TrackpadOutputAction.mouseMove(
+            dx: pendingSmoothedDX,
+            dy: pendingSmoothedDY
+        )
+        clearPendingSmoothedMotion()
+        return [action]
+    }
+
+    private mutating func resetPointerMotion(anchor: TrackpadSample? = nil) {
+        pointerFilter.reset(anchor: anchor)
+        clearPendingSmoothedMotion()
+    }
+
+    private mutating func clearPendingSmoothedMotion() {
+        pendingSmoothedDX = 0
+        pendingSmoothedDY = 0
     }
 
     private mutating func updateButtonZones(to next: Set<ButtonZone>) throws -> [TrackpadOutputAction] {

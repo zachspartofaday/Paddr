@@ -11,7 +11,8 @@ User-visible changes to Paddr are recorded here. Release entries describe confir
   transitions to normal pointer tracking without a catch-up jump
   ([#83](https://github.com/zachspartofaday/Paddr/issues/83)).
 - Added optional, adjustable pointer smoothing. The speed-adaptive filter reduces slow jitter while
-  retaining fast response, remains off by default, and can be tuned independently for each pad.
+  retaining fast response, preserves sustained slow motion below the per-report noise gate, remains
+  off by default, and can be tuned independently for each pad.
 
 ## 0.11.0 — 2026-08-24
 

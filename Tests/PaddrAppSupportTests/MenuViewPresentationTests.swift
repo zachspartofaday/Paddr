@@ -984,6 +984,27 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertFalse(configuration.tapStabilizationEnabled)
     }
 
+    func testTapStabilizationUsesCompleteLocalizedToleranceForSliderAccessibilityValue() {
+        let valueText = TapStabilizationPresentation.toleranceValue(
+            points: 6,
+            locale: Locale(identifier: "en")
+        )
+        XCTAssertEqual(valueText, "6 pt")
+        XCTAssertEqual(
+            ToggleValueSliderRow(
+                title: "Tap stabilization",
+                systemImage: "hand.tap",
+                isEnabled: .constant(true),
+                value: .constant(6),
+                range: ConfigurationLimits.tapStabilizationThresholdPoints,
+                step: 1,
+                valueText: valueText,
+                accessibilityIdentifier: "tap-stabilization-test"
+            ).sliderAccessibilityValue,
+            valueText
+        )
+    }
+
     func testProfilePickerPresentsPendingCreatedProfile() async throws {
         try await assertPendingProfilePicker(
             expectedName: "Third",

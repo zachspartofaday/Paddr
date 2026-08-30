@@ -1,6 +1,9 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%arg pt": {
+      "comment": "Tap-stabilization tolerance value; the argument is a distance in points."
+    },
     "%arg: %arg": {
       "comment": "Status-pill help text; the arguments are the status title and its current value."
     },
