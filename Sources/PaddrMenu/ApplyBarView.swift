@@ -142,8 +142,7 @@ struct ApplyBarView: View {
         if let messageState = model.status.messageState {
             Label {
                 Text(model.status.message)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
             } icon: {
                 Image(
                     systemName: messageState == .failure

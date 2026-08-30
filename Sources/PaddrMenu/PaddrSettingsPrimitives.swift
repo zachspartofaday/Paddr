@@ -90,6 +90,7 @@ struct PaddrSettingsRow<Control: View>: View {
     private var label: some View {
         Label(title, systemImage: systemImage)
             .paddrTypography(.rowLabel)
+            .accessibilityHidden(true)
     }
 }
 

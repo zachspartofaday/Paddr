@@ -22,4 +22,40 @@ final class WindowFrameGeometryTests: XCTestCase {
 
         XCTAssertEqual(result, CGSize(width: 720, height: 480))
     }
+
+    func testFormerDefaultFrameGrowsToTheNewDefault() {
+        XCTAssertEqual(
+            WindowFrameGeometry.migratedUsableSize(
+                restoredSize: CGSize(width: 1_280, height: 700),
+                legacyDefaultSize: CGSize(width: 1_280, height: 700),
+                newDefaultSize: CGSize(width: 1_280, height: 760),
+                minimumSize: CGSize(width: 680, height: 600)
+            ),
+            CGSize(width: 1_280, height: 760)
+        )
+    }
+
+    func testCustomFrameIsPreservedAboveTheNewMinimum() {
+        XCTAssertEqual(
+            WindowFrameGeometry.migratedUsableSize(
+                restoredSize: CGSize(width: 1_410, height: 830),
+                legacyDefaultSize: CGSize(width: 1_280, height: 700),
+                newDefaultSize: CGSize(width: 1_280, height: 760),
+                minimumSize: CGSize(width: 680, height: 600)
+            ),
+            CGSize(width: 1_410, height: 830)
+        )
+    }
+
+    func testCustomFrameIsClampedToTheNewMinimum() {
+        XCTAssertEqual(
+            WindowFrameGeometry.migratedUsableSize(
+                restoredSize: CGSize(width: 640, height: 520),
+                legacyDefaultSize: CGSize(width: 1_280, height: 700),
+                newDefaultSize: CGSize(width: 1_280, height: 760),
+                minimumSize: CGSize(width: 680, height: 600)
+            ),
+            CGSize(width: 680, height: 600)
+        )
+    }
 }

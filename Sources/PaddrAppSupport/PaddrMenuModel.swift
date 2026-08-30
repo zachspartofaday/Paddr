@@ -292,6 +292,81 @@ public final class PaddrMenuModel {
         }
     }
 
+    /// Persists the newest draft before application termination without replacing the
+    /// running session. Edits made while an earlier save was in flight are saved in a
+    /// subsequent pass before this method reports success.
+    public func saveBeforeTermination() async -> Bool {
+        await initializationTask?.value
+
+        while terminationState == .idle, let pendingTask = configurationTask {
+            await pendingTask.value
+        }
+
+        guard terminationState == .idle, isInitialized else { return false }
+        guard hasUnsavedChanges else { return true }
+        guard !profileDocumentSaveInProgress else { return false }
+        guard !storageWriteBlocked else {
+            publishStatus(
+                .failure(
+                    .configurationSave(
+                        diagnostic: "Profile storage is unavailable."
+                    )
+                )
+            )
+            statusDidChange?()
+            return false
+        }
+        guard canEditActiveProfile || needsInitialSave else { return false }
+
+        profileOperationInProgress = true
+        profileDocumentSaveInProgress = true
+        statusDidChange?()
+        defer {
+            profileOperationInProgress = false
+            profileDocumentSaveInProgress = false
+            statusDidChange?()
+        }
+
+        while terminationState == .idle, hasUnsavedChanges {
+            let draft = configuration
+            let revision = draftRevision
+            let validated: PaddrConfiguration
+            do {
+                validated = try draft.validated()
+            } catch {
+                publishStatus(
+                    .failure(.configurationInvalid(diagnostic: String(describing: error)))
+                )
+                return false
+            }
+
+            do {
+                var document = profileDocument
+                if !(needsInitialSave && activeProfileID == .default && validated == .default) {
+                    try document.replaceConfiguration(for: activeProfileID, with: validated)
+                }
+                try await dependencies.saveProfiles(document)
+                guard terminationState == .idle else { return false }
+
+                publishProfileDocument(document)
+                savedConfiguration = validated
+                needsInitialSave = false
+                guard draftRevision == revision else { continue }
+
+                publishConfiguration(validated)
+                publishStatus(.configurationSaved)
+                return true
+            } catch {
+                guard terminationState == .idle else { return false }
+                publishStatus(
+                    .failure(.configurationSave(diagnostic: String(describing: error)))
+                )
+                return false
+            }
+        }
+        return terminationState == .idle && !hasUnsavedChanges
+    }
+
     private func initialize(
         replacingRevision initialDraftRevision: UInt64,
         statusGeneration initialStatusGeneration: UInt64
@@ -309,7 +384,7 @@ public final class PaddrMenuModel {
                 needsInitialSave = true
                 if terminationState == .idle {
                     statusGeneration = withStatusPublicationGeneration(statusGeneration) {
-                        publishStatus(.failure(.configurationLoad(diagnostic: diagnostic)))
+                        publishStatus(.failure(.configurationRecovered(diagnostic: diagnostic)))
                     }
                 }
             }

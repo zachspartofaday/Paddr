@@ -100,6 +100,33 @@ enum PaddrFamilyWindowChrome {
         }
     }
 
+    /// Restores compact-titlebar geometry while migrating only the former default size.
+    /// User-customized frames keep their dimensions except where the new minimum clamps them.
+    @discardableResult
+    static func restoreAutosavedUsableFrame(
+        usingName name: String,
+        legacyDefaultSize: NSSize,
+        newDefaultSize: NSSize,
+        minimumSize: NSSize,
+        for window: NSWindow
+    ) -> Bool {
+        guard window.setFrameUsingName(name) else { return false }
+        window.contentView?.layoutSubtreeIfNeeded()
+        let restoredSize = window.contentLayoutRect.size
+        let topLeft = NSPoint(x: window.frame.minX, y: window.frame.maxY)
+        let migratedSize = WindowFrameGeometry.migratedUsableSize(
+            restoredSize: restoredSize,
+            legacyDefaultSize: legacyDefaultSize,
+            newDefaultSize: newDefaultSize,
+            minimumSize: minimumSize
+        )
+        if !restoredSize.isApproximatelyEqual(to: migratedSize) {
+            setUsableLayoutSize(migratedSize, for: window)
+            window.setFrameTopLeftPoint(topLeft)
+        }
+        return true
+    }
+
     /// Restores a physical frame written under a different toolbar style without silently
     /// changing the usable layout size or the saved top edge.
     @discardableResult
@@ -153,6 +180,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var configurationWindowController: NSWindowController?
     private var guideWindowController: NSWindowController?
     private var guidePresentation = OnboardingWindowPresentation()
+    private var isResolvingTerminationRequest = false
+    private var terminationSaveTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let shouldShowGuide = OnboardingEligibility.shouldPresent(
@@ -187,10 +216,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        let waitsForOutputRelease = model.stopForTermination { shouldTerminate in
-            sender.reply(toApplicationShouldTerminate: shouldTerminate)
+        guard !isResolvingTerminationRequest else { return .terminateLater }
+        guard model.hasUnsavedChanges else { return terminationReply(for: sender) }
+
+        isResolvingTerminationRequest = true
+        showConfigurationWindow()
+        guard let window = configurationWindowController?.window else {
+            isResolvingTerminationRequest = false
+            return .terminateCancel
         }
+
+        let alert = PaddrUnsavedQuitAlert.make(profileName: model.activeProfile.name)
+        alert.beginSheetModal(for: window) { [weak self] response in
+            Task { @MainActor [weak self] in
+                self?.resolveUnsavedTermination(response, application: sender)
+            }
+        }
+        return .terminateLater
+    }
+
+    private func resolveUnsavedTermination(
+        _ response: NSApplication.ModalResponse,
+        application: NSApplication
+    ) {
+        switch PaddrUnsavedQuitAlert.action(for: response) {
+        case .saveAndQuit:
+            terminationSaveTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                let didSave = await model.saveBeforeTermination()
+                terminationSaveTask = nil
+                guard didSave else {
+                    isResolvingTerminationRequest = false
+                    application.reply(toApplicationShouldTerminate: false)
+                    return
+                }
+                continueDeferredTermination(application)
+            }
+        case .quitWithoutSaving:
+            continueDeferredTermination(application)
+        case .cancel:
+            isResolvingTerminationRequest = false
+            application.reply(toApplicationShouldTerminate: false)
+        }
+    }
+
+    private func terminationReply(
+        for application: NSApplication
+    ) -> NSApplication.TerminateReply {
+        let waitsForOutputRelease = model.stopForTermination { [weak self] shouldTerminate in
+            self?.isResolvingTerminationRequest = false
+            application.reply(toApplicationShouldTerminate: shouldTerminate)
+        }
+        if waitsForOutputRelease { isResolvingTerminationRequest = true }
         return waitsForOutputRelease ? .terminateLater : .terminateNow
+    }
+
+    private func continueDeferredTermination(_ application: NSApplication) {
+        let waitsForOutputRelease = model.stopForTermination { [weak self] shouldTerminate in
+            self?.isResolvingTerminationRequest = false
+            application.reply(toApplicationShouldTerminate: shouldTerminate)
+        }
+        if !waitsForOutputRelease {
+            isResolvingTerminationRequest = false
+            application.reply(toApplicationShouldTerminate: true)
+        }
     }
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -587,12 +676,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         )
         PaddrFamilyWindowChrome.apply(to: window)
         PaddrFamilyWindowChrome.installConfigurationTitle(window.title, in: window)
-        let autosaveName = "PaddrConfigurationWindow.v7"
+        let autosaveName = "PaddrConfigurationWindow.v8"
+        let previousAutosaveName = "PaddrConfigurationWindow.v7"
         let expandedAutosaveName = "PaddrConfigurationWindow.v6"
         let compactAutosaveName = "PaddrConfigurationWindow.v5"
         let legacyAutosaveName = "PaddrConfigurationWindow.v4"
         if !window.setFrameUsingName(autosaveName) {
-            if PaddrFamilyWindowChrome.migrateAutosavedFrame(
+            if PaddrFamilyWindowChrome.restoreAutosavedUsableFrame(
+                usingName: previousAutosaveName,
+                legacyDefaultSize: NSSize(width: 1_280, height: 700),
+                newDefaultSize: PaddrStyle.Metrics.defaultWindowSize,
+                minimumSize: PaddrStyle.Metrics.minimumWindowSize,
+                for: window
+            ) {
+                // The former default grows to reveal both cards; custom frames are preserved.
+            } else if PaddrFamilyWindowChrome.migrateAutosavedFrame(
                 usingName: expandedAutosaveName,
                 from: .unified,
                 to: .unifiedCompact,

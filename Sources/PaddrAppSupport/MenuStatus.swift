@@ -2,6 +2,7 @@ import Foundation
 
 public enum MenuFailure: Equatable, Sendable {
     case accessibilityRequired
+    case configurationRecovered(diagnostic: String)
     case configurationLoad(diagnostic: String)
     case configurationInvalid(diagnostic: String)
     case configurationSave(diagnostic: String)
@@ -11,17 +12,19 @@ public enum MenuFailure: Equatable, Sendable {
     public var message: LocalizedStringResource {
         switch self {
         case .accessibilityRequired:
-            LocalizedStringResource("Accessibility is required before Paddr can emit mapped input.")
+            LocalizedStringResource("Enable Paddr in Accessibility, then turn Trackpad Output on again.")
+        case .configurationRecovered:
+            LocalizedStringResource("Paddr repaired the saved profile selection. Review the profiles, then choose Save & Apply.")
         case .configurationLoad:
-            LocalizedStringResource("Saved settings could not be loaded. Defaults are shown.")
+            LocalizedStringResource("Saved settings couldn’t be loaded. Repair or move ~/.config/Paddr/config.json, then reopen Paddr.")
         case .configurationInvalid:
-            LocalizedStringResource("Some settings are invalid. Review the values and try again.")
+            LocalizedStringResource("Some settings are invalid. Review the values, then choose Save & Apply again.")
         case .configurationSave:
-            LocalizedStringResource("Settings could not be saved. Your edits are still available.")
+            LocalizedStringResource("Settings couldn’t be saved. Your edits are still available. Choose Save & Apply to try again.")
         case .output:
-            LocalizedStringResource("Trackpad output stopped because of an error.")
+            LocalizedStringResource("Trackpad output stopped because of an error. Check the puck and controller, then turn Trackpad Output on again.")
         case .unexpected:
-            LocalizedStringResource("An unexpected error occurred.")
+            LocalizedStringResource("An unexpected error occurred. Reopen Paddr, then try again.")
         }
     }
 
@@ -29,7 +32,8 @@ public enum MenuFailure: Equatable, Sendable {
         switch self {
         case .accessibilityRequired:
             nil
-        case let .configurationLoad(diagnostic),
+        case let .configurationRecovered(diagnostic),
+             let .configurationLoad(diagnostic),
              let .configurationInvalid(diagnostic),
              let .configurationSave(diagnostic),
              let .output(diagnostic),

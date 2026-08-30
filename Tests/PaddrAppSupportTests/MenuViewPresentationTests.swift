@@ -218,6 +218,36 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertEqual(compactWindow.frame.maxY, expectedTopLeft.y, accuracy: 0.5)
     }
 
+    func testV7DefaultAutosavedFrameGrowsToV8WithoutMovingTopEdge() {
+        let autosaveName = "PaddrConfigurationWindow.v7.Tests.\(UUID().uuidString)"
+        let formerDefault = NSSize(width: 1_280, height: 700)
+        defer { NSWindow.removeFrame(usingName: autosaveName) }
+
+        let v7Window = makeWindow(hasToolbar: false, usesFullSizeContent: true)
+        PaddrFamilyWindowChrome.apply(to: v7Window)
+        PaddrFamilyWindowChrome.setUsableLayoutSize(formerDefault, for: v7Window)
+        v7Window.center()
+        v7Window.contentView?.layoutSubtreeIfNeeded()
+        let expectedTopEdge = v7Window.frame.maxY
+        v7Window.saveFrame(usingName: autosaveName)
+
+        let v8Window = makeWindow(hasToolbar: false, usesFullSizeContent: true)
+        PaddrFamilyWindowChrome.apply(to: v8Window)
+        XCTAssertTrue(
+            PaddrFamilyWindowChrome.restoreAutosavedUsableFrame(
+                usingName: autosaveName,
+                legacyDefaultSize: formerDefault,
+                newDefaultSize: PaddrStyle.Metrics.defaultWindowSize,
+                minimumSize: PaddrStyle.Metrics.minimumWindowSize,
+                for: v8Window
+            )
+        )
+        v8Window.contentView?.layoutSubtreeIfNeeded()
+
+        assertSize(v8Window.contentLayoutRect.size, equals: PaddrStyle.Metrics.defaultWindowSize)
+        XCTAssertEqual(v8Window.frame.maxY, expectedTopEdge, accuracy: 0.5)
+    }
+
     func testAccessibilityOnboardingPageFitsCompactWindowWithoutScrolling() throws {
         var pager = OnboardingPager()
         pager.advance()
@@ -710,6 +740,8 @@ final class MenuViewPresentationTests: XCTestCase {
                 title: LocalizedStringResource("Accessibility"),
                 detail: LocalizedStringResource("Sends mapped mouse, scroll, and keyboard input."),
                 isGranted: false,
+                requestAccessibilityLabel: "Request Accessibility",
+                settingsAccessibilityLabel: "Open Accessibility Settings",
                 requestAction: {},
                 settingsAction: {}
             )
@@ -752,6 +784,21 @@ final class MenuViewPresentationTests: XCTestCase {
             "The Behavior selector already communicates the selected mode"
         )
         XCTAssertEqual(selector.accessibilityLabel(), "Behavior")
+    }
+
+    func testPointerSettingsFollowResponseThenTapWorkflowOrder() async throws {
+        XCTAssertEqual(
+            PointerSetting.allCases,
+            [
+                .sensitivity,
+                .acceleration,
+                .smoothing,
+                .tapAction,
+                .tapRadius,
+                .pointerTracking,
+                .tapStabilization,
+            ]
+        )
     }
 
     func testAdaptivePadHeaderMovesTheSameSelectorBelowTitleOnlyWhenNeeded() throws {
@@ -990,18 +1037,75 @@ final class MenuViewPresentationTests: XCTestCase {
             locale: Locale(identifier: "en")
         )
         XCTAssertEqual(valueText, "6 pt")
+        let row = ToggleValueSliderRow(
+            title: "Tap stabilization",
+            systemImage: "hand.tap",
+            isEnabled: .constant(true),
+            value: .constant(6),
+            range: ConfigurationLimits.tapStabilizationThresholdPoints,
+            step: 1,
+            valueText: valueText,
+            accessibilityIdentifier: "tap-stabilization-test",
+            sliderAccessibilityLabel: "Tap Stabilization Tolerance"
+        )
+        XCTAssertEqual(row.sliderAccessibilityValue, valueText)
+        XCTAssertEqual(row.sliderAccessibilityLabelText, "Tap Stabilization Tolerance")
+    }
+
+    func testPermissionActionsExposeUniqueVoiceControlNames() {
+        let input = PermissionTile(
+            title: "Input Monitoring",
+            detail: "Receives Steam Controller 2 reports from the puck.",
+            isGranted: false,
+            identifier: "input-monitoring",
+            requestAccessibilityLabel: "Request Input Monitoring",
+            settingsAccessibilityLabel: "Open Input Monitoring Settings",
+            requestAction: {},
+            settingsAction: {}
+        )
+        let accessibility = PermissionTile(
+            title: "Accessibility",
+            detail: "Sends mapped mouse, scroll, and keyboard input.",
+            isGranted: false,
+            identifier: "accessibility",
+            requestAccessibilityLabel: "Request Accessibility",
+            settingsAccessibilityLabel: "Open Accessibility Settings",
+            requestAction: {},
+            settingsAction: {}
+        )
+
+        XCTAssertEqual(String(localized: input.requestAccessibilityLabel), "Request Input Monitoring")
+        XCTAssertEqual(String(localized: input.settingsAccessibilityLabel), "Open Input Monitoring Settings")
+        XCTAssertEqual(String(localized: accessibility.requestAccessibilityLabel), "Request Accessibility")
+        XCTAssertEqual(String(localized: accessibility.settingsAccessibilityLabel), "Open Accessibility Settings")
+    }
+
+    func testUnsavedQuitAlertUsesThreeExplicitActions() {
+        let alert = PaddrUnsavedQuitAlert.make(profileName: "Editing")
+
+        XCTAssertEqual(alert.messageText, "Save changes before quitting?")
         XCTAssertEqual(
-            ToggleValueSliderRow(
-                title: "Tap stabilization",
-                systemImage: "hand.tap",
-                isEnabled: .constant(true),
-                value: .constant(6),
-                range: ConfigurationLimits.tapStabilizationThresholdPoints,
-                step: 1,
-                valueText: valueText,
-                accessibilityIdentifier: "tap-stabilization-test"
-            ).sliderAccessibilityValue,
-            valueText
+            alert.informativeText,
+            "Changes to “Editing” will be lost if you quit without saving."
+        )
+        XCTAssertEqual(alert.buttons.map(\.title), [
+            "Save & Quit",
+            "Cancel",
+            "Quit Without Saving"
+        ])
+        XCTAssertEqual(alert.buttons[1].keyEquivalent, "\u{1b}")
+        XCTAssertTrue(alert.buttons[2].hasDestructiveAction)
+        XCTAssertEqual(
+            PaddrUnsavedQuitAlert.action(for: .alertFirstButtonReturn),
+            .saveAndQuit
+        )
+        XCTAssertEqual(
+            PaddrUnsavedQuitAlert.action(for: .alertSecondButtonReturn),
+            .cancel
+        )
+        XCTAssertEqual(
+            PaddrUnsavedQuitAlert.action(for: .alertThirdButtonReturn),
+            .quitWithoutSaving
         )
     }
 

@@ -20,6 +20,16 @@ enum TapStabilizationPresentation {
     }
 }
 
+enum PointerSetting: CaseIterable {
+    case sensitivity
+    case acceleration
+    case smoothing
+    case tapAction
+    case tapRadius
+    case pointerTracking
+    case tapStabilization
+}
+
 struct PadConfigurationView: View {
     @Environment(\.paddrFillsEqualHeightColumn) private var fillsEqualHeightColumn
     @Environment(\.layoutDirection) private var layoutDirection
@@ -103,83 +113,9 @@ struct PadConfigurationView: View {
         case .mouse:
             previewSplit(previewTitle: LocalizedStringResource("Tap area")) {
                 PaddrSettingsGroup {
-                    sensitivityRow
-                    ValueSliderRow(
-                        title: "Pointer acceleration",
-                        systemImage: "arrow.up.right.and.arrow.down.left",
-                        value: $configuration.mouseAcceleration,
-                        range: ConfigurationLimits.mouseAcceleration,
-                        step: 0.01,
-                        valueText: configuration.mouseAcceleration.formatted(
-                            .percent.precision(.fractionLength(0))
-                        )
-                    )
-                    .help("Zero is linear. Higher values increase fast-motion gain.")
-                    ToggleValueSliderRow(
-                        title: "Pointer smoothing",
-                        systemImage: "waveform.path",
-                        isEnabled: $configuration.pointerSmoothingEnabled,
-                        value: $configuration.pointerSmoothingStrength,
-                        range: ConfigurationLimits.pointerSmoothingStrength,
-                        step: 0.05,
-                        valueText: configuration.pointerSmoothingStrength.formatted(
-                            .percent.precision(.fractionLength(0))
-                        ),
-                        accessibilityIdentifier: PaddrAccessibility.identifier(
-                            "pad",
-                            side.rawValue,
-                            "pointer-smoothing"
-                        )
-                    )
-                    .help("Smooths slow pointer jitter while preserving fast movement. The slider controls smoothing strength.")
-                    ValueSliderRow(
-                        title: "Center tap radius",
-                        systemImage: "scope",
-                        value: $configuration.mouseDeadzone,
-                        range: ConfigurationLimits.mouseDeadzone,
-                        step: 0.01,
-                        valueText: configuration.mouseDeadzone.formatted(.percent.precision(.fractionLength(0)))
-                    )
-                    .help("The radius starts at the pad center. Leaving it cancels the tap. At 0%, taps use the maximum-movement limit.")
-                    PaddrSettingsRow(
-                        title: "Track pointer inside tap radius",
-                        systemImage: "cursorarrow.motionlines",
-                        labelWidth: nil
-                    ) {
-                        Toggle(
-                            "Track pointer inside tap radius",
-                            isOn: tracksPointerInsideTapRadius
-                        )
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .accessibilityLabel("Track pointer inside tap radius")
-                        .accessibilityValue(
-                            configuration.centerTapTrackingMode == .decoupled
-                                ? LocalizedStringResource("On")
-                                : LocalizedStringResource("Off")
-                        )
-                        .help("When on, pointer movement continues inside and across the center tap radius. When off, the radius also acts as a pointer dead zone.")
-                        .paddrAccessibilityID("pad", side.rawValue, "pointer-tracking")
+                    ForEach(PointerSetting.allCases, id: \.self) { setting in
+                        pointerSetting(setting)
                     }
-                    TapActionPicker(selection: $configuration.tapKey)
-                    ToggleValueSliderRow(
-                        title: "Tap stabilization",
-                        systemImage: "hand.tap",
-                        isEnabled: $configuration.tapStabilizationEnabled,
-                        value: $configuration.tapStabilizationThresholdPoints,
-                        range: ConfigurationLimits.tapStabilizationThresholdPoints,
-                        step: 1,
-                        valueText: TapStabilizationPresentation.toleranceValue(
-                            points: configuration.tapStabilizationThresholdPoints,
-                            locale: locale
-                        ),
-                        accessibilityIdentifier: PaddrAccessibility.identifier(
-                            "pad",
-                            side.rawValue,
-                            "tap-stabilization"
-                        )
-                    )
-                    .help("Keeps the cursor fixed during a tap. Moving beyond the tolerance cancels the tap and resumes pointer tracking.")
                 }
             }
 
@@ -193,6 +129,100 @@ struct PadConfigurationView: View {
 
         case .dpad:
             ButtonZoneConfigurationView(configuration: $configuration)
+        }
+    }
+
+    @ViewBuilder
+    private func pointerSetting(_ setting: PointerSetting) -> some View {
+        switch setting {
+        case .sensitivity:
+            sensitivityRow
+        case .acceleration:
+            ValueSliderRow(
+                title: "Pointer acceleration",
+                systemImage: "arrow.up.right.and.arrow.down.left",
+                value: $configuration.mouseAcceleration,
+                range: ConfigurationLimits.mouseAcceleration,
+                step: 0.01,
+                valueText: configuration.mouseAcceleration.formatted(
+                    .percent.precision(.fractionLength(0))
+                )
+            )
+            .help("Zero is linear. Higher values increase fast-motion gain.")
+        case .smoothing:
+            ToggleValueSliderRow(
+                title: "Pointer smoothing",
+                systemImage: "waveform.path",
+                isEnabled: $configuration.pointerSmoothingEnabled,
+                value: $configuration.pointerSmoothingStrength,
+                range: ConfigurationLimits.pointerSmoothingStrength,
+                step: 0.05,
+                valueText: configuration.pointerSmoothingStrength.formatted(
+                    .percent.precision(.fractionLength(0))
+                ),
+                accessibilityIdentifier: PaddrAccessibility.identifier(
+                    "pad",
+                    side.rawValue,
+                    "pointer-smoothing"
+                ),
+                sliderAccessibilityLabel: "Pointer Smoothing Strength"
+            )
+            .help("Smooths slow pointer jitter while preserving fast movement. The slider controls smoothing strength.")
+        case .tapAction:
+            TapActionPicker(selection: $configuration.tapKey)
+        case .tapRadius:
+            ValueSliderRow(
+                title: "Center tap radius",
+                systemImage: "scope",
+                value: $configuration.mouseDeadzone,
+                range: ConfigurationLimits.mouseDeadzone,
+                step: 0.01,
+                valueText: configuration.mouseDeadzone.formatted(
+                    .percent.precision(.fractionLength(0))
+                )
+            )
+            .help("The radius starts at the pad center. Leaving it cancels the tap. At 0%, taps use the maximum-movement limit.")
+        case .pointerTracking:
+            PaddrSettingsRow(
+                title: "Track pointer inside tap radius",
+                systemImage: "cursorarrow.motionlines",
+                labelWidth: nil
+            ) {
+                Toggle(
+                    "Track pointer inside tap radius",
+                    isOn: tracksPointerInsideTapRadius
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .accessibilityLabel("Track pointer inside tap radius")
+                .accessibilityValue(
+                    configuration.centerTapTrackingMode == .decoupled
+                        ? LocalizedStringResource("On")
+                        : LocalizedStringResource("Off")
+                )
+                .help("When on, pointer movement continues inside and across the center tap radius. When off, the radius also acts as a pointer dead zone.")
+                .paddrAccessibilityID("pad", side.rawValue, "pointer-tracking")
+            }
+        case .tapStabilization:
+            ToggleValueSliderRow(
+                title: "Tap stabilization",
+                systemImage: "hand.tap",
+                isEnabled: $configuration.tapStabilizationEnabled,
+                value: $configuration.tapStabilizationThresholdPoints,
+                range: ConfigurationLimits.tapStabilizationThresholdPoints,
+                step: 1,
+                valueText: TapStabilizationPresentation.toleranceValue(
+                    points: configuration.tapStabilizationThresholdPoints,
+                    locale: locale
+                ),
+                accessibilityIdentifier: PaddrAccessibility.identifier(
+                    "pad",
+                    side.rawValue,
+                    "tap-stabilization"
+                ),
+                sliderAccessibilityLabel: "Tap Stabilization Tolerance"
+            )
+            .help("Keeps the cursor fixed during a tap. Moving beyond the tolerance cancels the tap and resumes pointer tracking.")
         }
     }
 

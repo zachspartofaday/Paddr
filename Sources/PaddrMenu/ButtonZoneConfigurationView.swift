@@ -86,6 +86,7 @@ struct ButtonZoneConfigurationView: View {
                             .paddrTypography(.value)
                             .foregroundStyle(.secondary)
                             .frame(width: PaddrStyle.Width.readout, alignment: .trailing)
+                            .accessibilityHidden(true)
                     }
                 }
             }

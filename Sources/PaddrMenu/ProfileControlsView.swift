@@ -79,8 +79,9 @@ struct ProfileControlsView: View {
                         .labelStyle(.titleAndIcon)
                         .fixedSize(horizontal: true, vertical: false)
                 } else {
-                    Label("Profile actions", systemImage: "ellipsis.circle")
-                        .labelStyle(.iconOnly)
+                    Label("Profile Actions", systemImage: "ellipsis.circle")
+                        .labelStyle(.titleAndIcon)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
             .fixedSize(horizontal: true, vertical: false)
@@ -164,7 +165,7 @@ struct ProfileControlsView: View {
     }
 
     private var profileActionsAccessibilityLabel: LocalizedStringResource {
-        isDefaultProfile ? "Duplicate Default to Edit" : "Profile actions"
+        isDefaultProfile ? "Duplicate Default to Edit" : "Profile Actions"
     }
 
     private var profileActionsAccessibilityValue: LocalizedStringResource {

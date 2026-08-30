@@ -1,6 +1,6 @@
 # Paddr Family UI Parity Manifest
 
-Updated: 2026-08-23  
+Updated: 2026-08-30
 Status: Implemented for the Paddr 0.11 development line  
 Paddr issues: #76, #77, #78  
 Authority: BottleRocket `docs/marketing/PADDR_FAMILY_UI_AUTHORITY.md`, issue #267,
@@ -71,7 +71,7 @@ means the authority expressly withholds it from the MIT grant.
 | `SCMenuSelector` | **Adapted only as menu chrome:** native Paddr `Picker` and `Menu` controls use `paddrMenuSelector()`. |
 | `SCPanelSection` | **Adapted:** `PaddrSectionContainer` and `PaddrSettingsGroup`; Paddr does not adopt the reference persistence behavior. |
 | `SCContextHelpCard` | **Adapted as tone/surface presentation:** `PermissionTile`; permission state and actions remain Paddr-owned. |
-| `SCWindowConfigurator` | **Adapted only as the window geometry contract:** `PaddrStyle.Metrics`. Paddr's `AppDelegate` adds product-local full-size, transparent, separatorless family chrome while retaining a compact unified toolbar, visible plain title treatment, usable-layout sizing, activation, and window lifecycle behavior. Legacy v4/v5 and short-lived regular-unified v6 autosaved geometry migrates to the full-size v7 contract without losing usable size or top-edge position; content scrolls within the user-managed window instead of resizing it to the document. |
+| `SCWindowConfigurator` | **Adapted only as the window geometry contract:** `PaddrStyle.Metrics`. Paddr's `AppDelegate` adds product-local full-size, transparent, separatorless family chrome while retaining a compact unified toolbar, visible plain title treatment, usable-layout sizing, activation, and window lifecycle behavior. Legacy v4/v5, short-lived regular-unified v6, and compact v7 autosaved geometry migrates to the full-size v8 contract without losing custom usable size or top-edge position. The former 1280×700 default alone grows to 1280×760, and custom frames clamp to the new minimum; content scrolls within the user-managed window instead of resizing it to the document. |
 
 ### `SCMapprAccessibility.swift`
 
@@ -126,8 +126,9 @@ editor subtrees during reflow.
 | primary / secondary / tertiary text | `#FFFFFF` / `#D7E9FF` / `#9DC4F8` |
 | control height / radius | `38` / `7` points |
 | reference content width / outer spacing | `820` / `24` points; Paddr retains the outer spacing |
-| Paddr default usable window / content width | `1280 × 700` / `1232` points; product-local width keeps both nested pad editors in columns |
-| configuration titlebar | compact unified style; plain leading 16-point semibold title, transparent background, no separator; v4/v5/v6 frames migrate to v7 without losing usable height or their top edge |
+| Paddr default usable window / content width | `1280 × 760` / `1232` points; product-local width keeps both nested pad editors in columns and the complete card enclosure visible above the status bar |
+| Paddr minimum usable window | `680 × 600` points; compact content remains vertically scrollable |
+| configuration titlebar | compact unified style; plain leading 16-point semibold title, transparent background, no separator; v4/v5/v6/v7 frames migrate to v8 while preserving custom geometry and the saved top edge |
 | card / inset-panel content margin | `16` / `16` points; the card modifier and section container own these insets |
 | sibling-card / row / inline-control gap | `16` / `12` / `8` points |
 | preview–inspector gutter | `24` points |
@@ -156,10 +157,12 @@ claims of BottleRocket token parity:
 - Left and Right configurations remain independent and keep their existing encoded form.
 - Both Left and Right editors stay mounted and independently bound to their existing
   configuration values. There is no selected-side state or persistence seam.
-- Fresh default geometry uses a 1280×700-point usable window and two equal 608-point pad
+- Fresh default geometry uses a 1280×760-point usable window and two equal 608-point pad
   columns, keeping each pad preview and its settings visible side-by-side. Wider user or
-  restored windows expand those columns fluidly; existing autosaved sizes remain respected,
-  document height remains user-controlled, and the configuration surface scrolls within it.
+  restored windows expand those columns fluidly. The two permission tiles share a row at
+  regular text sizes when at least 960 points are available and stack below that breakpoint
+  or at accessibility text sizes. Custom autosaved sizes remain respected above the 680×600
+  minimum, document height remains user-controlled, and the configuration surface scrolls within it.
 - The 24-point canvas margin, 16-point primary-card and inset-panel margins, 16-point sibling-card
   gap, 12-point row rhythm, 8-point inline-control gap, and 4-point icon gap form one declared
   spacing hierarchy. Fixed 190×182 pad maps center inside compact sections, and settings-row

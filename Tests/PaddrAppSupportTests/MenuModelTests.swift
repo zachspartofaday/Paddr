@@ -1693,6 +1693,81 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(relaunched.hasUnsavedChanges)
     }
 
+    func testSaveBeforeTerminationPersistsDraftWithoutRestartingOutput() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, first, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let session = ManualEventSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        model.isEnabled = true
+        await session.connect(receiver: "Fake puck")
+        await waitUntil(model: model) { model.isRunning }
+        let startCountBeforeSave = await session.startCount
+
+        model.configuration.right.sensitivity = 7
+        let didSave = await model.saveBeforeTermination()
+        let startCountAfterSave = await session.startCount
+        XCTAssertTrue(didSave)
+
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertTrue(model.isEnabled)
+        XCTAssertTrue(model.isRunning)
+        XCTAssertEqual(startCountAfterSave, startCountBeforeSave)
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.right.sensitivity,
+            7
+        )
+    }
+
+    func testSaveBeforeTerminationFailurePreservesDraftAndCancelsQuit() async throws {
+        let state = readyState(receiver: nil)
+        let (document, _, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        state.saveFailure = "Injected quit save failure."
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.left.sensitivity = 8
+
+        let didSave = await model.saveBeforeTermination()
+        XCTAssertFalse(didSave)
+
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertEqual(model.configuration.left.sensitivity, 8)
+        guard case let .failure(.configurationSave(diagnostic)) = model.status else {
+            return XCTFail("Expected a save failure")
+        }
+        XCTAssertTrue(diagnostic.contains("Injected quit save failure."))
+    }
+
+    func testSaveBeforeTerminationWaitsForEarlierSaveThenPersistsNewerEdits() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = BoundedTestGate()
+        state.saveGate = saveGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.left.sensitivity = 6
+        model.saveAndApply()
+        await waitUntil { state.saveCallCount == 1 }
+
+        model.configuration.left.sensitivity = 9
+        let quitSave = Task { await model.saveBeforeTermination() }
+        state.saveGate = nil
+        saveGate.signal()
+
+        let didSave = await quitSave.value
+        XCTAssertTrue(didSave)
+        XCTAssertEqual(state.saveCallCount, 2)
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
+            9
+        )
+    }
+
     func testTerminationAwaitsSessionStop() async {
         let state = readyState(receiver: nil)
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed], keepsStreamOpen: true)
@@ -2028,7 +2103,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertTrue(model.needsInitialSave)
         XCTAssertTrue(model.canSaveAndApply)
         XCTAssertFalse(model.canEditActiveProfile)
-        guard case let .failure(.configurationLoad(diagnostic)) = model.status else {
+        guard case let .failure(.configurationRecovered(diagnostic)) = model.status else {
             return XCTFail("Expected the preserved repair diagnostic")
         }
         XCTAssertEqual(diagnostic, state.loadDiagnostic)

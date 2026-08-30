@@ -150,9 +150,11 @@ struct OnboardingGuideView: View {
 
                 Button("Request", action: model.requestInputMonitoring)
                     .paddrActionButton(.primary)
+                    .accessibilityLabel("Request Input Monitoring")
                     .paddrAccessibilityID("guide", "input-monitoring", "request")
                 Button("Open Settings", action: model.openInputMonitoringSettings)
                     .paddrActionButton(.secondary)
+                    .accessibilityLabel("Open Input Monitoring Settings")
                     .paddrAccessibilityID("guide", "input-monitoring", "settings")
             }
 
@@ -170,9 +172,11 @@ struct OnboardingGuideView: View {
 
                 Button("Request", action: model.requestAccessibility)
                     .paddrActionButton(.primary)
+                    .accessibilityLabel("Request Accessibility")
                     .paddrAccessibilityID("guide", "accessibility", "request")
                 Button("Open Settings", action: model.openAccessibilitySettings)
                     .paddrActionButton(.secondary)
+                    .accessibilityLabel("Open Accessibility Settings")
                     .paddrAccessibilityID("guide", "accessibility", "settings")
             }
         }
