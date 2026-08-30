@@ -181,7 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var guideWindowController: NSWindowController?
     private var guidePresentation = OnboardingWindowPresentation()
     private var isResolvingTerminationRequest = false
-    private var terminationSaveTask: Task<Void, Never>?
+    private var terminationResolutionTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let shouldShowGuide = OnboardingEligibility.shouldPresent(
@@ -217,22 +217,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !isResolvingTerminationRequest else { return .terminateLater }
+        if model.hasPendingConfigurationPersistence {
+            isResolvingTerminationRequest = true
+            terminationResolutionTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                let hasUnsavedChanges = await model.hasUnsavedChangesAfterPendingPersistence()
+                terminationResolutionTask = nil
+                resolvePreparedTermination(
+                    hasUnsavedChanges: hasUnsavedChanges,
+                    application: sender
+                )
+            }
+            return .terminateLater
+        }
         guard model.hasUnsavedChanges else { return terminationReply(for: sender) }
 
         isResolvingTerminationRequest = true
+        presentUnsavedTerminationAlert(application: sender)
+        return .terminateLater
+    }
+
+    private func resolvePreparedTermination(
+        hasUnsavedChanges: Bool,
+        application: NSApplication
+    ) {
+        guard hasUnsavedChanges else {
+            continueDeferredTermination(application)
+            return
+        }
+        presentUnsavedTerminationAlert(application: application)
+    }
+
+    private func presentUnsavedTerminationAlert(application: NSApplication) {
         showConfigurationWindow()
         guard let window = configurationWindowController?.window else {
             isResolvingTerminationRequest = false
-            return .terminateCancel
+            application.reply(toApplicationShouldTerminate: false)
+            return
         }
 
         let alert = PaddrUnsavedQuitAlert.make(profileName: model.activeProfile.name)
         alert.beginSheetModal(for: window) { [weak self] response in
             Task { @MainActor [weak self] in
-                self?.resolveUnsavedTermination(response, application: sender)
+                self?.resolveUnsavedTermination(response, application: application)
             }
         }
-        return .terminateLater
     }
 
     private func resolveUnsavedTermination(
@@ -241,10 +270,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     ) {
         switch PaddrUnsavedQuitAlert.action(for: response) {
         case .saveAndQuit:
-            terminationSaveTask = Task { @MainActor [weak self] in
+            terminationResolutionTask = Task { @MainActor [weak self] in
                 guard let self else { return }
                 let didSave = await model.saveBeforeTermination()
-                terminationSaveTask = nil
+                terminationResolutionTask = nil
                 guard didSave else {
                     isResolvingTerminationRequest = false
                     application.reply(toApplicationShouldTerminate: false)

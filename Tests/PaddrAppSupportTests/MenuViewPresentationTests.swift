@@ -945,7 +945,7 @@ final class MenuViewPresentationTests: XCTestCase {
 
         let defaultSwitches = descendants(of: NSSwitch.self, in: defaultHostingView)
         XCTAssertEqual(defaultSwitches.count, 3)
-        let defaultToggle = try XCTUnwrap(defaultSwitches.dropFirst().first)
+        let defaultToggle = try XCTUnwrap(defaultSwitches.last)
         XCTAssertEqual(defaultToggle.state, .on)
         XCTAssertEqual(defaultToggle.accessibilityRoleDescription(), "switch")
         XCTAssertEqual(accessibilityIntegerValue(of: defaultToggle), 1)
@@ -981,7 +981,7 @@ final class MenuViewPresentationTests: XCTestCase {
 
         let legacySwitches = descendants(of: NSSwitch.self, in: legacyHostingView)
         XCTAssertEqual(legacySwitches.count, 3)
-        let legacyToggle = try XCTUnwrap(legacySwitches.dropFirst().first)
+        let legacyToggle = try XCTUnwrap(legacySwitches.last)
         XCTAssertEqual(legacy.centerTapTrackingMode, .coupled)
         XCTAssertEqual(legacyToggle.state, .off)
         XCTAssertEqual(legacyToggle.accessibilityRoleDescription(), "switch")
@@ -1018,7 +1018,7 @@ final class MenuViewPresentationTests: XCTestCase {
         let switches = descendants(of: NSSwitch.self, in: hostingView)
         XCTAssertEqual(switches.count, 3)
         let smoothing = try XCTUnwrap(switches.first)
-        let stabilization = try XCTUnwrap(switches.last)
+        let stabilization = try XCTUnwrap(switches.dropFirst().first)
 
         XCTAssertEqual(smoothing.state, .off)
         XCTAssertEqual(stabilization.state, .on)

@@ -1768,6 +1768,69 @@ final class MenuModelTests: XCTestCase {
         )
     }
 
+    func testTerminationDecisionWaitsForInFlightSaveThatCoversTheDraft() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = BoundedTestGate()
+        state.saveGate = saveGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.left.sensitivity = 6
+        model.saveAndApply()
+        await waitUntil { state.saveCallCount == 1 }
+
+        let decision = Task { await model.hasUnsavedChangesAfterPendingPersistence() }
+        state.saveGate = nil
+        saveGate.signal()
+
+        let hasUnsavedChanges = await decision.value
+        XCTAssertFalse(hasUnsavedChanges)
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertEqual(state.saveCallCount, 1)
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
+            6
+        )
+    }
+
+    func testTerminationDecisionOffersDiscardOnlyForEditsAfterInFlightSave() async throws {
+        let state = readyState(receiver: nil)
+        let (document, first, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let saveGate = BoundedTestGate()
+        state.saveGate = saveGate
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.left.sensitivity = 6
+        model.saveAndApply()
+        await waitUntil { state.saveCallCount == 1 }
+
+        model.configuration.left.sensitivity = 9
+        let decision = Task { await model.hasUnsavedChangesAfterPendingPersistence() }
+        state.saveGate = nil
+        saveGate.signal()
+
+        let hasUnsavedChanges = await decision.value
+        XCTAssertTrue(hasUnsavedChanges)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertEqual(model.configuration.left.sensitivity, 9)
+        XCTAssertEqual(state.saveCallCount, 1)
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
+            6
+        )
+
+        var didReply = false
+        XCTAssertFalse(model.stopForTermination { _ in didReply = true })
+        XCTAssertFalse(didReply)
+        XCTAssertEqual(state.saveCallCount, 1)
+        XCTAssertEqual(
+            state.savedProfileDocument?.profile(id: first.id)?.configuration.left.sensitivity,
+            6
+        )
+    }
+
     func testTerminationAwaitsSessionStop() async {
         let state = readyState(receiver: nil)
         let session = ScriptedSession(events: [.controllerConnected, .outputArmed], keepsStreamOpen: true)

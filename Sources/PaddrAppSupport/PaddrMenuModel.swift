@@ -123,6 +123,7 @@ public final class PaddrMenuModel {
     @ObservationIgnored public var statusDidChange: (@MainActor () -> Void)?
 
     public var hasUnsavedChanges: Bool { needsInitialSave || configuration != savedConfiguration }
+    public var hasPendingConfigurationPersistence: Bool { configurationTask != nil }
     public var hasSystemAccess: Bool { accessibilityTrusted && inputMonitoringGranted }
     public var activeProfile: ConfigurationProfile {
         profiles.first { $0.id == activeProfileID } ?? .default
@@ -290,6 +291,15 @@ public final class PaddrMenuModel {
                 operation: operation
             )
         }
+    }
+
+    /// Waits for saves that were already requested, without persisting newer draft edits,
+    /// then reports whether a quit decision is still required.
+    public func hasUnsavedChangesAfterPendingPersistence() async -> Bool {
+        while terminationState == .idle, let pendingTask = configurationTask {
+            await pendingTask.value
+        }
+        return terminationState == .idle && hasUnsavedChanges
     }
 
     /// Persists the newest draft before application termination without replacing the
