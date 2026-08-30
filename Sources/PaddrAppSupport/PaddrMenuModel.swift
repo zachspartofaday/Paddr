@@ -35,7 +35,10 @@ public final class PaddrMenuModel {
     public var configuration: PaddrConfiguration {
         didSet {
             guard !isPublishingConfiguration, !isRejectingConfigurationEdit else { return }
-            guard isInitialized, !replacesActiveConfiguration else {
+            guard isInitialized,
+                  terminationState == .idle,
+                  !terminationDecisionInProgress,
+                  !replacesActiveConfiguration else {
                 isRejectingConfigurationEdit = true
                 configuration = oldValue
                 isRejectingConfigurationEdit = false
@@ -54,6 +57,7 @@ public final class PaddrMenuModel {
         didSet {
             guard !isRejectingEnabledChange, isEnabled != oldValue else { return }
             guard terminationState == .idle,
+                  !terminationDecisionInProgress,
                   isInitialized,
                   isEnabled == false
                       || ((!profileDocumentSaveInProgress || replacesActiveConfiguration)
@@ -105,9 +109,20 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var isRejectingEnabledChange = false
     private var profileOperationInProgress = false
     private var pendingProfileActivation: ConfigurationProfile?
-    private var profileDocumentSaveInProgress = false
+    private var profileDocumentSaveInProgress = false {
+        didSet {
+            guard oldValue != profileDocumentSaveInProgress else { return }
+            resumePersistenceWaiters()
+        }
+    }
+    @ObservationIgnored private var persistenceWaiters: [CheckedContinuation<Void, Never>] = []
     private var replacesActiveConfiguration = false
-    @ObservationIgnored private var activationCommitPending = false
+    @ObservationIgnored private var activationCommitPending = false {
+        didSet {
+            guard oldValue != activationCommitPending else { return }
+            resumePersistenceWaiters()
+        }
+    }
     @ObservationIgnored private var statusRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var statusRefreshEpoch: UInt64 = 0
     @ObservationIgnored private var receiverStateGeneration: UInt64 = 0
@@ -118,17 +133,25 @@ public final class PaddrMenuModel {
     @ObservationIgnored private var permissionRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var terminationTask: Task<Void, Never>?
     @ObservationIgnored private var terminationState = TerminationState.idle
+    private var terminationDecisionInProgress = false
     @ObservationIgnored private var terminationEpoch: UInt64 = 0
     @ObservationIgnored private var terminationCompletions: [@MainActor (Bool) -> Void] = []
     @ObservationIgnored public var statusDidChange: (@MainActor () -> Void)?
 
     public var hasUnsavedChanges: Bool { needsInitialSave || configuration != savedConfiguration }
+    public var hasPendingConfigurationPersistence: Bool {
+        configurationTask != nil || profileDocumentSaveInProgress || activationCommitPending
+    }
     public var hasSystemAccess: Bool { accessibilityTrusted && inputMonitoringGranted }
     public var activeProfile: ConfigurationProfile {
         profiles.first { $0.id == activeProfileID } ?? .default
     }
     public var canEditActiveProfile: Bool {
-        isInitialized && !replacesActiveConfiguration && activeProfileID != .default
+        terminationState == .idle
+            && !terminationDecisionInProgress
+            && isInitialized
+            && !replacesActiveConfiguration
+            && activeProfileID != .default
     }
     public var profileSelectionPresentation: ProfileSelectionPresentation {
         if let pendingProfileActivation {
@@ -148,16 +171,21 @@ public final class PaddrMenuModel {
         }
     }
     public var canManageProfiles: Bool {
-        terminationState == .idle && isInitialized && !profileOperationInProgress
+        terminationState == .idle
+            && !terminationDecisionInProgress
+            && isInitialized
+            && !profileOperationInProgress
     }
     public var canToggleOutput: Bool {
         terminationState == .idle
+            && !terminationDecisionInProgress
             && isInitialized
             && (!profileDocumentSaveInProgress || replacesActiveConfiguration || isEnabled)
             && (isEnabled || !isReleasingOutput)
     }
     public var canSaveAndApply: Bool {
         terminationState == .idle
+            && !terminationDecisionInProgress
             && isInitialized
             && !storageWriteBlocked
             && !profileDocumentSaveInProgress
@@ -167,6 +195,7 @@ public final class PaddrMenuModel {
     }
     public var canSelectProfileFromMenu: Bool {
         terminationState == .idle
+            && !terminationDecisionInProgress
             && isInitialized
             && !hasUnsavedChanges
             && configurationTask == nil
@@ -214,6 +243,7 @@ public final class PaddrMenuModel {
         statusRefreshTask?.cancel()
         permissionRefreshTask?.cancel()
         terminationTask?.cancel()
+        for waiter in persistenceWaiters { waiter.resume() }
     }
 
     public func refreshStatus() {
@@ -292,6 +322,137 @@ public final class PaddrMenuModel {
         }
     }
 
+    /// Waits for saves that were already requested or scheduled by output activation,
+    /// without starting another save, then reports whether a quit decision is still required.
+    public func hasUnsavedChangesAfterPendingPersistence() async -> Bool {
+        while terminationState == .idle {
+            if let pendingTask = configurationTask {
+                await pendingTask.value
+                continue
+            }
+            guard profileDocumentSaveInProgress || activationCommitPending else { break }
+            await waitForPersistenceStateChange()
+        }
+        return terminationState == .idle && hasUnsavedChanges
+    }
+
+    private func waitForPersistenceStateChange() async {
+        guard profileDocumentSaveInProgress || activationCommitPending else { return }
+        await withCheckedContinuation { continuation in
+            guard profileDocumentSaveInProgress || activationCommitPending else {
+                continuation.resume()
+                return
+            }
+            persistenceWaiters.append(continuation)
+        }
+    }
+
+    private func resumePersistenceWaiters() {
+        let waiters = persistenceWaiters
+        persistenceWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
+    }
+
+    @discardableResult
+    public func beginTerminationDecision() -> Bool {
+        switch terminationState {
+        case .idle, .releasePending:
+            break
+        case .stopping, .finished:
+            return false
+        }
+        guard !terminationDecisionInProgress else { return true }
+        terminationDecisionInProgress = true
+        statusDidChange?()
+        return true
+    }
+
+    public func cancelTerminationDecision() {
+        guard terminationDecisionInProgress else { return }
+        terminationDecisionInProgress = false
+        statusDidChange?()
+    }
+
+    private var canPersistBeforeTermination: Bool {
+        guard isInitialized else { return false }
+        switch terminationState {
+        case .idle:
+            return true
+        case .releasePending:
+            return terminationDecisionInProgress
+        case .stopping, .finished:
+            return false
+        }
+    }
+
+    /// Persists the newest draft before application termination without replacing the
+    /// running session. Edits made while an earlier save was in flight are saved in a
+    /// subsequent pass before this method reports success.
+    public func saveBeforeTermination() async -> Bool {
+        await initializationTask?.value
+
+        while canPersistBeforeTermination, let pendingTask = configurationTask {
+            await pendingTask.value
+        }
+
+        guard canPersistBeforeTermination else { return false }
+        guard hasUnsavedChanges else { return true }
+        guard !profileDocumentSaveInProgress else { return false }
+        guard !storageWriteBlocked else {
+            statusDidChange?()
+            return false
+        }
+        guard activeProfileID != .default || needsInitialSave else { return false }
+
+        profileOperationInProgress = true
+        profileDocumentSaveInProgress = true
+        statusDidChange?()
+        defer {
+            profileOperationInProgress = false
+            profileDocumentSaveInProgress = false
+            statusDidChange?()
+        }
+
+        while canPersistBeforeTermination, hasUnsavedChanges {
+            let draft = configuration
+            let revision = draftRevision
+            let validated: PaddrConfiguration
+            do {
+                validated = try draft.validated()
+            } catch {
+                publishStatus(
+                    .failure(.configurationInvalid(diagnostic: String(describing: error)))
+                )
+                return false
+            }
+
+            do {
+                var document = profileDocument
+                if !(needsInitialSave && activeProfileID == .default && validated == .default) {
+                    try document.replaceConfiguration(for: activeProfileID, with: validated)
+                }
+                try await dependencies.saveProfiles(document)
+                guard canPersistBeforeTermination else { return false }
+
+                publishProfileDocument(document)
+                savedConfiguration = validated
+                needsInitialSave = false
+                guard draftRevision == revision else { continue }
+
+                publishConfiguration(validated)
+                publishStatus(.configurationSaved)
+                return true
+            } catch {
+                guard canPersistBeforeTermination else { return false }
+                publishStatus(
+                    .failure(.configurationSave(diagnostic: String(describing: error)))
+                )
+                return false
+            }
+        }
+        return canPersistBeforeTermination && !hasUnsavedChanges
+    }
+
     private func initialize(
         replacingRevision initialDraftRevision: UInt64,
         statusGeneration initialStatusGeneration: UInt64
@@ -309,7 +470,7 @@ public final class PaddrMenuModel {
                 needsInitialSave = true
                 if terminationState == .idle {
                     statusGeneration = withStatusPublicationGeneration(statusGeneration) {
-                        publishStatus(.failure(.configurationLoad(diagnostic: diagnostic)))
+                        publishStatus(.failure(.configurationRecovered(diagnostic: diagnostic)))
                     }
                 }
             }
@@ -435,7 +596,9 @@ public final class PaddrMenuModel {
         id: ConfigurationProfileID,
         source: ProfileSelectionSource
     ) -> ProfileSelectionRequestResult {
-        guard terminationState == .idle, isInitialized else { return .operationInProgress }
+        guard terminationState == .idle,
+              !terminationDecisionInProgress,
+              isInitialized else { return .operationInProgress }
         guard profileDocument.profile(id: id) != nil else { return .profileNotFound }
         guard !storageWriteBlocked else { return .storageUnavailable }
         guard configurationTask == nil,
@@ -455,7 +618,9 @@ public final class PaddrMenuModel {
         id: ConfigurationProfileID,
         discardChanges: Bool
     ) -> ProfileSelectionRequestResult {
-        guard terminationState == .idle, isInitialized else { return .operationInProgress }
+        guard terminationState == .idle,
+              !terminationDecisionInProgress,
+              isInitialized else { return .operationInProgress }
         guard discardChanges else { return .cancelled }
         guard profileDocument.profile(id: id) != nil else { return .profileNotFound }
         guard !storageWriteBlocked else { return .storageUnavailable }
@@ -590,14 +755,11 @@ public final class PaddrMenuModel {
     private func canBeginProfileMutation(discardingDraft: Bool) -> Bool {
         guard isInitialized,
               terminationState == .idle,
+              !terminationDecisionInProgress,
               configurationTask == nil,
               !profileDocumentSaveInProgress else { return false }
         guard !storageWriteBlocked else {
-            publishProfileOperationFailure(
-                PaddrError.configuration(
-                    "Profile storage could not be loaded. Preserve or repair the original file, then relaunch Paddr before saving."
-                )
-            )
+            statusDidChange?()
             return false
         }
         if discardingDraft, hasUnsavedChanges {
@@ -644,11 +806,7 @@ public final class PaddrMenuModel {
               terminationState == .idle,
               configurationTask == nil else { return }
         guard !storageWriteBlocked else {
-            publishProfileOperationFailure(
-                PaddrError.configuration(
-                    "Profile storage could not be loaded. Preserve or repair the original file, then relaunch Paddr before saving."
-                )
-            )
+            statusDidChange?()
             return
         }
 
@@ -749,19 +907,18 @@ public final class PaddrMenuModel {
             } catch {
                 recordConfigurationDidNotCommit(operation: operation)
                 clearConfigurationTask(operation: operation)
+                let failure: MenuFailure = clearsInitialSave
+                    ? .configurationSave(diagnostic: String(describing: error))
+                    : .profileSave(diagnostic: String(describing: error))
                 if replacingActiveConfiguration, isEnabled {
                     isEnabled = false
                     withStatusPublicationGeneration(currentStatusGeneration) {
-                        publishStatus(
-                            .failure(.configurationSave(diagnostic: String(describing: error)))
-                        )
+                        publishStatus(.failure(failure))
                     }
                 } else {
                     preservingCurrentOperationalStatusAuthority {
                         withStatusPublicationGeneration(operationStatusGeneration) {
-                            publishStatus(
-                                .failure(.configurationSave(diagnostic: String(describing: error)))
-                            )
+                            publishStatus(.failure(failure))
                         }
                     }
                 }
@@ -778,7 +935,7 @@ public final class PaddrMenuModel {
     }
 
     private func publishProfileOperationFailure(_ error: Error) {
-        publishStatus(.failure(.configurationInvalid(diagnostic: String(describing: error))))
+        publishStatus(.failure(.profileInvalid(diagnostic: String(describing: error))))
         statusDidChange?()
     }
 
@@ -792,6 +949,8 @@ public final class PaddrMenuModel {
         case .idle, .releasePending:
             break
         }
+
+        terminationDecisionInProgress = false
 
         guard hasPendingLifecycleWork else {
             permissionRefreshTask?.cancel()
@@ -1496,7 +1655,7 @@ public final class PaddrMenuModel {
             }
             clearTerminationTaskState()
             terminationState = .releasePending
-            publishStatus(.failure(.output(diagnostic: diagnostic)))
+            publishStatus(.failure(.terminationRelease(diagnostic: diagnostic)))
             shouldTerminate = false
         }
         let completions = terminationCompletions

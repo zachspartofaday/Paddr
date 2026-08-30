@@ -37,6 +37,7 @@ struct ValueSliderRow: View {
                     .paddrTypography(.value)
                     .foregroundStyle(.secondary)
                     .frame(width: PaddrStyle.Width.readout, alignment: .trailing)
+                    .accessibilityHidden(true)
             }
         }
     }
@@ -51,8 +52,10 @@ struct ToggleValueSliderRow: View {
     let step: Double
     let valueText: String
     let accessibilityIdentifier: String
+    let sliderAccessibilityLabel: LocalizedStringResource
 
     var sliderAccessibilityValue: String { valueText }
+    var sliderAccessibilityLabelText: String { String(localized: sliderAccessibilityLabel) }
 
     var body: some View {
         PaddrSettingsRow(
@@ -75,13 +78,14 @@ struct ToggleValueSliderRow: View {
                     .frame(minWidth: PaddrStyle.toggleSliderMinimumWidth)
                     .layoutPriority(1)
                     .disabled(!isEnabled)
-                    .accessibilityLabel(title)
+                    .accessibilityLabel(sliderAccessibilityLabel)
                     .accessibilityValue(sliderAccessibilityValue)
                     .accessibilityIdentifier(accessibilityIdentifier + ".strength")
                 Text(valueText)
                     .paddrTypography(.value)
                     .foregroundStyle(.secondary)
                     .frame(width: PaddrStyle.Width.readout, alignment: .trailing)
+                    .accessibilityHidden(true)
             }
         }
     }

@@ -13,6 +13,12 @@
     "Allow Input Monitoring": {
       "comment": "Readiness action requesting Input Monitoring permission."
     },
+    "An unexpected error occurred. Reopen Paddr, then try again.": {
+      "comment": "Unexpected-error recovery instruction."
+    },
+    "Changes to “%arg” will be lost if you quit without saving.": {
+      "comment": "Unsaved-quit warning; the argument is the active profile name."
+    },
     "Controller: %arg": {
       "comment": "Status-menu summary for controller connection."
     },
@@ -28,6 +34,9 @@
     "Enable Trackpad Output": {
       "comment": "Readiness action shown when setup is ready and output is off."
     },
+    "Enable Paddr in Accessibility, then turn Trackpad Output on again.": {
+      "comment": "Recovery instruction after output is blocked by Accessibility permission."
+    },
     "Keeps the cursor fixed during a tap. Moving beyond the tolerance cancels the tap and resumes pointer tracking.": {
       "comment": "Help text for pointer-mode tap stabilization."
     },
@@ -37,11 +46,53 @@
     "Open Source Notices…": {
       "comment": "Menu command that opens the licenses bundled with Paddr."
     },
+    "Open Accessibility Settings": {
+      "comment": "Accessibility name for the action that opens Accessibility privacy settings."
+    },
+    "Open Input Monitoring Settings": {
+      "comment": "Accessibility name for the action that opens Input Monitoring privacy settings."
+    },
     "Output: %arg": {
       "comment": "Status-menu summary for mapped output."
     },
     "Pointer smoothing": {
       "comment": "Per-trackpad control for adaptive pointer smoothing."
+    },
+    "Pointer Smoothing Strength": {
+      "comment": "Accessibility name for the pointer-smoothing strength slider."
+    },
+    "Paddr repaired the saved profile selection. Review the profiles, then choose Save & Apply.": {
+      "comment": "Recovery instruction after Paddr repairs a saved profile selection."
+    },
+    "Profile change couldn’t be completed. Review the profile details, then try again.": {
+      "comment": "Recovery instruction after invalid profile-management input."
+    },
+    "Profile change couldn’t be saved. Make the change again. If it still fails, reopen Paddr.": {
+      "comment": "Recovery instruction after a profile-management save failure."
+    },
+    "Profile Actions": {
+      "comment": "Visible menu label for actions that manage an editable profile."
+    },
+    "Quit Without Saving": {
+      "comment": "Destructive unsaved-quit alert action."
+    },
+    "Request Accessibility": {
+      "comment": "Accessibility name for the action that requests Accessibility permission."
+    },
+    "Request Input Monitoring": {
+      "comment": "Accessibility name for the action that requests Input Monitoring permission."
+    },
+    "Save & Quit": {
+      "comment": "Default unsaved-quit alert action."
+    },
+    "Save changes before quitting?": {
+      "comment": "Title of the unsaved-quit alert."
+    },
+    "Saved settings couldn’t be loaded. Repair or move the existing configuration file in ~/.config/Paddr, ~/.config/PuckPads, ~/.config/TracksBack, or ~/.config/TrackIsBack, then reopen Paddr.": {
+      "comment": "Recovery instruction for unreadable current or legacy saved settings."
+    },
+    "Settings couldn’t be saved. Your edits are still available. Try saving again.": {
+      "comment": "Recovery instruction after a configuration save failure."
     },
     "Paddr. %arg. %arg. %arg. %arg.": {
       "comment": "Menu-bar status item summary in output, controller, transport, profile order."
@@ -66,6 +117,18 @@
     },
     "Tap stabilization": {
       "comment": "Per-trackpad control that keeps the cursor steady during a touch tap."
+    },
+    "Tap Stabilization Tolerance": {
+      "comment": "Accessibility name for the tap-stabilization tolerance slider."
+    },
+    "Paddr couldn’t finish releasing mapped input. Quit Paddr again to retry cleanup.": {
+      "comment": "Recovery instruction after application termination cannot release mapped input."
+    },
+    "Some settings are invalid. Review the values, then choose Save & Apply again.": {
+      "comment": "Recovery instruction for invalid settings."
+    },
+    "Trackpad output stopped because of an error. Check the puck and controller, then turn Trackpad Output on again.": {
+      "comment": "Recovery instruction after a trackpad-output failure."
     },
     "Trackpad Output is unavailable until mapped keys and mouse buttons finish releasing.": {
       "comment": "Disabled reason for the output switch during release."

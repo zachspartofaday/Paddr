@@ -34,6 +34,102 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         )
     }
 
+    func testPermissionTilesUseColumnsAtDefaultAndStackWhenSpaceOrTextRequiresIt() async throws {
+        let model = try makeEditableMenuModel(hasSystemAccess: false)
+        let didInitialize = await waitUntil { model.isInitialized && !model.hasSystemAccess }
+        XCTAssertTrue(didInitialize)
+
+        let hostingView = NSHostingView(rootView: TopControlsView(model: model))
+        hostingView.frame = NSRect(
+            origin: .zero,
+            size: NSSize(width: PaddrStyle.Metrics.defaultContentWidth, height: 320)
+        )
+        await settle(hostingView)
+
+        let inlineHeight = hostingView.fittingSize.height
+
+        hostingView.frame.size.width = PaddrStyle.Metrics.permissionColumnsBreakpoint - 1
+        await settle(hostingView)
+        let compactHeight = hostingView.fittingSize.height
+        XCTAssertGreaterThan(
+            compactHeight,
+            inlineHeight + (PaddrStyle.Metrics.row / 2),
+            "Narrow permission tiles should stack"
+        )
+
+        let accessibilityHost = NSHostingView(
+            rootView: TopControlsView(model: model)
+                .environment(\.dynamicTypeSize, .accessibility5)
+        )
+        accessibilityHost.frame = NSRect(
+            origin: .zero,
+            size: NSSize(width: PaddrStyle.Metrics.defaultContentWidth, height: 500)
+        )
+        await settle(accessibilityHost)
+        XCTAssertGreaterThan(
+            accessibilityHost.fittingSize.height,
+            inlineHeight + (PaddrStyle.Metrics.row / 2),
+            "Accessibility text sizes should stack permission tiles"
+        )
+    }
+
+    func testDefaultPermissionNeededConfigurationShowsCompletePadCardsWithoutScrolling() async throws {
+        let model = try makeEditableMenuModel(hasSystemAccess: false)
+        let didInitialize = await waitUntil { model.isInitialized && !model.hasSystemAccess }
+        XCTAssertTrue(didInitialize)
+        model.configuration.left.mode = .dpad
+        model.configuration.right.mode = .mouse
+
+        let hostingView = NSHostingView(rootView: ConfigurationView(model: model))
+        hostingView.frame = NSRect(origin: .zero, size: PaddrStyle.Metrics.defaultWindowSize)
+        await settle(hostingView, passes: 12)
+
+        let scrollView = try XCTUnwrap(configurationScrollView(in: hostingView))
+        let contentHeight = await configurationContentHeight(
+            model: model,
+            width: scrollView.contentSize.width
+        )
+        XCTAssertLessThanOrEqual(
+            contentHeight,
+            scrollView.contentSize.height + 0.5,
+            "The default permission-needed UI must show both card bottoms above the status bar"
+        )
+        XCTAssertTrue(scrollView.verticalScroller?.isHidden ?? true)
+    }
+
+    func testMinimumAndAccessibilityLayoutsScrollWithoutHorizontalClipping() async throws {
+        let model = try makeEditableMenuModel(hasSystemAccess: false)
+        let didInitialize = await waitUntil { model.isInitialized && !model.hasSystemAccess }
+        XCTAssertTrue(didInitialize)
+        model.configuration.left.mode = .dpad
+        model.configuration.right.mode = .mouse
+
+        for dynamicTypeSize in [DynamicTypeSize.medium, .accessibility5] {
+            let hostingView = NSHostingView(
+                rootView: ConfigurationView(model: model)
+                    .environment(\.dynamicTypeSize, dynamicTypeSize)
+                    .environment(\.layoutDirection, .rightToLeft)
+            )
+            hostingView.frame = NSRect(origin: .zero, size: PaddrStyle.Metrics.minimumWindowSize)
+            await settle(hostingView, passes: 12)
+
+            let scrollView = try XCTUnwrap(configurationScrollView(in: hostingView))
+            let contentHeight = await configurationContentHeight(
+                model: model,
+                width: scrollView.contentSize.width,
+                dynamicTypeSize: dynamicTypeSize,
+                layoutDirection: .rightToLeft
+            )
+            XCTAssertGreaterThan(contentHeight, scrollView.contentSize.height)
+            XCTAssertTrue(scrollView.hasVerticalScroller)
+            for control in descendants(of: NSControl.self, in: hostingView) {
+                let controlFrame = frame(of: control, in: hostingView)
+                XCTAssertGreaterThanOrEqual(controlFrame.minX, hostingView.bounds.minX - 0.5)
+                XCTAssertLessThanOrEqual(controlFrame.maxX, hostingView.bounds.maxX + 0.5)
+            }
+        }
+    }
+
     func testApplyBarPreservesFullNextActionInsideMinimumWidth() async {
         let model = makeMenuModel(receiver: "Test puck")
         let didInitialize = await waitUntil { model.isInitialized && model.hasSystemAccess }
@@ -532,6 +628,52 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         )
     }
 
+    private func makeEditableMenuModel(hasSystemAccess: Bool) throws -> PaddrMenuModel {
+        var document = ConfigurationProfileDocument.default
+        let profile = try document.createProfile(named: "Editable")
+        try document.activateProfile(id: profile.id)
+        let loadedDocument = document
+        return PaddrMenuModel(
+            dependencies: MenuDependencies(
+                session: LayoutEvidenceSession(),
+                loadProfiles: { ConfigurationProfileLoadResult(document: loadedDocument) },
+                saveProfiles: { _ in },
+                probeReceiver: { nil },
+                accessibilityTrusted: { _ in hasSystemAccess },
+                inputMonitoringAccess: { _ in hasSystemAccess ? .granted : .denied },
+                openPrivacySettings: { _ in },
+                sleep: { _ in throw CancellationError() },
+                reconnectDelay: { _ in throw CancellationError() }
+            )
+        )
+    }
+
+    private func configurationScrollView(in view: NSView) -> NSScrollView? {
+        descendants(of: NSScrollView.self, in: view).max {
+            ($0.contentSize.width * $0.contentSize.height)
+                < ($1.contentSize.width * $1.contentSize.height)
+        }
+    }
+
+    private func configurationContentHeight(
+        model: PaddrMenuModel,
+        width: CGFloat,
+        dynamicTypeSize: DynamicTypeSize = .medium,
+        layoutDirection: LayoutDirection = .leftToRight
+    ) async -> CGFloat {
+        let hostingView = NSHostingView(
+            rootView: ConfigurationContentView(model: model)
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
+                .environment(\.layoutDirection, layoutDirection)
+        )
+        hostingView.frame = NSRect(
+            origin: .zero,
+            size: NSSize(width: width, height: 2_000)
+        )
+        await settle(hostingView, passes: 12)
+        return hostingView.fittingSize.height
+    }
+
     private func modeSelectors(in view: NSView) -> [NSSegmentedControl] {
         descendants(of: NSSegmentedControl.self, in: view).filter { $0.segmentCount == 4 }
     }
@@ -607,8 +749,8 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         return current + view.subviews.flatMap { descendants(of: type, in: $0) }
     }
 
-    private func settle(_ hostingView: NSView) async {
-        for _ in 0..<6 {
+    private func settle(_ hostingView: NSView, passes: Int = 6) async {
+        for _ in 0..<passes {
             hostingView.layoutSubtreeIfNeeded()
             await Task.yield()
         }

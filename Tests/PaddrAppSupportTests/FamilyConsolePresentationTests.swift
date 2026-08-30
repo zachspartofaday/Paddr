@@ -12,7 +12,8 @@ final class FamilyConsolePresentationTests: XCTestCase {
         XCTAssertEqual(PaddrStyle.Metrics.controlHeight, 38)
         XCTAssertEqual(PaddrStyle.Metrics.statusPill, 32)
         XCTAssertEqual(PaddrStyle.Radius.control, 7)
-        XCTAssertEqual(PaddrStyle.Metrics.defaultWindowSize, NSSize(width: 1_280, height: 700))
+        XCTAssertEqual(PaddrStyle.Metrics.defaultWindowSize, NSSize(width: 1_280, height: 760))
+        XCTAssertEqual(PaddrStyle.Metrics.minimumWindowSize, NSSize(width: 680, height: 600))
         XCTAssertEqual(PaddrStyle.Metrics.defaultContentWidth, 1_232)
         XCTAssertEqual(PaddrStyle.Metrics.outerSpacing, 24)
         XCTAssertEqual(PaddrStyle.Inset.window, 24)
@@ -29,6 +30,7 @@ final class FamilyConsolePresentationTests: XCTestCase {
             (2 * PaddrStyle.minimumPadColumnWidth) + PaddrStyle.cardSpacing
         )
         XCTAssertEqual(PaddrStyle.Metrics.statusBarInlineBreakpoint, 1_120)
+        XCTAssertEqual(PaddrStyle.Metrics.permissionColumnsBreakpoint, 960)
     }
 
     func testStatusStripUsesReadinessOrder() {

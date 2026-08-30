@@ -5,6 +5,7 @@ struct TopControlsView: View {
     private static let reflowBreakpoint: CGFloat = 680
 
     @Bindable var model: PaddrMenuModel
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var availableWidth: CGFloat = 0
 
     var body: some View {
@@ -60,12 +61,20 @@ struct TopControlsView: View {
     }
 
     private var permissionsContent: some View {
-        VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s2) {
+        let usesColumns = availableWidth >= PaddrStyle.Metrics.permissionColumnsBreakpoint
+            && !dynamicTypeSize.isAccessibilitySize
+        let permissionsLayout = usesColumns
+            ? AnyLayout(HStackLayout(alignment: .top, spacing: PaddrStyle.Spacing.s3))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: PaddrStyle.Spacing.s2))
+
+        return VStack(alignment: .leading, spacing: PaddrStyle.Spacing.s2) {
             PaddrSectionHeader("Permissions")
                 .fixedSize()
 
-            inputMonitoringTile
-            accessibilityTile
+            permissionsLayout {
+                inputMonitoringTile
+                accessibilityTile
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(minHeight: PaddrStyle.Metrics.row)
@@ -79,6 +88,8 @@ struct TopControlsView: View {
             ),
             isGranted: model.inputMonitoringGranted,
             identifier: "input-monitoring",
+            requestAccessibilityLabel: "Request Input Monitoring",
+            settingsAccessibilityLabel: "Open Input Monitoring Settings",
             requestAction: model.requestInputMonitoring,
             settingsAction: model.openInputMonitoringSettings
         )
@@ -92,6 +103,8 @@ struct TopControlsView: View {
             ),
             isGranted: model.accessibilityTrusted,
             identifier: "accessibility",
+            requestAccessibilityLabel: "Request Accessibility",
+            settingsAccessibilityLabel: "Open Accessibility Settings",
             requestAction: model.requestAccessibility,
             settingsAction: model.openAccessibilitySettings
         )

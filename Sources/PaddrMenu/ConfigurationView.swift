@@ -10,16 +10,7 @@ struct ConfigurationView: View {
 
             VStack(spacing: 0) {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: PaddrStyle.cardSpacing) {
-                        TopControlsView(model: model)
-                        DualPadConfigurationView(
-                            configuration: $model.configuration,
-                            appearsEnabled: model.activeProfileControlsAppearEnabled,
-                            isEditable: model.canEditActiveProfile
-                        )
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(PaddrStyle.Inset.window)
+                    ConfigurationContentView(model: model)
                 }
                 .scrollIndicators(.automatic)
 

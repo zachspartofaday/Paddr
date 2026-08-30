@@ -5,6 +5,8 @@ struct PermissionTile: View {
     let detail: LocalizedStringResource
     let isGranted: Bool
     var identifier: String = "permission"
+    let requestAccessibilityLabel: LocalizedStringResource
+    let settingsAccessibilityLabel: LocalizedStringResource
     let requestAction: () -> Void
     let settingsAction: () -> Void
 
@@ -38,9 +40,11 @@ struct PermissionTile: View {
             if !isGranted {
                 Button("Request", action: requestAction)
                     .paddrActionButton(.primary)
+                    .accessibilityLabel(requestAccessibilityLabel)
                     .paddrAccessibilityID("permissions", identifier, "request")
                 Button("Open Settings", systemImage: "gearshape", action: settingsAction)
                     .paddrActionButton(.icon)
+                    .accessibilityLabel(settingsAccessibilityLabel)
                     .paddrAccessibilityID("permissions", identifier, "settings")
             }
         }
