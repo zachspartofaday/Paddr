@@ -287,8 +287,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     private func presentUnsavedTerminationAlert(application: NSApplication) {
+        guard model.beginTerminationDecision() else {
+            isResolvingTerminationRequest = false
+            application.reply(toApplicationShouldTerminate: false)
+            return
+        }
         showConfigurationWindow()
         guard let window = configurationWindowController?.window else {
+            model.cancelTerminationDecision()
             isResolvingTerminationRequest = false
             application.reply(toApplicationShouldTerminate: false)
             return
@@ -313,6 +319,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 let didSave = await model.saveBeforeTermination()
                 terminationResolutionTask = nil
                 guard didSave else {
+                    model.cancelTerminationDecision()
                     isResolvingTerminationRequest = false
                     application.reply(toApplicationShouldTerminate: false)
                     return
@@ -322,6 +329,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         case .quitWithoutSaving:
             continueDeferredTermination(application)
         case .cancel:
+            model.cancelTerminationDecision()
             isResolvingTerminationRequest = false
             application.reply(toApplicationShouldTerminate: false)
         }

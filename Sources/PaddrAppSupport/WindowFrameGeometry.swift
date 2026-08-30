@@ -17,7 +17,7 @@ public enum WindowFrameGeometry {
                 visibleFrame.maxY - frame.height
             )
         } else {
-            constrained.origin.y = visibleFrame.minY
+            constrained.origin.y = visibleFrame.maxY - frame.height
         }
         return constrained
     }

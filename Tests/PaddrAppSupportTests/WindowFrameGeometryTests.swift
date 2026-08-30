@@ -22,6 +22,16 @@ final class WindowFrameGeometryTests: XCTestCase {
         )
     }
 
+    func testOversizedFrameKeepsItsTitleBarAtTheVisibleTopEdge() {
+        let frame = CGRect(x: 80, y: 0, width: 680, height: 1_000)
+        let visibleFrame = CGRect(x: 0, y: 0, width: 1_440, height: 800)
+
+        let result = WindowFrameGeometry.constrainedFrame(frame, to: visibleFrame)
+
+        XCTAssertEqual(result, CGRect(x: 80, y: -200, width: 680, height: 1_000))
+        XCTAssertEqual(result.maxY, visibleFrame.maxY)
+    }
+
     func testFullSizeContentAddsTheTitlebarAndToolbarInsetToRequestedLayoutSize() {
         let result = WindowFrameGeometry.contentSize(
             forLayoutSize: CGSize(width: 1_280, height: 700),

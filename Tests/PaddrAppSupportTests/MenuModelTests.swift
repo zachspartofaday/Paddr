@@ -1925,6 +1925,43 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 6)
     }
 
+    func testTerminationDecisionFreezesPersistenceTriggersUntilCancelled() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, _, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let session = GatedSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        model.configuration.left.sensitivity = 6
+
+        XCTAssertTrue(model.beginTerminationDecision())
+        XCTAssertFalse(model.canEditActiveProfile)
+        XCTAssertFalse(model.canManageProfiles)
+        XCTAssertFalse(model.canSaveAndApply)
+        XCTAssertFalse(model.canSelectProfileFromMenu)
+        XCTAssertFalse(model.canToggleOutput)
+
+        model.configuration.left.sensitivity = 9
+        model.isEnabled = true
+        model.saveAndApply()
+        XCTAssertFalse(model.createProfile(named: "Late profile"))
+        await Task.yield()
+
+        XCTAssertEqual(model.configuration.left.sensitivity, 6)
+        XCTAssertFalse(model.isEnabled)
+        XCTAssertEqual(state.saveCallCount, 0)
+        let stopCount = await session.stopCount
+        XCTAssertEqual(stopCount, 0)
+
+        model.cancelTerminationDecision()
+
+        XCTAssertTrue(model.canEditActiveProfile)
+        XCTAssertTrue(model.canManageProfiles)
+        XCTAssertTrue(model.canSaveAndApply)
+        XCTAssertTrue(model.canToggleOutput)
+    }
+
     func testDeferredTerminationRejectsEditsWhileOutputReleaseIsInFlight() async throws {
         let state = readyState(receiver: "Fake puck")
         let (document, _, _) = try twoProfileDocument()
@@ -1993,7 +2030,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(replies, [false])
         XCTAssertEqual(
             model.status,
-            .failure(.output(diagnostic: "Injected persistent release failure."))
+            .failure(.terminationRelease(diagnostic: "Injected persistent release failure."))
         )
         XCTAssertTrue(model.hasPendingLifecycleWork)
         XCTAssertFalse(model.canToggleOutput)
@@ -2017,6 +2054,45 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.hasPendingLifecycleWork)
         let recoveredStopCount = await session.stopCount
         XCTAssertEqual(recoveredStopCount, 3)
+    }
+
+    func testSaveBeforeTerminationPersistsDraftAfterFailedOutputRelease() async throws {
+        let state = readyState(receiver: "Fake puck")
+        let (document, _, _) = try twoProfileDocument()
+        state.loadedProfileDocument = document
+        let session = GatedSession()
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        model.configuration.left.sensitivity = 8
+        await session.setStopOutcome(.failed("Injected persistent release failure."))
+
+        var firstReply: Bool?
+        XCTAssertTrue(model.stopForTermination { firstReply = $0 })
+        await waitUntil(model: model) { firstReply != nil }
+
+        XCTAssertEqual(firstReply, false)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        guard case .failure(.terminationRelease) = model.status else {
+            return XCTFail(
+                "Expected the failed release to require a termination retry, got \(model.status)"
+            )
+        }
+
+        XCTAssertTrue(model.beginTerminationDecision())
+        let didSave = await model.saveBeforeTermination()
+        XCTAssertTrue(didSave)
+
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertEqual(model.savedConfiguration.left.sensitivity, 8)
+        XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 8)
+
+        await session.setStopOutcome(.clean)
+        var retryReply: Bool?
+        XCTAssertTrue(model.stopForTermination { retryReply = $0 })
+        await waitUntil(model: model) { retryReply != nil }
+
+        XCTAssertEqual(retryReply, true)
     }
 
     func testCallbackDrivenCleanupRetryKeepsNewTerminationCoordinatorAlive() async {
@@ -2306,6 +2382,28 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.canSaveAndApply)
         let startCount = await session.startCount
         XCTAssertEqual(startCount, 0)
+    }
+
+    func testMissingActiveProfileRepairSaveFailureKeepsConfigurationRecovery() async {
+        let state = readyState(receiver: nil)
+        state.loadedProfileDocument = .default
+        state.loadDiagnostic = "Missing active profile; Default is active."
+        state.saveFailure = "Injected repair save failure."
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        model.saveAndApply()
+        await waitUntil(model: model) {
+            if case .failure(.configurationSave) = model.status { return true }
+            return false
+        }
+
+        XCTAssertTrue(model.needsInitialSave)
+        XCTAssertTrue(model.canSaveAndApply)
+        guard case let .failure(.configurationSave(diagnostic)) = model.status else {
+            return XCTFail("Expected repair persistence to remain a configuration save")
+        }
+        XCTAssertTrue(diagnostic.contains("Injected repair save failure."))
     }
 
     func testEnabledMissingActiveProfileRepairSerializesStopSaveStartAndRearms() async {
@@ -2972,7 +3070,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(model.hasUnsavedChanges)
         XCTAssertFalse(model.isEnabled)
         XCTAssertFalse(model.isRunning)
-        guard case .failure(.output) = model.status else {
+        guard case .failure(.terminationRelease) = model.status else {
             return XCTFail("Expected the held-output failure to remain authoritative")
         }
     }

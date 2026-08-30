@@ -91,7 +91,7 @@
     "Saved settings couldn’t be loaded. Repair or move the existing configuration file in ~/.config/Paddr, ~/.config/PuckPads, ~/.config/TracksBack, or ~/.config/TrackIsBack, then reopen Paddr.": {
       "comment": "Recovery instruction for unreadable current or legacy saved settings."
     },
-    "Settings couldn’t be saved. Your edits are still available. Choose Save & Apply to try again.": {
+    "Settings couldn’t be saved. Your edits are still available. Try saving again.": {
       "comment": "Recovery instruction after a configuration save failure."
     },
     "Paddr. %arg. %arg. %arg. %arg.": {
@@ -120,6 +120,9 @@
     },
     "Tap Stabilization Tolerance": {
       "comment": "Accessibility name for the tap-stabilization tolerance slider."
+    },
+    "Paddr couldn’t finish releasing mapped input. Quit Paddr again to retry cleanup.": {
+      "comment": "Recovery instruction after application termination cannot release mapped input."
     },
     "Some settings are invalid. Review the values, then choose Save & Apply again.": {
       "comment": "Recovery instruction for invalid settings."

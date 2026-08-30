@@ -9,6 +9,7 @@ public enum MenuFailure: Equatable, Sendable {
     case profileInvalid(diagnostic: String)
     case profileSave(diagnostic: String)
     case output(diagnostic: String)
+    case terminationRelease(diagnostic: String)
     case unexpected(diagnostic: String)
 
     public var message: LocalizedStringResource {
@@ -22,13 +23,15 @@ public enum MenuFailure: Equatable, Sendable {
         case .configurationInvalid:
             LocalizedStringResource("Some settings are invalid. Review the values, then choose Save & Apply again.")
         case .configurationSave:
-            LocalizedStringResource("Settings couldn’t be saved. Your edits are still available. Choose Save & Apply to try again.")
+            LocalizedStringResource("Settings couldn’t be saved. Your edits are still available. Try saving again.")
         case .profileInvalid:
             LocalizedStringResource("Profile change couldn’t be completed. Review the profile details, then try again.")
         case .profileSave:
             LocalizedStringResource("Profile change couldn’t be saved. Make the change again. If it still fails, reopen Paddr.")
         case .output:
             LocalizedStringResource("Trackpad output stopped because of an error. Check the puck and controller, then turn Trackpad Output on again.")
+        case .terminationRelease:
+            LocalizedStringResource("Paddr couldn’t finish releasing mapped input. Quit Paddr again to retry cleanup.")
         case .unexpected:
             LocalizedStringResource("An unexpected error occurred. Reopen Paddr, then try again.")
         }
@@ -45,6 +48,7 @@ public enum MenuFailure: Equatable, Sendable {
              let .profileInvalid(diagnostic),
              let .profileSave(diagnostic),
              let .output(diagnostic),
+             let .terminationRelease(diagnostic),
              let .unexpected(diagnostic):
             diagnostic
         }
