@@ -1758,8 +1758,26 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(diagnostic, "Saved settings are unreadable.")
         XCTAssertEqual(
             String(localized: model.status.message),
-            "Saved settings couldn’t be loaded. Repair or move ~/.config/Paddr/config.json, then reopen Paddr."
+            "Saved settings couldn’t be loaded. Repair or move the existing configuration file in ~/.config/Paddr, ~/.config/PuckPads, ~/.config/TracksBack, or ~/.config/TrackIsBack, then reopen Paddr."
         )
+    }
+
+    func testProfileMutationKeepsLoadRecoveryGuidanceWhenStorageIsBlocked() async {
+        let state = readyState(receiver: nil)
+        state.loadFailure = "Malformed legacy file at ~/.config/PuckPads/config.json."
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+
+        XCTAssertFalse(model.createProfile(named: "Blocked profile"))
+
+        guard case let .failure(.configurationLoad(diagnostic)) = model.status else {
+            return XCTFail("Expected profile management to preserve the load failure")
+        }
+        XCTAssertEqual(
+            diagnostic,
+            "Malformed legacy file at ~/.config/PuckPads/config.json."
+        )
+        XCTAssertTrue(String(localized: model.status.message).contains("~/.config/PuckPads"))
     }
 
     func testSaveBeforeTerminationWaitsForEarlierSaveThenPersistsNewerEdits() async throws {
@@ -1871,6 +1889,36 @@ final class MenuModelTests: XCTestCase {
 
         let hasUnsavedChanges = await decision.value
         XCTAssertFalse(hasUnsavedChanges)
+        XCTAssertFalse(model.hasPendingConfigurationPersistence)
+        XCTAssertFalse(model.hasUnsavedChanges)
+        XCTAssertEqual(state.saveCallCount, 1)
+        XCTAssertEqual(state.savedConfiguration?.left.sensitivity, 6)
+    }
+
+    func testTerminationDecisionWaitsForScheduledOutputActivationPersistence() async {
+        let state = readyState(receiver: "Fake puck")
+        let session = GatedSession(blockedStops: [1])
+        let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
+        await waitUntil(model: model) { model.isInitialized }
+        await waitUntil(model: model) { await session.startCount == 1 }
+        model.configuration.left.sensitivity = 6
+
+        model.isEnabled = true
+        await session.waitForStop(1)
+
+        XCTAssertEqual(state.saveCallCount, 0)
+        XCTAssertTrue(model.hasPendingConfigurationPersistence)
+        var decisionResult: Bool?
+        let decision = Task {
+            decisionResult = await model.hasUnsavedChangesAfterPendingPersistence()
+        }
+        await Task.yield()
+        XCTAssertNil(decisionResult)
+
+        await session.releaseStop(1)
+        await decision.value
+
+        XCTAssertEqual(decisionResult, false)
         XCTAssertFalse(model.hasPendingConfigurationPersistence)
         XCTAssertFalse(model.hasUnsavedChanges)
         XCTAssertEqual(state.saveCallCount, 1)
@@ -2552,14 +2600,14 @@ final class MenuModelTests: XCTestCase {
 
         XCTAssertFalse(model.renameProfile(id: missingID, to: "Missing"))
         XCTAssertEqual(state.saveCallCount, 0)
-        guard case let .failure(.configurationInvalid(missingDiagnostic)) = model.status else {
+        guard case let .failure(.profileInvalid(missingDiagnostic)) = model.status else {
             return XCTFail("Expected a missing captured target to publish a validation error")
         }
         XCTAssertTrue(missingDiagnostic.contains("no longer exists"))
 
         XCTAssertFalse(model.renameProfile(id: .default, to: "Mutable Default"))
         XCTAssertEqual(state.saveCallCount, 0)
-        guard case let .failure(.configurationInvalid(defaultDiagnostic)) = model.status else {
+        guard case let .failure(.profileInvalid(defaultDiagnostic)) = model.status else {
             return XCTFail("Expected an immutable captured target to publish a validation error")
         }
         XCTAssertTrue(defaultDiagnostic.contains("cannot be renamed"))
@@ -2576,7 +2624,7 @@ final class MenuModelTests: XCTestCase {
         )
         XCTAssertEqual(createModel.profiles, [.default])
         XCTAssertEqual(createState.saveCallCount, 0)
-        guard case let .failure(.configurationInvalid(createDiagnostic)) = createModel.status else {
+        guard case let .failure(.profileInvalid(createDiagnostic)) = createModel.status else {
             return XCTFail("Expected UUID-shaped create name to publish a validation error")
         }
         XCTAssertTrue(createDiagnostic.contains("cannot be UUIDs"))
@@ -2595,7 +2643,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertFalse(renameModel.renameActiveProfile(to: profile.id.rawValue.uppercased()))
         XCTAssertEqual(renameModel.activeProfile.name, "Normal name")
         XCTAssertEqual(renameState.saveCallCount, 0)
-        guard case let .failure(.configurationInvalid(renameDiagnostic)) = renameModel.status else {
+        guard case let .failure(.profileInvalid(renameDiagnostic)) = renameModel.status else {
             return XCTFail("Expected UUID-shaped rename to publish a validation error")
         }
         XCTAssertTrue(renameDiagnostic.contains("cannot be UUIDs"))
@@ -2641,12 +2689,12 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.configuration, first.configuration)
         XCTAssertEqual(model.savedConfiguration, first.configuration)
         XCTAssertNil(state.savedProfileDocument)
-        guard case let .failure(.configurationSave(diagnostic)) = model.status else {
+        guard case let .failure(.profileSave(diagnostic)) = model.status else {
             return XCTFail("Expected the profile activation save failure, got \(model.status)")
         }
         XCTAssertTrue(diagnostic.contains("simulated profile activation save failure"))
         await session.stop()
-        guard case .failure(.configurationSave) = model.status else {
+        guard case .failure(.profileSave) = model.status else {
             return XCTFail("Expected the profile activation save failure to remain authoritative")
         }
     }
@@ -3455,7 +3503,7 @@ final class MenuModelTests: XCTestCase {
         model.configuration.left.sensitivity = 9
         XCTAssertTrue(model.renameActiveProfile(to: "Renamed"))
         await waitUntil(model: model) {
-            if case .failure(.configurationSave) = model.status {
+            if case .failure(.profileSave) = model.status {
                 return model.canManageProfiles
             }
             return false
@@ -3466,7 +3514,7 @@ final class MenuModelTests: XCTestCase {
         XCTAssertEqual(model.configuration.left.sensitivity, 9)
         XCTAssertTrue(model.hasUnsavedChanges)
         XCTAssertNil(state.savedProfileDocument)
-        guard case let .failure(.configurationSave(diagnostic)) = model.status else {
+        guard case let .failure(.profileSave(diagnostic)) = model.status else {
             return XCTFail("Expected the metadata save failure, got \(model.status)")
         }
         XCTAssertTrue(diagnostic.contains("simulated metadata save failure"))

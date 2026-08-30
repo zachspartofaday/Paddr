@@ -109,15 +109,18 @@ public final class PaddrMenuModel {
     private var pendingProfileActivation: ConfigurationProfile?
     private var profileDocumentSaveInProgress = false {
         didSet {
-            guard oldValue, !profileDocumentSaveInProgress else { return }
-            let waiters = profilePersistenceWaiters
-            profilePersistenceWaiters.removeAll()
-            for waiter in waiters { waiter.resume() }
+            guard oldValue != profileDocumentSaveInProgress else { return }
+            resumePersistenceWaiters()
         }
     }
-    @ObservationIgnored private var profilePersistenceWaiters: [CheckedContinuation<Void, Never>] = []
+    @ObservationIgnored private var persistenceWaiters: [CheckedContinuation<Void, Never>] = []
     private var replacesActiveConfiguration = false
-    @ObservationIgnored private var activationCommitPending = false
+    @ObservationIgnored private var activationCommitPending = false {
+        didSet {
+            guard oldValue != activationCommitPending else { return }
+            resumePersistenceWaiters()
+        }
+    }
     @ObservationIgnored private var statusRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var statusRefreshEpoch: UInt64 = 0
     @ObservationIgnored private var receiverStateGeneration: UInt64 = 0
@@ -134,7 +137,7 @@ public final class PaddrMenuModel {
 
     public var hasUnsavedChanges: Bool { needsInitialSave || configuration != savedConfiguration }
     public var hasPendingConfigurationPersistence: Bool {
-        configurationTask != nil || profileDocumentSaveInProgress
+        configurationTask != nil || profileDocumentSaveInProgress || activationCommitPending
     }
     public var hasSystemAccess: Bool { accessibilityTrusted && inputMonitoringGranted }
     public var activeProfile: ConfigurationProfile {
@@ -230,7 +233,7 @@ public final class PaddrMenuModel {
         statusRefreshTask?.cancel()
         permissionRefreshTask?.cancel()
         terminationTask?.cancel()
-        for waiter in profilePersistenceWaiters { waiter.resume() }
+        for waiter in persistenceWaiters { waiter.resume() }
     }
 
     public func refreshStatus() {
@@ -309,29 +312,35 @@ public final class PaddrMenuModel {
         }
     }
 
-    /// Waits for saves that were already requested, without persisting newer draft edits,
-    /// then reports whether a quit decision is still required.
+    /// Waits for saves that were already requested or scheduled by output activation,
+    /// without starting another save, then reports whether a quit decision is still required.
     public func hasUnsavedChangesAfterPendingPersistence() async -> Bool {
         while terminationState == .idle {
             if let pendingTask = configurationTask {
                 await pendingTask.value
                 continue
             }
-            guard profileDocumentSaveInProgress else { break }
-            await waitForProfilePersistence()
+            guard profileDocumentSaveInProgress || activationCommitPending else { break }
+            await waitForPersistenceStateChange()
         }
         return terminationState == .idle && hasUnsavedChanges
     }
 
-    private func waitForProfilePersistence() async {
-        guard profileDocumentSaveInProgress else { return }
+    private func waitForPersistenceStateChange() async {
+        guard profileDocumentSaveInProgress || activationCommitPending else { return }
         await withCheckedContinuation { continuation in
-            guard profileDocumentSaveInProgress else {
+            guard profileDocumentSaveInProgress || activationCommitPending else {
                 continuation.resume()
                 return
             }
-            profilePersistenceWaiters.append(continuation)
+            persistenceWaiters.append(continuation)
         }
+    }
+
+    private func resumePersistenceWaiters() {
+        let waiters = persistenceWaiters
+        persistenceWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
     }
 
     /// Persists the newest draft before application termination without replacing the
@@ -703,11 +712,7 @@ public final class PaddrMenuModel {
               configurationTask == nil,
               !profileDocumentSaveInProgress else { return false }
         guard !storageWriteBlocked else {
-            publishProfileOperationFailure(
-                PaddrError.configuration(
-                    "Profile storage could not be loaded. Preserve or repair the original file, then relaunch Paddr before saving."
-                )
-            )
+            statusDidChange?()
             return false
         }
         if discardingDraft, hasUnsavedChanges {
@@ -754,11 +759,7 @@ public final class PaddrMenuModel {
               terminationState == .idle,
               configurationTask == nil else { return }
         guard !storageWriteBlocked else {
-            publishProfileOperationFailure(
-                PaddrError.configuration(
-                    "Profile storage could not be loaded. Preserve or repair the original file, then relaunch Paddr before saving."
-                )
-            )
+            statusDidChange?()
             return
         }
 
@@ -863,14 +864,14 @@ public final class PaddrMenuModel {
                     isEnabled = false
                     withStatusPublicationGeneration(currentStatusGeneration) {
                         publishStatus(
-                            .failure(.configurationSave(diagnostic: String(describing: error)))
+                            .failure(.profileSave(diagnostic: String(describing: error)))
                         )
                     }
                 } else {
                     preservingCurrentOperationalStatusAuthority {
                         withStatusPublicationGeneration(operationStatusGeneration) {
                             publishStatus(
-                                .failure(.configurationSave(diagnostic: String(describing: error)))
+                                .failure(.profileSave(diagnostic: String(describing: error)))
                             )
                         }
                     }
@@ -888,7 +889,7 @@ public final class PaddrMenuModel {
     }
 
     private func publishProfileOperationFailure(_ error: Error) {
-        publishStatus(.failure(.configurationInvalid(diagnostic: String(describing: error))))
+        publishStatus(.failure(.profileInvalid(diagnostic: String(describing: error))))
         statusDidChange?()
     }
 

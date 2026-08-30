@@ -64,6 +64,12 @@
     "Paddr repaired the saved profile selection. Review the profiles, then choose Save & Apply.": {
       "comment": "Recovery instruction after Paddr repairs a saved profile selection."
     },
+    "Profile change couldn’t be completed. Review the profile details, then try again.": {
+      "comment": "Recovery instruction after invalid profile-management input."
+    },
+    "Profile change couldn’t be saved. Make the change again. If it still fails, reopen Paddr.": {
+      "comment": "Recovery instruction after a profile-management save failure."
+    },
     "Profile Actions": {
       "comment": "Visible menu label for actions that manage an editable profile."
     },
@@ -82,8 +88,8 @@
     "Save changes before quitting?": {
       "comment": "Title of the unsaved-quit alert."
     },
-    "Saved settings couldn’t be loaded. Repair or move ~/.config/Paddr/config.json, then reopen Paddr.": {
-      "comment": "Recovery instruction for unreadable saved settings."
+    "Saved settings couldn’t be loaded. Repair or move the existing configuration file in ~/.config/Paddr, ~/.config/PuckPads, ~/.config/TracksBack, or ~/.config/TrackIsBack, then reopen Paddr.": {
+      "comment": "Recovery instruction for unreadable current or legacy saved settings."
     },
     "Settings couldn’t be saved. Your edits are still available. Choose Save & Apply to try again.": {
       "comment": "Recovery instruction after a configuration save failure."

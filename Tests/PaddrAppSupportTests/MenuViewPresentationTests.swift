@@ -218,6 +218,36 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertEqual(compactWindow.frame.maxY, expectedTopLeft.y, accuracy: 0.5)
     }
 
+    func testLegacyAutosavedFrameBelowNewMinimumIsEnlargedBeforeDisplay() {
+        let autosaveName = "PaddrConfigurationWindow.v5.Tests.\(UUID().uuidString)"
+        let legacyUsableSize = NSSize(width: 640, height: 500)
+        defer { NSWindow.removeFrame(usingName: autosaveName) }
+
+        let legacyWindow = makeWindow(hasToolbar: true, usesFullSizeContent: true)
+        PaddrFamilyWindowChrome.apply(to: legacyWindow)
+        PaddrFamilyWindowChrome.setUsableLayoutSize(legacyUsableSize, for: legacyWindow)
+        legacyWindow.center()
+        legacyWindow.contentView?.layoutSubtreeIfNeeded()
+        let expectedTopEdge = legacyWindow.frame.maxY
+        legacyWindow.saveFrame(usingName: autosaveName)
+
+        let restoredWindow = makeWindow(hasToolbar: true, usesFullSizeContent: true)
+        PaddrFamilyWindowChrome.apply(to: restoredWindow)
+        XCTAssertTrue(restoredWindow.setFrameUsingName(autosaveName))
+
+        PaddrFamilyWindowChrome.clampRestoredUsableFrame(
+            minimumSize: PaddrStyle.Metrics.minimumWindowSize,
+            for: restoredWindow
+        )
+        restoredWindow.contentView?.layoutSubtreeIfNeeded()
+
+        assertSize(
+            restoredWindow.contentLayoutRect.size,
+            equals: PaddrStyle.Metrics.minimumWindowSize
+        )
+        XCTAssertEqual(restoredWindow.frame.maxY, expectedTopEdge, accuracy: 0.5)
+    }
+
     func testV7DefaultAutosavedFrameGrowsToV8WithoutMovingTopEdge() {
         let autosaveName = "PaddrConfigurationWindow.v7.Tests.\(UUID().uuidString)"
         let formerDefault = NSSize(width: 1_280, height: 700)

@@ -121,20 +121,48 @@ enum PaddrFamilyWindowChrome {
             newDefaultSize: newDefaultSize,
             minimumSize: minimumSize
         )
-        if !restoredSize.isApproximatelyEqual(to: migratedSize) {
-            setUsableLayoutSize(migratedSize, for: window)
-            window.setFrameTopLeftPoint(topLeft)
-            if let targetVisibleFrame {
-                window.setFrame(
-                    WindowFrameGeometry.constrainedFrame(
-                        window.frame,
-                        to: targetVisibleFrame
-                    ),
-                    display: false
-                )
-            }
-        }
+        resizeRestoredUsableFrame(
+            from: restoredSize,
+            to: migratedSize,
+            preferredTopLeft: topLeft,
+            visibleFrame: targetVisibleFrame,
+            for: window
+        )
         return true
+    }
+
+    static func clampRestoredUsableFrame(minimumSize: NSSize, for window: NSWindow) {
+        window.contentView?.layoutSubtreeIfNeeded()
+        let restoredSize = window.contentLayoutRect.size
+        let clampedSize = NSSize(
+            width: max(restoredSize.width, minimumSize.width),
+            height: max(restoredSize.height, minimumSize.height)
+        )
+        resizeRestoredUsableFrame(
+            from: restoredSize,
+            to: clampedSize,
+            preferredTopLeft: NSPoint(x: window.frame.minX, y: window.frame.maxY),
+            visibleFrame: window.screen?.visibleFrame,
+            for: window
+        )
+    }
+
+    private static func resizeRestoredUsableFrame(
+        from restoredSize: NSSize,
+        to migratedSize: NSSize,
+        preferredTopLeft: NSPoint,
+        visibleFrame: NSRect?,
+        for window: NSWindow
+    ) {
+        guard !restoredSize.isApproximatelyEqual(to: migratedSize) else { return }
+        setUsableLayoutSize(migratedSize, for: window)
+        window.setFrameTopLeftPoint(preferredTopLeft)
+        if let visibleFrame {
+            window.setFrame(
+                WindowFrameGeometry.constrainedFrame(window.frame, to: visibleFrame),
+                display: false
+            )
+        }
     }
 
     /// Restores a physical frame written under a different toolbar style without silently
@@ -748,6 +776,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 )
                 window.center()
             }
+            PaddrFamilyWindowChrome.clampRestoredUsableFrame(
+                minimumSize: PaddrStyle.Metrics.minimumWindowSize,
+                for: window
+            )
         }
         PaddrFamilyWindowChrome.setMinimumUsableLayoutSize(
             PaddrStyle.Metrics.minimumWindowSize,

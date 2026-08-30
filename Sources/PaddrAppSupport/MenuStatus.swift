@@ -6,6 +6,8 @@ public enum MenuFailure: Equatable, Sendable {
     case configurationLoad(diagnostic: String)
     case configurationInvalid(diagnostic: String)
     case configurationSave(diagnostic: String)
+    case profileInvalid(diagnostic: String)
+    case profileSave(diagnostic: String)
     case output(diagnostic: String)
     case unexpected(diagnostic: String)
 
@@ -16,11 +18,15 @@ public enum MenuFailure: Equatable, Sendable {
         case .configurationRecovered:
             LocalizedStringResource("Paddr repaired the saved profile selection. Review the profiles, then choose Save & Apply.")
         case .configurationLoad:
-            LocalizedStringResource("Saved settings couldn’t be loaded. Repair or move ~/.config/Paddr/config.json, then reopen Paddr.")
+            LocalizedStringResource("Saved settings couldn’t be loaded. Repair or move the existing configuration file in ~/.config/Paddr, ~/.config/PuckPads, ~/.config/TracksBack, or ~/.config/TrackIsBack, then reopen Paddr.")
         case .configurationInvalid:
             LocalizedStringResource("Some settings are invalid. Review the values, then choose Save & Apply again.")
         case .configurationSave:
             LocalizedStringResource("Settings couldn’t be saved. Your edits are still available. Choose Save & Apply to try again.")
+        case .profileInvalid:
+            LocalizedStringResource("Profile change couldn’t be completed. Review the profile details, then try again.")
+        case .profileSave:
+            LocalizedStringResource("Profile change couldn’t be saved. Make the change again. If it still fails, reopen Paddr.")
         case .output:
             LocalizedStringResource("Trackpad output stopped because of an error. Check the puck and controller, then turn Trackpad Output on again.")
         case .unexpected:
@@ -36,6 +42,8 @@ public enum MenuFailure: Equatable, Sendable {
              let .configurationLoad(diagnostic),
              let .configurationInvalid(diagnostic),
              let .configurationSave(diagnostic),
+             let .profileInvalid(diagnostic),
+             let .profileSave(diagnostic),
              let .output(diagnostic),
              let .unexpected(diagnostic):
             diagnostic
