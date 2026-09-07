@@ -563,12 +563,14 @@ if [ "$(plutil -extract rearButtons.l4 raw -o - "$stdout_path")" != f1 ] \
     exit 1
 fi
 "$cli_path" --config "$rear_input" --write-config "$rear_profiles" >"$stdout_path" 2>"$stderr_path"
-"$cli_path" --profile-store "$rear_profiles" --profile 'CLI configuration' --show-config >"$stdout_path" 2>"$stderr_path"
+"$cli_path" --profile-store "$rear_profiles" --select-profile 'CLI configuration' >"$stdout_path" 2>"$stderr_path"
+"$cli_path" --config "$rear_profiles" --show-config >"$stdout_path" 2>"$stderr_path"
 if [ "$(plutil -extract rearButtons.r5 raw -o - "$stdout_path")" != code:118 ]; then
     echo "Saved-profile selection lost rear bindings." >&2
     exit 1
 fi
-"$cli_path" --profile-store "$rear_profiles" --profile Default --show-config >"$stdout_path" 2>"$stderr_path"
+"$cli_path" --profile-store "$rear_profiles" --select-profile Default >"$stdout_path" 2>"$stderr_path"
+"$cli_path" --config "$rear_profiles" --show-config >"$stdout_path" 2>"$stderr_path"
 if [ "$(plutil -extract rearButtons json -o - "$stdout_path")" != '{}' ]; then
     echo "Default profile unexpectedly assigned a rear button." >&2
     exit 1

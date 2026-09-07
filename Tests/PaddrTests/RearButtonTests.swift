@@ -61,6 +61,16 @@ final class RearButtonTests: XCTestCase {
         }
     }
 
+    func testRawRearOnlyInputPassesStoreDiscriminatorAndValidation() throws {
+        let input = try ConfigurationProfileStore.decodeConfigurationInput(
+            from: Data(#"{"rearButtons":{"l4":" F1 ","r5":null}}"#.utf8))
+        XCTAssertNil(input.profileDocument)
+        XCTAssertEqual(input.configuration.rearButtons, .init(l4: "f1"))
+        for json in [#"{"rearButtons":{"l4":"none"}}"#, #"{"unrelated":{}}"#] {
+            XCTAssertThrowsError(try ConfigurationProfileStore.decodeConfigurationInput(from: Data(json.utf8)))
+        }
+    }
+
     func testProfileRoundTripDuplicateAndReplacementRetainRearBindings() throws {
         var config = PaddrConfiguration.default
         config.rearButtons = .init(l4: "f1", l5: "mouse-left", r4: "f3", r5: "f4")
