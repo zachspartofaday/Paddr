@@ -75,7 +75,7 @@ enum PaddrStyle {
         static let outerSpacing = Inset.window
         /// Fresh windows match the approved side-by-side preview-and-settings composition.
         /// Restored and user-sized windows remain fluid around this default.
-        static let defaultWindowSize = NSSize(width: 1_280, height: 760)
+        static let defaultWindowSize = NSSize(width: 1_380, height: 1_040)
         static let defaultContentWidth = defaultWindowSize.width - (2 * outerSpacing)
         /// Below this content width, two complete pad editors no longer have
         /// enough room for their native mode controls and stack vertically.

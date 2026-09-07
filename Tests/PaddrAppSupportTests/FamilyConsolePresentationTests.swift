@@ -12,9 +12,9 @@ final class FamilyConsolePresentationTests: XCTestCase {
         XCTAssertEqual(PaddrStyle.Metrics.controlHeight, 38)
         XCTAssertEqual(PaddrStyle.Metrics.statusPill, 32)
         XCTAssertEqual(PaddrStyle.Radius.control, 7)
-        XCTAssertEqual(PaddrStyle.Metrics.defaultWindowSize, NSSize(width: 1_280, height: 760))
+        XCTAssertEqual(PaddrStyle.Metrics.defaultWindowSize, NSSize(width: 1_380, height: 1_040))
         XCTAssertEqual(PaddrStyle.Metrics.minimumWindowSize, NSSize(width: 680, height: 600))
-        XCTAssertEqual(PaddrStyle.Metrics.defaultContentWidth, 1_232)
+        XCTAssertEqual(PaddrStyle.Metrics.defaultContentWidth, 1_332)
         XCTAssertEqual(PaddrStyle.Metrics.outerSpacing, 24)
         XCTAssertEqual(PaddrStyle.Inset.window, 24)
         XCTAssertEqual(PaddrStyle.Inset.card, 16)
@@ -24,7 +24,7 @@ final class FamilyConsolePresentationTests: XCTestCase {
         XCTAssertEqual(PaddrStyle.Metrics.padEditorColumnsBreakpoint, 792)
         XCTAssertEqual(PaddrStyle.minimumPadSectionWidth, 324)
         XCTAssertEqual(PaddrStyle.minimumPadColumnWidth, 388)
-        XCTAssertEqual(PaddrStyle.padColumnWidth, 608)
+        XCTAssertEqual(PaddrStyle.padColumnWidth, 658)
         XCTAssertEqual(
             PaddrStyle.Metrics.padEditorColumnsBreakpoint,
             (2 * PaddrStyle.minimumPadColumnWidth) + PaddrStyle.cardSpacing

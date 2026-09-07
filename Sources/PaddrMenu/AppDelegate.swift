@@ -100,6 +100,38 @@ enum PaddrFamilyWindowChrome {
         }
     }
 
+    /// Measure after setUsableLayoutSize has settled any installed titlebar accessories.
+    static func fittedDefaultUsableSize(
+        _ size: NSSize, minimumSize: NSSize, visibleFrame: NSRect?, for window: NSWindow
+    ) -> NSSize {
+        window.contentView?.layoutSubtreeIfNeeded()
+        guard let visibleFrame else { return size }
+        return WindowFrameGeometry.fittedDefaultUsableSize(
+            requestedSize: size,
+            minimumSize: minimumSize,
+            currentFrame: window.frame,
+            currentLayoutRect: window.contentLayoutRect,
+            visibleFrame: visibleFrame
+        )
+    }
+
+    static func setFreshDefaultUsableFrame(for window: NSWindow) {
+        let visibleFrame = (window.screen ?? NSScreen.main)?.visibleFrame
+        // Sizing once settles titlebar accessories before measuring their actual inset.
+        setUsableLayoutSize(PaddrStyle.Metrics.defaultWindowSize, for: window)
+        setUsableLayoutSize(
+            fittedDefaultUsableSize(
+                PaddrStyle.Metrics.defaultWindowSize,
+                minimumSize: PaddrStyle.Metrics.minimumWindowSize,
+                visibleFrame: visibleFrame, for: window
+            ), for: window
+        )
+        window.center()
+        if let visibleFrame {
+            window.setFrame(WindowFrameGeometry.constrainedFrame(window.frame, to: visibleFrame), display: false)
+        }
+    }
+
     /// Restores compact-titlebar geometry while migrating only the former default size.
     /// User-customized frames keep their dimensions except where the new minimum clamps them.
     @discardableResult
@@ -115,14 +147,20 @@ enum PaddrFamilyWindowChrome {
         let restoredSize = window.contentLayoutRect.size
         let topLeft = NSPoint(x: window.frame.minX, y: window.frame.maxY)
         let targetVisibleFrame = window.screen?.visibleFrame
+        if restoredSize.isApproximatelyEqual(to: legacyDefaultSize) {
+            setUsableLayoutSize(newDefaultSize, for: window)
+        }
         let migratedSize = WindowFrameGeometry.migratedUsableSize(
             restoredSize: restoredSize,
             legacyDefaultSize: legacyDefaultSize,
-            newDefaultSize: newDefaultSize,
+            newDefaultSize: fittedDefaultUsableSize(
+                newDefaultSize, minimumSize: minimumSize,
+                visibleFrame: targetVisibleFrame, for: window
+            ),
             minimumSize: minimumSize
         )
         resizeRestoredUsableFrame(
-            from: restoredSize,
+            from: window.contentLayoutRect.size,
             to: migratedSize,
             preferredTopLeft: topLeft,
             visibleFrame: targetVisibleFrame,
@@ -154,8 +192,9 @@ enum PaddrFamilyWindowChrome {
         visibleFrame: NSRect?,
         for window: NSWindow
     ) {
-        guard !restoredSize.isApproximatelyEqual(to: migratedSize) else { return }
-        setUsableLayoutSize(migratedSize, for: window)
+        if !restoredSize.isApproximatelyEqual(to: migratedSize) {
+            setUsableLayoutSize(migratedSize, for: window)
+        }
         window.setFrameTopLeftPoint(preferredTopLeft)
         if let visibleFrame {
             window.setFrame(
@@ -751,20 +790,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         )
         PaddrFamilyWindowChrome.apply(to: window)
         PaddrFamilyWindowChrome.installConfigurationTitle(window.title, in: window)
-        let autosaveName = "PaddrConfigurationWindow.v8"
+        let autosaveName = "PaddrConfigurationWindow.v9"
+        let rearButtonsAutosaveName = "PaddrConfigurationWindow.v8"
         let previousAutosaveName = "PaddrConfigurationWindow.v7"
         let expandedAutosaveName = "PaddrConfigurationWindow.v6"
         let compactAutosaveName = "PaddrConfigurationWindow.v5"
         let legacyAutosaveName = "PaddrConfigurationWindow.v4"
         if !window.setFrameUsingName(autosaveName) {
             if PaddrFamilyWindowChrome.restoreAutosavedUsableFrame(
+                usingName: rearButtonsAutosaveName,
+                legacyDefaultSize: NSSize(width: 1_280, height: 760),
+                newDefaultSize: PaddrStyle.Metrics.defaultWindowSize,
+                minimumSize: PaddrStyle.Metrics.minimumWindowSize,
+                for: window
+            ) {
+                // Only the v8 default grows; custom frames retain their usable size.
+            } else if PaddrFamilyWindowChrome.restoreAutosavedUsableFrame(
                 usingName: previousAutosaveName,
                 legacyDefaultSize: NSSize(width: 1_280, height: 700),
                 newDefaultSize: PaddrStyle.Metrics.defaultWindowSize,
                 minimumSize: PaddrStyle.Metrics.minimumWindowSize,
                 for: window
             ) {
-                // The former default grows to reveal both cards; custom frames are preserved.
+                // Retain the v7 default migration and preserve custom frames.
             } else if PaddrFamilyWindowChrome.migrateAutosavedFrame(
                 usingName: expandedAutosaveName,
                 from: .unified,
@@ -778,11 +826,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 let legacyUsableSize = window.contentRect(forFrameRect: window.frame).size
                 PaddrFamilyWindowChrome.setUsableLayoutSize(legacyUsableSize, for: window)
             } else {
-                PaddrFamilyWindowChrome.setUsableLayoutSize(
-                    PaddrStyle.Metrics.defaultWindowSize,
-                    for: window
-                )
-                window.center()
+                PaddrFamilyWindowChrome.setFreshDefaultUsableFrame(for: window)
             }
             PaddrFamilyWindowChrome.clampRestoredUsableFrame(
                 minimumSize: PaddrStyle.Metrics.minimumWindowSize,
