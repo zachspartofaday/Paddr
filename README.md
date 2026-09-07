@@ -1,13 +1,19 @@
 # Paddr
 
-> **TL;DR:** macOS 27 Developer Beta 5 added native Steam Controller 2 support through Apple's `SteamControllerHIDServicePlugin`, allowing a puck-connected controller to appear in the system controller picker and native game APIs. Apple currently omits usable trackpad input. Paddr adds the trackpads back as pointer, scroll, touch-tap, and configurable button-zone input. This depends on an early macOS beta implementation that Apple may change at any time, potentially breaking Paddr until it is updated.
+Paddr adds pointer movement, scrolling, touch-tap actions, button zones, and rear-button mappings to a puck-connected Steam Controller 2 on macOS—without requiring Steam Input.
+
+Apple's native controller service handles the controller's buttons, sticks, and triggers. Paddr reads the puck reports and turns trackpad gestures and assigned rear buttons into normal mouse and keyboard input.
 
 > [!WARNING]
-> Paddr is an early, hardware-specific beta confirmed on macOS 27 Developer Beta 5. macOS 27 Public Beta 3 has been released and is likely compatible: a public beta typically corresponds to the preceding developer beta, but the exact build identity and Paddr compatibility have not yet been confirmed. Expect bugs and compatibility changes, and please report reproducible problems in [Issues](https://github.com/zachspartofaday/Paddr/issues).
+> Paddr is an early, hardware-specific beta. **macOS 27 Developer Beta 8 (build `26A5425a`) is known compatible** with a puck-connected Steam Controller 2, based on the maintainer's current setup. Developer Beta 5 was also confirmed previously. Other beta builds and connection paths are not confirmed; future macOS changes may require Paddr updates. Please report reproducible problems in [Issues](https://github.com/zachspartofaday/Paddr/issues).
 
 See [CHANGELOG.md](CHANGELOG.md) for release history and current compatibility notes.
 
-![Paddr configuration window showing the World of Warcraft profile with left Scroll and right Pointer trackpads, plus compact green Access, Puck, Controller, and Output indicators and a 97 percent Battery status](docs/images/paddr-profile-overview.png)
+![Paddr configuration window with left Scroll and right Pointer trackpads, pointer smoothing and tap stabilization controls, all four rear-button pickers, and the permissions and status panels](docs/images/paddr-profile-overview.png)
+
+The current configuration window keeps both trackpads and the Rear buttons card visible at its 1380 × 1040-point default when the screen allows. Smaller screens fit the available area, and narrow windows stack the cards with vertical scrolling down to a 680 × 600-point minimum.
+
+Screenshots show the local build with permissions still needed, no puck connected, and mapped output off. The zone examples are unsaved drafts; their bindings are examples, not built-in presets.
 
 ## What Paddr adds
 
@@ -27,7 +33,7 @@ Paddr does not send controller feature reports or alter lizard mode, firmware, I
 
 Disabling output or losing the controller releases held mapped keys and mouse buttons before Paddr becomes idle. Release obligations remain tracked until the matching up events succeed, and reconnect waits for both trackpads and any assigned rear buttons to be released before safely resuming.
 
-Rear buttons start at **None** in new and existing profiles. Assign each one in the Rear buttons card below the pads, then choose **Save & Apply**. Draft edits do not change active output. Restore Defaults requests confirmation before replacing unsaved edits and resets rear bindings to None in the draft; Save & Apply is still required. Unassigned rear buttons emit nothing and do not delay output activation. F1–F4 are available choices, with no automatic game-specific preset.
+Rear buttons start at **None** in new profiles and profiles created before rear-button support. Assign each one in the Rear buttons card below the pads, then choose **Save & Apply**. Hold a rear button to hold its assigned action; release it to release the action. Hover over a picker for help. Draft edits do not change active output. Restore Defaults requests confirmation before replacing unsaved edits and resets rear bindings to None in the draft; Save & Apply is still required. Unassigned rear buttons emit nothing and do not delay output activation. F1–F4 are available choices, with no automatic game-specific preset.
 
 Raw `--config` files accept an optional `rearButtons` object, for example:
 
@@ -49,22 +55,22 @@ Paddr does not require Steam to be installed or running. Apple's native controll
 
 Requirements:
 
-- macOS 27 Developer Beta 5 with `SteamControllerHIDServicePlugin.plugin` (confirmed); macOS 27 Public Beta 3 is likely compatible but remains unconfirmed;
-- Steam Controller 2 connected through the puck; and
+- macOS 27 with Apple's `SteamControllerHIDServicePlugin.plugin`; Developer Beta 8 (`26A5425a`) is known compatible, and Developer Beta 5 was previously confirmed;
+- Steam Controller 2 connected through the puck;
 - Input Monitoring permission to receive puck reports; and
 - Accessibility permission to emit mapped mouse and keyboard events.
 
 Puck mode is the only confirmed connection. Bluetooth and direct USB remain unvalidated.
 
 1. Download `Paddr.zip` from [Releases](https://github.com/zachspartofaday/Paddr/releases).
-2. Move `Paddr.app` to Applications and launch it. On first launch, the four-step guide walks through connection, Accessibility, pad setup, and everyday use; reopen it later from Help or the status menu.
+2. Move `Paddr.app` to Applications and launch it. On first launch, the four-step guide covers the app, profiles, Input Monitoring and Accessibility, and everyday use; reopen it later from Help or the status menu.
 
 ![Paddr Guide welcome page, step 1 of 4, explaining trackpad mouse, scrolling, and keyboard mappings without Steam Input](docs/images/paddr-onboarding.png)
 
 3. Grant Input Monitoring and Accessibility when prompted. Input Monitoring lets Paddr see the
    puck reports; Accessibility lets it emit your mapped mouse and keyboard actions.
 
-![Paddr Guide Accessibility page, step 3 of 4, showing Access needed with Request and Open Settings buttons](docs/images/paddr-permissions.png)
+![Paddr Guide Allow Access page, step 3 of 4, with separate Input Monitoring and Accessibility Request and Open Settings buttons](docs/images/paddr-permissions.png)
 
 4. Duplicate the built-in **Default** profile, name the copy, configure both trackpads, and choose **Save & Apply**. Default always remains left Scroll/right Pointer and cannot be renamed, edited, or deleted.
 
@@ -81,13 +87,15 @@ Choose **Zones** independently for either trackpad:
 - **Left / right** or **Top / bottom:** two large regions; or
 - **3 × 3:** nine independent bindings.
 
+The five layouts below use left Zones and right Pointer, with the Rear buttons card visible beneath both trackpads. Click an image to view it at full size.
+
 | Radial 4-way | Four corners |
 | --- | --- |
-| [![Paddr configuration window showing the Everyday profile, left trackpad Zones in Four-way radial mode with four directional regions, and right trackpad Scroll](docs/images/paddr-zones-radial-four-way.png)](docs/images/paddr-zones-radial-four-way.png) | [![Paddr configuration window showing the Everyday profile, left trackpad Zones in Four corners mode with four corner regions, and right trackpad Scroll](docs/images/paddr-zones-four-corners.png)](docs/images/paddr-zones-four-corners.png) |
+| [![Paddr configuration window showing a World of Warcraft profile draft, left trackpad Zones in Four-way radial mode with four directional regions, and right trackpad Pointer](docs/images/paddr-zones-radial-four-way.png)](docs/images/paddr-zones-radial-four-way.png) | [![Paddr configuration window showing a World of Warcraft profile draft, left trackpad Zones in Four corners mode with four corner regions, and right trackpad Pointer](docs/images/paddr-zones-four-corners.png)](docs/images/paddr-zones-four-corners.png) |
 | Left / right | Top / bottom |
-| [![Paddr configuration window showing the Everyday profile, left trackpad Zones in Left/right mode with two vertical regions, and right trackpad Scroll](docs/images/paddr-zones-left-right.png)](docs/images/paddr-zones-left-right.png) | [![Paddr configuration window showing the Everyday profile, left trackpad Zones in Top/bottom mode with two horizontal regions, and right trackpad Scroll](docs/images/paddr-zones-top-bottom.png)](docs/images/paddr-zones-top-bottom.png) |
+| [![Paddr configuration window showing a World of Warcraft profile draft, left trackpad Zones in Left/right mode with two vertical regions, and right trackpad Pointer](docs/images/paddr-zones-left-right.png)](docs/images/paddr-zones-left-right.png) | [![Paddr configuration window showing a World of Warcraft profile draft, left trackpad Zones in Top/bottom mode with two horizontal regions, and right trackpad Pointer](docs/images/paddr-zones-top-bottom.png)](docs/images/paddr-zones-top-bottom.png) |
 | 3 × 3 | |
-| [![Paddr configuration window showing the Everyday profile, left trackpad Zones in 3 by 3 grid mode with nine regions, and right trackpad Scroll](docs/images/paddr-zones-three-by-three.png)](docs/images/paddr-zones-three-by-three.png) | |
+| [![Paddr configuration window showing a World of Warcraft profile draft, left trackpad Zones in 3 by 3 grid mode with nine regions, and right trackpad Pointer](docs/images/paddr-zones-three-by-three.png)](docs/images/paddr-zones-three-by-three.png) | |
 
 Each region can hold a keyboard key, left mouse button, or right mouse button until the touch moves or lifts. Crossing regions releases the previous action before pressing the next one. Non-grid layouts expose a **Neutral zone** control; 3×3 uses the complete pad.
 
