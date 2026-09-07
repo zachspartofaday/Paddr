@@ -2,7 +2,28 @@
 
 User-visible changes to Paddr are recorded here. Release entries describe confirmed behavior at the time of each release; later entries may supersede earlier limitations.
 
-## Unreleased
+## 1.0.0 — 2026-09-07
+
+### Rear buttons and mapped input
+
+- Added optional L4, L5, R4, and R5 keyboard or mouse-button mappings, saved with each
+  profile. Hold a rear button to hold its assigned action; unassigned buttons send no input.
+- Preserved rear-button bindings through CLI profile selection and import/export. Profiles
+  created before rear-button support load with all four bindings unassigned.
+- Preserved fractional scroll movement until it accumulates to a whole point, rejected stale
+  controller reports, and required fresh neutral input before mapped output resumes.
+- Kept profile schema version 1. Older binaries can discard rear-button bindings when saving;
+  export a backup before downgrading.
+
+### Configuration and quit behavior
+
+- Expanded the default configuration window to 1380 × 1040 usable points, with both
+  trackpads, Rear buttons, and the footer visible when the screen allows. Fresh and migrated
+  defaults fit the screen; custom restored sizes are preserved.
+- Kept the 680 × 600 minimum, responsive layouts, and vertical scrolling. Simplified rear-button
+  instructions into localized picker help.
+- Improved narrow layouts, permission visibility, window restoration, and unsaved-quit handling,
+  including saves already in progress and recovery after a failed save.
 
 ### Compatibility and documentation
 
