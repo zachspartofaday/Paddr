@@ -212,7 +212,7 @@ final class RuntimeTests: XCTestCase {
         XCTAssertEqual(events.events.last, .controllerLost(.init(reportCount: 2, actionCount: 0)))
     }
 
-    func testDelayedDrainUsesReportReceiptTimeToReleaseHeldOutputAtDeadline() throws {
+    func testDelayedDrainRejectsExpiredPressBeforeMapping() throws {
         let clock = ManualUptimeClock()
         let timeline = TimelineRecorder()
         let output = RecordingOutput { action in timeline.append(action.description) }
@@ -239,14 +239,8 @@ final class RuntimeTests: XCTestCase {
             events: events
         )
 
-        let space = try KeyCatalog.resolve("space")
-        XCTAssertEqual(output.actions, [
-            .key(space, isPressed: true),
-            .key(space, isPressed: false)
-        ])
-        let entries = timeline.entries
-        let lostIndex = try XCTUnwrap(entries.firstIndex { $0.contains("controllerLost") })
-        XCTAssertLessThan(try XCTUnwrap(entries.firstIndex(of: "key space up")), lostIndex)
+        XCTAssertTrue(output.actions.isEmpty)
+        XCTAssertTrue(timeline.entries.contains { $0.contains("controllerLost") })
     }
 
     func testAcceptedReportAfterReceiveGapCleansUpBeforeStartingFreshEpoch() throws {
@@ -1491,6 +1485,246 @@ final class RuntimeTests: XCTestCase {
         XCTAssertEqual(openCount.withLock { $0 }, 0)
     }
 
+    func testRearPendingReleaseBlocksReplacementWithoutOpeningHID() throws {
+        let stopToken = TrackpadStopToken()
+        let firstClock = ManualUptimeClock()
+        let firstHID = ScriptedHID(clock: firstClock, steps: [
+            .report(neutralReport(), at: 0),
+            .report(rearReport(0x20000), at: 10),
+            .stop
+        ])
+        var configuration = PaddrConfiguration.default
+        configuration.rearButtons.l4 = "f1"
+
+        XCTAssertThrowsError(try TrackpadRuntime.run(
+            configuration: configuration,
+            observeOnly: false,
+            stopToken: stopToken,
+            dependencies: TrackpadRuntimeDependencies(
+                openHID: { firstHID },
+                makeOutput: { FailingReleaseOutput() },
+                uptimeNanoseconds: { firstClock.now }
+            )
+        ))
+
+        let secondClock = ManualUptimeClock()
+        let secondHID = ScriptedHID(clock: secondClock, steps: [.stop])
+        let openCount = Mutex(0)
+        XCTAssertThrowsError(try TrackpadRuntime.run(
+            configuration: .default,
+            observeOnly: false,
+            stopToken: stopToken,
+            dependencies: TrackpadRuntimeDependencies(
+                openHID: {
+                    openCount.withLock { $0 += 1 }
+                    return secondHID
+                },
+                makeOutput: { RecordingOutput() },
+                uptimeNanoseconds: { secondClock.now }
+            )
+        )) { error in
+            XCTAssertTrue(String(describing: error).contains("before reusing the stop token"))
+        }
+        XCTAssertEqual(openCount.withLock { $0 }, 0)
+    }
+
+    func testRearDuplicateOwnershipWithPadAndObserveOnly() throws {
+        for observeOnly in [false, true] {
+            for binding in ["space", "mouse-left"] {
+                let clock = ManualUptimeClock()
+                let output = RecordingOutput()
+                var config = PaddrConfiguration.default
+                config.left.mode = .dpad
+                config.left.dpadKeys.up = binding
+                config.rearButtons = .init(l4: binding, l5: binding == "space" ? "code:49" : binding)
+                let hid = ScriptedHID(clock: clock, steps: [
+                    .report(neutralReport(), at: 0),
+                    .report(rearReport(0x20000), at: 10),
+                    .report(rearReport(0x60000, padHeld: true), at: 20),
+                    .report(rearReport(0x60000, padHeld: true), at: 30),
+                    .report(rearReport(0x40000, padHeld: true), at: 40),
+                    .report(rearReport(0x40000), at: 50),
+                    .report(neutralReport(), at: 60)
+                ])
+                let result = try run(configuration: config, observeOnly: observeOnly, hid: hid,
+                                     clock: clock, output: output, events: EventRecorder())
+                XCTAssertEqual(result.summary.actionCount, 2)
+                if observeOnly {
+                    XCTAssertTrue(output.actions.isEmpty)
+                } else if binding == "space" {
+                    XCTAssertEqual(output.actions.count, 2)
+                    XCTAssertEqual(output.actions.first, .key(try KeyCatalog.resolve("space"), isPressed: true))
+                    XCTAssertEqual(output.actions.last, .key(try KeyCatalog.resolve("code:49"), isPressed: false))
+                } else {
+                    XCTAssertEqual(output.actions, [.mouseButton(.left, isPressed: true), .mouseButton(.left, isPressed: false)])
+                }
+            }
+        }
+    }
+
+    func testAssignedRearNeutralGateAndUnassignedGrip() throws {
+        let clock = ManualUptimeClock()
+        let output = RecordingOutput()
+        let events = EventRecorder()
+        let gate = OutputGate()
+        var config = PaddrConfiguration.default
+        config.rearButtons.l4 = "f1"
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(rearReport(0x20000), at: 0), // assigned initial hold blocks
+            .report(rearReport(0x100), at: 10), // unassigned R5 does not block
+            .report(rearReport(0x20100), at: 20),
+            .perform { gate.setEnabled(false) }, .wake(at: 30),
+            .perform { gate.setEnabled(true) },
+            .report(rearReport(0x20100), at: 40), // held across gate cannot resume
+            .report(rearReport(0x100), at: 50),
+            .report(rearReport(0x20100), at: 60), .stop
+        ])
+        _ = try run(configuration: config, outputGate: gate, hid: hid, clock: clock, output: output, events: events)
+        let f1 = try KeyCatalog.resolve("f1")
+        XCTAssertEqual(output.actions, [.key(f1, isPressed: true), .key(f1, isPressed: false),
+                                        .key(f1, isPressed: true), .key(f1, isPressed: false)])
+        XCTAssertEqual(events.events.filter { $0 == .outputArmed }.count, 2)
+    }
+
+    func testRearHoldsReleaseOnEveryLossBoundaryAndRetryFailedRelease() throws {
+        let endings: [[ScriptedHID.Step]] = [
+            [.stop], [.remove], [.report([0x46, 1], at: 20)],
+            [.wake(at: 1_000_000_010)],
+            [.delayedReport(neutralReport(), receivedAt: 20, processedAt: 1_000_000_020)]
+        ]
+        for ending in endings {
+            let clock = ManualUptimeClock()
+            let output = FailOnceReleaseOutput()
+            var config = PaddrConfiguration.default
+            config.rearButtons = .init(l4: "f1", l5: "f2", r4: "mouse-left", r5: "mouse-right")
+            let hid = ScriptedHID(clock: clock, steps: [
+                .report(neutralReport(), at: 0), .report(rearReport(0x60180), at: 10)
+            ] + ending)
+            _ = try run(configuration: config, hid: hid, clock: clock, output: output, events: EventRecorder())
+            XCTAssertEqual(output.committed.filter { !$0.isReleaseForTesting }.count, 4)
+            XCTAssertEqual(output.committed.filter(\.isReleaseForTesting).count, 4)
+            XCTAssertEqual(output.attempts.filter(\.isReleaseForTesting).count, 5)
+        }
+    }
+
+    func testRearPartialPostFailureReleasesOnlyCommittedPress() throws {
+        let clock = ManualUptimeClock()
+        let output = FailingCallOutput(failingCalls: [2])
+        var config = PaddrConfiguration.default
+        config.rearButtons = .init(l4: "f1", l5: "f2")
+        let hid = ScriptedHID(clock: clock, steps: [.report(neutralReport(), at: 0), .report(rearReport(0x60000), at: 10)])
+        XCTAssertThrowsError(try run(configuration: config, hid: hid, clock: clock, output: output, events: EventRecorder()))
+        let f1 = try KeyCatalog.resolve("f1")
+        XCTAssertEqual(output.committed, [.key(f1, isPressed: true), .key(f1, isPressed: false)])
+    }
+
+    func testExpiredNeutralAndPressCannotRearmAndFreshNeutralRecovers() throws {
+        let clock = ManualUptimeClock()
+        let output = RecordingOutput()
+        let events = EventRecorder()
+        var config = PaddrConfiguration.default
+        config.rearButtons.l4 = "f1"
+        let hid = ScriptedHID(clock: clock, steps: [
+            .report(neutralReport(), at: 0), .report(rearReport(0x20000), at: 10),
+            .delayedReport(neutralReport(), receivedAt: 20, processedAt: 1_000_000_020),
+            .delayedReport(rearReport(0x20000), receivedAt: 30, processedAt: 1_000_000_030),
+            .report(rearReport(0x20000), at: 1_000_000_040),
+            .report(neutralReport(), at: 1_000_000_050),
+            .report(rearReport(0x20000), at: 1_000_000_060), .stop
+        ])
+        let result = try run(configuration: config, hid: hid, clock: clock, output: output, events: events)
+        XCTAssertEqual(result.summary.reportCount, 5)
+        XCTAssertEqual(result.summary.actionCount, 2)
+        let f1 = try KeyCatalog.resolve("f1")
+        XCTAssertEqual(output.actions, [.key(f1, isPressed: true), .key(f1, isPressed: false),
+                                        .key(f1, isPressed: true), .key(f1, isPressed: false)])
+        XCTAssertEqual(events.events.filter { $0 == .outputArmed }.count, 2)
+    }
+
+    func testRuntimeChecksStopAndDurationInsideTransportBatch() throws {
+        for stopByToken in [false, true] {
+            let clock = ManualUptimeClock()
+            let token = TrackpadStopToken()
+            let output = RecordingOutput { action in
+                if !action.isReleaseForTesting {
+                    if stopByToken { token.requestStop() } else { clock.set(100) }
+                }
+            }
+            var config = PaddrConfiguration.default
+            config.rearButtons = .init(l4: "f1", l5: "f2")
+            let hid = UncheckedBatchHID(reports: [neutralReport(), rearReport(0x20000), rearReport(0x60000)])
+            _ = try TrackpadRuntime.run(configuration: config, observeOnly: false, stopToken: token,
+                duration: stopByToken ? nil : .nanoseconds(100), dependencies: .init(
+                    openHID: { hid }, makeOutput: { output }, uptimeNanoseconds: { clock.now }))
+            let f1 = try KeyCatalog.resolve("f1")
+            XCTAssertEqual(output.actions, [.key(f1, isPressed: true), .key(f1, isPressed: false)])
+        }
+    }
+
+    func testRearConfigurationReplacementReleasesOldBindingAndRequiresNeutral() throws {
+        let clock = ManualUptimeClock()
+        let token = TrackpadStopToken()
+        let output = RecordingOutput()
+        for binding in ["f1", "f2"] {
+            var config = PaddrConfiguration.default
+            config.rearButtons.l4 = binding
+            let hid = ScriptedHID(clock: clock, steps: [
+                .report(rearReport(0x20000), at: 0), .report(neutralReport(), at: 10),
+                .report(rearReport(0x20000), at: 20), .stop
+            ])
+            _ = try TrackpadRuntime.run(configuration: config, observeOnly: false, stopToken: token,
+                dependencies: .init(openHID: { hid }, makeOutput: { output }, uptimeNanoseconds: { clock.now }))
+        }
+        XCTAssertEqual(output.actions, [
+            .key(try KeyCatalog.resolve("f1"), isPressed: true), .key(try KeyCatalog.resolve("f1"), isPressed: false),
+            .key(try KeyCatalog.resolve("f2"), isPressed: true), .key(try KeyCatalog.resolve("f2"), isPressed: false)
+        ])
+    }
+
+    func testScrollResidualIsClearedAcrossGateAndControllerEpochs() throws {
+        for gateReset in [false, true] {
+            let clock = ManualUptimeClock()
+            let gate = OutputGate()
+            let output = RecordingOutput()
+            var config = PaddrConfiguration.default
+            config.left.scrollSensitivity = 0.5
+            let reset: [ScriptedHID.Step] = gateReset
+                ? [.perform { gate.setEnabled(false) }, .wake(at: 30), .perform { gate.setEnabled(true) }]
+                : [.report([0x46, 1], at: 30)]
+            let hid = ScriptedHID(clock: clock, steps: [
+                .report(neutralReport(), at: 0),
+                .report(report(leftTouched: true, rightTouched: false, leftX: 0), at: 10),
+                .report(report(leftTouched: true, rightTouched: false, leftX: 360), at: 20)
+            ] + reset + [
+                .report(neutralReport(), at: 40),
+                .report(report(leftTouched: true, rightTouched: false, leftX: 0), at: 50),
+                .report(report(leftTouched: true, rightTouched: false, leftX: 120), at: 60), .stop
+            ])
+            _ = try run(configuration: config, outputGate: gate, hid: hid, clock: clock,
+                        output: output, events: EventRecorder())
+            XCTAssertTrue(output.actions.isEmpty)
+        }
+    }
+
+    func testObserveOnlyRearDiagnosticsAndFreshnessBoundary() throws {
+        let clock = ManualUptimeClock()
+        let output = RecordingOutput()
+        let diagnostics = StringRecorder()
+        var config = PaddrConfiguration.default
+        config.rearButtons.r4 = "f3"
+        let hid = ScriptedHID(clock: clock, steps: [
+            .delayedReport(neutralReport(), receivedAt: 0, processedAt: 999_999_999),
+            .delayedReport(rearReport(0x80), receivedAt: 1, processedAt: 1_000_000_000),
+            .delayedReport(neutralReport(), receivedAt: 2, processedAt: 1_000_000_001)
+        ])
+        let result = try TrackpadRuntime.run(configuration: config, observeOnly: true, stopToken: TrackpadStopToken(),
+            dependencies: .init(openHID: { hid }, makeOutput: { output }, uptimeNanoseconds: { clock.now }),
+            onAction: diagnostics.append)
+        XCTAssertEqual(result.summary.actionCount, 2)
+        XCTAssertEqual(diagnostics.values, ["key f3 down", "key f3 up"])
+        XCTAssertTrue(output.actions.isEmpty)
+    }
+
     private func run(
         configuration: PaddrConfiguration = .default,
         observeOnly: Bool = false,
@@ -1750,5 +1984,22 @@ private extension TrackpadOutputAction {
         case let .key(_, isPressed), let .mouseButton(_, isPressed): !isPressed
         case .mouseMove, .scroll: false
         }
+    }
+}
+
+private func rearReport(_ bits: UInt32, padHeld: Bool = false) -> [UInt8] {
+    var bytes = report(leftTouched: padHeld, rightTouched: false)
+    for offset in 0..<4 { bytes[2 + offset] |= UInt8(truncatingIfNeeded: bits >> (8 * offset)) }
+    return bytes
+}
+
+private struct UncheckedBatchHID: TrackpadHIDStreaming {
+    let reports: [[UInt8]]
+    let summaryDescription = "Unchecked batch fixture"
+    func stream(shouldContinue: () -> Bool, onWake: () throws -> Void,
+                onReport: (TrackpadHIDReport) throws -> Void) throws -> TrackpadStreamTermination {
+        guard shouldContinue() else { return .stopped }
+        for bytes in reports { try onReport(.init(slot: 0, bytes: bytes, timestampNanoseconds: 0)) }
+        return .stopped
     }
 }

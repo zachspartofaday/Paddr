@@ -659,8 +659,8 @@ final class PaddrTests: XCTestCase {
         _ = try mapper.process(sample(touched: true, x: 0, y: 0, time: 1))
 
         XCTAssertEqual(
-            try mapper.process(sample(touched: true, x: 240, y: 120, time: 2)),
-            [.scroll(dx: 0.5, dy: -0.25)]
+            try mapper.process(sample(touched: true, x: 960, y: 480, time: 2)),
+            [.scroll(dx: 2, dy: -1)]
         )
     }
 
@@ -781,8 +781,8 @@ final class PaddrTests: XCTestCase {
         )
         _ = try scroll.process(sample(touched: true, time: 1))
         XCTAssertEqual(
-            try scroll.process(sample(touched: true, x: 240, y: 120, time: 2)),
-            [.scroll(dx: 0.5, dy: -0.25)]
+            try scroll.process(sample(touched: true, x: 960, y: 480, time: 2)),
+            [.scroll(dx: 2, dy: -1)]
         )
 
         var tap = PadMapper(

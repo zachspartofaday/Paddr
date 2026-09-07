@@ -14,6 +14,10 @@ struct ConfigurationContentView: View {
                 appearsEnabled: model.activeProfileControlsAppearEnabled,
                 isEditable: model.canEditActiveProfile
             )
+            RearButtonConfigurationView(
+                configuration: $model.configuration.rearButtons,
+                isEditable: model.canEditActiveProfile
+            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(PaddrStyle.Inset.window)

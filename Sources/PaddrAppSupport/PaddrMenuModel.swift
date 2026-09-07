@@ -585,10 +585,13 @@ public final class PaddrMenuModel {
         statusDidChange?()
     }
 
-    public func restoreDefaults() {
-        guard terminationState == .idle, isInitialized, canEditActiveProfile else { return }
+    @discardableResult
+    public func restoreDefaults(discardChanges: Bool = false) -> Bool {
+        guard terminationState == .idle, isInitialized, canEditActiveProfile,
+              !hasUnsavedChanges || discardChanges else { return false }
         configuration = .default
         publishStatus(.defaultsRestored)
+        return true
     }
 
     @discardableResult

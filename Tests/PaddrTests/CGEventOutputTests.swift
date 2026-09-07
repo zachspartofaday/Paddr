@@ -116,6 +116,24 @@ final class CGEventOutputTests: XCTestCase {
         ])
     }
 
+    func testFractionalMapperStepsReachRequestSinkAsConservedIntegralScroll() throws {
+        for sign in [1, -1] {
+            let recorder = CGEventRequestRecorder()
+            let output = makeOutput(recorder: recorder)
+            var mapper = PadMapper(side: .left, configuration: .init(mode: .scroll, scrollSensitivity: 0.5))
+            for step in 0...10 {
+                let sample = TrackpadSample(isTouched: true, isClicked: false,
+                    x: Int16(sign * step * 120), y: Int16(sign * step * 120), pressure: 0,
+                    timestampNanoseconds: UInt64(step))
+                try output.dispatch(try mapper.process(sample))
+            }
+            XCTAssertEqual(recorder.requests, [
+                .scroll(horizontal: Int32(sign), vertical: Int32(-sign)),
+                .scroll(horizontal: Int32(sign), vertical: Int32(-sign))
+            ])
+        }
+    }
+
     private func makeOutput(recorder: CGEventRequestRecorder) -> CGEventOutput {
         CGEventOutput(
             currentMouseLocation: { CGPoint(x: 100, y: 200) },

@@ -285,9 +285,49 @@ public struct PadConfiguration: Codable, Equatable, Sendable {
     }
 }
 
+public enum RearButton: String, CaseIterable, Codable, Hashable, Sendable {
+    case l4, l5, r4, r5
+}
+
+public struct RearButtonConfiguration: Codable, Equatable, Sendable {
+    public var l4: String?
+    public var l5: String?
+    public var r4: String?
+    public var r5: String?
+
+    public static let unassigned = RearButtonConfiguration()
+
+    public init(l4: String? = nil, l5: String? = nil, r4: String? = nil, r5: String? = nil) {
+        self.l4 = l4
+        self.l5 = l5
+        self.r4 = r4
+        self.r5 = r5
+    }
+
+    public subscript(_ button: RearButton) -> String? {
+        get {
+            switch button {
+            case .l4: l4
+            case .l5: l5
+            case .r4: r4
+            case .r5: r5
+            }
+        }
+        set {
+            switch button {
+            case .l4: l4 = newValue
+            case .l5: l5 = newValue
+            case .r4: r4 = newValue
+            case .r5: r5 = newValue
+            }
+        }
+    }
+}
+
 public struct PaddrConfiguration: Codable, Equatable, Sendable {
     public var left: PadConfiguration
     public var right: PadConfiguration
+    public var rearButtons: RearButtonConfiguration
 
     public static let `default` = PaddrConfiguration(
         left: PadConfiguration(mode: .scroll),
@@ -299,11 +339,16 @@ public struct PaddrConfiguration: Codable, Equatable, Sendable {
         right: PadConfiguration(mode: .mouse, centerTapTrackingMode: .coupled)
     )
 
-    private enum CodingKeys: String, CodingKey { case left, right }
+    private enum CodingKeys: String, CodingKey { case left, right, rearButtons }
 
-    public init(left: PadConfiguration, right: PadConfiguration) {
+    public init(
+        left: PadConfiguration,
+        right: PadConfiguration,
+        rearButtons: RearButtonConfiguration = .unassigned
+    ) {
         self.left = left
         self.right = right
+        self.rearButtons = rearButtons
     }
 
     public init(from decoder: Decoder) throws {
@@ -314,12 +359,18 @@ public struct PaddrConfiguration: Codable, Equatable, Sendable {
         missingRight.centerTapTrackingMode = .coupled
         left = try values.decodeIfPresent(PadConfiguration.self, forKey: .left) ?? missingLeft
         right = try values.decodeIfPresent(PadConfiguration.self, forKey: .right) ?? missingRight
+        rearButtons = try values.decodeIfPresent(RearButtonConfiguration.self, forKey: .rearButtons) ?? .unassigned
     }
 
     public func validated() throws -> PaddrConfiguration {
         var copy = self
         try copy.validate(side: .left, pad: &copy.left)
         try copy.validate(side: .right, pad: &copy.right)
+        for button in RearButton.allCases {
+            if let binding = copy.rearButtons[button], !TapBindingCatalog.isMouseButton(binding) {
+                copy.rearButtons[button] = try KeyCatalog.resolve(binding).name
+            }
+        }
         return copy
     }
 

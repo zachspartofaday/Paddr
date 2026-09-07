@@ -354,8 +354,17 @@ public enum TrackpadRuntime {
                     try loseControllerIfDeadlineReached(at: dependencies.uptimeNanoseconds())
                 },
                 onReport: { report in
+                    let now = dependencies.uptimeNanoseconds()
+                    guard stopToken.shouldContinue,
+                          runLimit.map({ $0.permits(now) }) ?? true else { return }
                     let bytes = report.bytes
                     let timestamp = report.timestampNanoseconds
+                    // Queued input cannot renew liveness or re-arm a new epoch after expiry.
+                    guard now >= timestamp,
+                          now - timestamp < controllerLossDeadlineNanoseconds else {
+                        if controllerLive, activeSlot == report.slot { try loseController() }
+                        return
+                    }
                     if let wirelessConnected = TritonParser.parseWirelessConnection(bytes) {
                         if wirelessConnected {
                             if let activeSlot, activeSlot != report.slot { return }
@@ -378,9 +387,10 @@ public enum TrackpadRuntime {
                         onEvent?(.batteryUpdated(battery))
                         return
                     }
-                    guard let pads = TritonParser.parseTrackpads(bytes, timestampNanoseconds: timestamp) else {
+                    guard let state = TritonParser.parseControllerState(bytes, timestampNanoseconds: timestamp) else {
                         return
                     }
+                    let pads = state.pads
                     if let activeSlot, activeSlot != report.slot { return }
                     try loseControllerIfDeadlineReached(at: timestamp)
                     activeSlot = report.slot
@@ -398,12 +408,12 @@ public enum TrackpadRuntime {
                     }
 
                     if controllerEpoch == nil {
-                        controllerEpoch = ControllerEpoch(configuration: validated)
+                        controllerEpoch = try ControllerEpoch(configuration: validated)
                     }
                     guard var epoch = controllerEpoch else { return }
 
                     if !epoch.isArmed {
-                        guard pads.isNeutral else {
+                        guard pads.isNeutral, epoch.rearMapper.isNeutral(state.rearButtons) else {
                             controllerEpoch = epoch
                             return
                         }
@@ -418,8 +428,11 @@ public enum TrackpadRuntime {
 
                     let left = try epoch.leftMapper.process(pads.left)
                     let right = try epoch.rightMapper.process(pads.right)
-                    let actions = epoch.arbiter.process(left, from: .leftPad)
+                    var actions = epoch.arbiter.process(left, from: .leftPad)
                         + epoch.arbiter.process(right, from: .rightPad)
+                    for (source, action) in epoch.rearMapper.process(state.rearButtons) {
+                        actions += epoch.arbiter.process([action], from: source)
+                    }
                     if !observeOnly { try output.dispatch(actions) }
                     controllerEpoch = epoch
                     actionCount += actions.count
@@ -454,12 +467,56 @@ public enum TrackpadRuntime {
 private struct ControllerEpoch {
     var leftMapper: PadMapper
     var rightMapper: PadMapper
+    var rearMapper: RearButtonMapper
     var arbiter = OutputArbiter()
     var isArmed = false
 
-    init(configuration: PaddrConfiguration) {
+    init(configuration: PaddrConfiguration) throws {
         leftMapper = PadMapper(side: .left, configuration: configuration.left)
         rightMapper = PadMapper(side: .right, configuration: configuration.right)
+        rearMapper = try RearButtonMapper(configuration: configuration.rearButtons)
+    }
+}
+
+// One logical owner per physical button preserves duplicate key/mouse bindings.
+private struct RearButtonMapper {
+    private var bindings: [RearButton: HeldOutput] = [:]
+    private var previous = TritonRearButtonState()
+
+    init(configuration: RearButtonConfiguration) throws {
+        for button in RearButton.allCases {
+            guard let binding = configuration[button] else { continue }
+            switch binding {
+            case TapBindingCatalog.leftMouseButton: bindings[button] = .mouseButton(.left)
+            case TapBindingCatalog.rightMouseButton: bindings[button] = .mouseButton(.right)
+            default: bindings[button] = .key(try KeyCatalog.resolve(binding))
+            }
+        }
+    }
+
+    func isNeutral(_ state: TritonRearButtonState) -> Bool {
+        bindings.keys.allSatisfy { !state.isPressed($0) }
+    }
+
+    mutating func process(_ state: TritonRearButtonState) -> [(OutputSource, TrackpadOutputAction)] {
+        defer { previous = state }
+        return RearButton.allCases.compactMap { button in
+            guard let binding = bindings[button],
+                  state.isPressed(button) != previous.isPressed(button) else { return nil }
+            let source: OutputSource
+            switch button {
+            case .l4: source = .rearL4
+            case .l5: source = .rearL5
+            case .r4: source = .rearR4
+            case .r5: source = .rearR5
+            }
+            let action: TrackpadOutputAction
+            switch binding {
+            case let .key(key): action = .key(key, isPressed: state.isPressed(button))
+            case let .mouseButton(mouse): action = .mouseButton(mouse, isPressed: state.isPressed(button))
+            }
+            return (source, action)
+        }
     }
 }
 

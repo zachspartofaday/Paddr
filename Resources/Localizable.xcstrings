@@ -28,13 +28,13 @@
     "Connect the puck, then refresh": {
       "comment": "Readiness action shown when the puck transport is unavailable."
     },
-    "Enable or disable mapped trackpad output": {
-      "comment": "Help text for the Trackpad Output switch in the bottom status bar."
+    "Enable or disable mapped output": {
+      "comment": "Help text for the Mapped output switch in the bottom status bar."
     },
-    "Enable Trackpad Output": {
+    "Enable Mapped output": {
       "comment": "Readiness action shown when setup is ready and output is off."
     },
-    "Enable Paddr in Accessibility, then turn Trackpad Output on again.": {
+    "Enable Paddr in Accessibility, then turn Mapped output on again.": {
       "comment": "Recovery instruction after output is blocked by Accessibility permission."
     },
     "Keeps the cursor fixed during a tap. Moving beyond the tolerance cancels the tap and resumes pointer tracking.": {
@@ -109,7 +109,7 @@
     "Puck not found": {
       "comment": "Status-menu value indicating that the puck transport is unavailable."
     },
-    "Release both trackpads": {
+    "Release both trackpads and any assigned rear buttons": {
       "comment": "Readiness action shown while output waits for neutral trackpads."
     },
     "Smooths slow pointer jitter while preserving fast movement. The slider controls smoothing strength.": {
@@ -127,16 +127,16 @@
     "Some settings are invalid. Review the values, then choose Save & Apply again.": {
       "comment": "Recovery instruction for invalid settings."
     },
-    "Trackpad output stopped because of an error. Check the puck and controller, then turn Trackpad Output on again.": {
+    "Mapped output stopped because of an error. Check the puck and controller, then turn Mapped output on again.": {
       "comment": "Recovery instruction after a trackpad-output failure."
     },
-    "Trackpad Output is unavailable until mapped keys and mouse buttons finish releasing.": {
+    "Mapped output is unavailable until mapped keys and mouse buttons finish releasing.": {
       "comment": "Disabled reason for the output switch during release."
     },
-    "Trackpad Output is unavailable while Paddr prepares the current profile.": {
+    "Mapped output is unavailable while Paddr prepares the current profile.": {
       "comment": "Disabled reason for the output switch during initialization."
     },
-    "Trackpad Output is unavailable while the profile operation finishes.": {
+    "Mapped output is unavailable while the profile operation finishes.": {
       "comment": "Disabled reason for the output switch during a profile operation."
     },
     "Transport: %arg": {
@@ -1359,12 +1359,12 @@
         }
       }
     },
-    "Release both trackpads to activate output…": {
+    "Release both trackpads and any assigned rear buttons to activate output…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Release both trackpads to activate output…"
+            "value": "Release both trackpads and any assigned rear buttons to activate output…"
           }
         }
       }
@@ -1740,12 +1740,12 @@
         }
       }
     },
-    "The Paddr menu shows receiver and controller status with the Trackpad Output toggle. When output starts, release both trackpads to return to neutral before mapped input activates.": {
+    "The Paddr menu shows receiver and controller status with the Mapped output toggle. When output starts, release both trackpads and any assigned rear buttons to return to neutral before mapped input activates.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The Paddr menu shows receiver and controller status with the Trackpad Output toggle. When output starts, release both trackpads to return to neutral before mapped input activates."
+            "value": "The Paddr menu shows receiver and controller status with the Mapped output toggle. When output starts, release both trackpads and any assigned rear buttons to return to neutral before mapped input activates."
           }
         }
       }
@@ -1873,12 +1873,13 @@
         }
       }
     },
-    "Trackpad Output": {
+    "Mapped output": {
+      "comment": "Label for the master trackpad-output toggle.",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Trackpad Output"
+            "value": "Mapped output"
           }
         }
       }
@@ -1893,53 +1894,42 @@
         }
       }
     },
-    "Trackpad output": {
-      "comment": "Label for the master trackpad-output toggle.",
+    "Mapped output is active.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Trackpad output"
+            "value": "Mapped output is active."
           }
         }
       }
     },
-    "Trackpad output is active.": {
+    "Mapped output is off.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Trackpad output is active."
+            "value": "Mapped output is off."
           }
         }
       }
     },
-    "Trackpad output is off.": {
+    "Mapped output stopped because of an error.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Trackpad output is off."
+            "value": "Mapped output stopped because of an error."
           }
         }
       }
     },
-    "Trackpad output stopped because of an error.": {
+    "Mapped output stopped.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Trackpad output stopped because of an error."
-          }
-        }
-      }
-    },
-    "Trackpad output stopped.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Trackpad output stopped."
+            "value": "Mapped output stopped."
           }
         }
       }
@@ -2109,6 +2099,45 @@
           }
         }
       }
+    },
+    "Rear buttons": {
+      "comment": "Rear-button configuration or draft restoration interface."
+    },
+    "L4": {
+      "comment": "Rear-button configuration or draft restoration interface."
+    },
+    "L5": {
+      "comment": "Rear-button configuration or draft restoration interface."
+    },
+    "R4": {
+      "comment": "Rear-button configuration or draft restoration interface."
+    },
+    "R5": {
+      "comment": "Rear-button configuration or draft restoration interface."
+    },
+    "Left rear button L4 action": {
+      "comment": "Rear-button configuration or draft restoration interface."
+    },
+    "Left rear button L5 action": {
+      "comment": "Rear-button configuration or draft restoration interface."
+    },
+    "Right rear button R4 action": {
+      "comment": "Rear-button configuration or draft restoration interface."
+    },
+    "Right rear button R5 action": {
+      "comment": "Rear-button configuration or draft restoration interface."
+    },
+    "Choose an action for each rear button. Save & Apply to use your changes.": {
+      "comment": "Rear-button configuration or draft restoration interface."
+    },
+    "The action stays pressed while you hold the rear button.": {
+      "comment": "Rear-button configuration or draft restoration interface."
+    },
+    "Restore defaults?": {
+      "comment": "Rear-button configuration or draft restoration interface."
+    },
+    "This replaces your unsaved draft with defaults. Save & Apply is still required to update the profile.": {
+      "comment": "Rear-button configuration or draft restoration interface."
     }
   },
   "version": "1.0"

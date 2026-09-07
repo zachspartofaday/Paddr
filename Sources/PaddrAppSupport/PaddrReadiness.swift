@@ -87,8 +87,8 @@ public enum PaddrReadinessNextAction: Equatable, Sendable {
         case .requestAccessibility: "Allow Accessibility"
         case .waitForOutputRelease: "Wait for mapped input to release"
         case .waitForProfileOperation: "Wait for the profile operation to finish"
-        case .enableOutput: "Enable Trackpad Output"
-        case .releaseTrackpads: "Release both trackpads"
+        case .enableOutput: "Enable Mapped output"
+        case .releaseTrackpads: "Release both trackpads and any assigned rear buttons"
         case .none: "Ready"
         }
     }
@@ -117,11 +117,11 @@ public enum PaddrOutputDisabledReason: Equatable, Sendable {
     public var message: LocalizedStringResource {
         switch self {
         case .initializing:
-            "Trackpad Output is unavailable while Paddr prepares the current profile."
+            "Mapped output is unavailable while Paddr prepares the current profile."
         case .releasingOutputs:
-            "Trackpad Output is unavailable until mapped keys and mouse buttons finish releasing."
+            "Mapped output is unavailable until mapped keys and mouse buttons finish releasing."
         case .profileOperation:
-            "Trackpad Output is unavailable while the profile operation finishes."
+            "Mapped output is unavailable while the profile operation finishes."
         }
     }
 }

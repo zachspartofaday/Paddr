@@ -16,15 +16,28 @@ Apple's HID service continues to provide native buttons, sticks, triggers, and c
 - **Button Zones:** independently available on either or both pads, with radial four-way, four-corner, left/right, top/bottom, and 3×3 layouts and a separate keyboard key or mouse button for every region;
 - pointer mode with independent sensitivity, acceleration, optional adaptive smoothing, and
   tap-stabilization tuning for each pad, plus independently adjustable scroll sensitivity;
+- optional **Rear buttons** mappings for L4, L5, R4, and R5, held as keyboard keys or mouse buttons until release;
 - touch-taps mapped to a keyboard key, left click, or right click;
 - a pointer-mode center tap radius that confines taps to the pad center while pointer tracking uses the full pad by default, with a per-pad switch for restoring the former coupled tracking dead zone; and
-- named profiles for saving and quickly switching complete two-pad setups.
+- named profiles for saving and quickly switching complete pad and rear-button setups.
 
 The interactive squircle map mirrors runtime hit-testing. Select a region on the map or with the **Selected area** pop-up, then assign its action. Radial, corner, and two-way layouts support an adjustable neutral region; the 3×3 layout dedicates the full pad to nine actions.
 
-Paddr does not send controller feature reports or alter lizard mode, firmware, IMU, haptics, rumble, or Apple's native gamepad mappings. The status bar reports access, receiver, controller, output, and battery in setup order. Ready states collapse to compact green icons, while battery percentage remains visible and shifts from green at 60% or higher, to amber at 20–59%, to red below 20%. **Puck** reflects passive receiver discovery alone, while **Controller** reflects fresh reports from the controller. Both stay accurate while Trackpad Output is off — the toggle controls mapped mouse, scroll, and keyboard emission only, never controller observation.
+Paddr does not send controller feature reports or alter lizard mode, firmware, IMU, haptics, rumble, or Apple's native gamepad mappings. The status bar reports access, receiver, controller, output, and battery in setup order. Ready states collapse to compact green icons, while battery percentage remains visible and shifts from green at 60% or higher, to amber at 20–59%, to red below 20%. **Puck** reflects passive receiver discovery alone, while **Controller** reflects fresh reports from the controller. Both stay accurate while Mapped output is off — the toggle controls mapped mouse, scroll, and keyboard emission only, never controller observation.
 
-Disabling output or losing the controller releases held mapped keys and mouse buttons before Paddr becomes idle. Release obligations remain tracked until the matching up events succeed, and reconnect waits for neutral pad input before safely resuming.
+Disabling output or losing the controller releases held mapped keys and mouse buttons before Paddr becomes idle. Release obligations remain tracked until the matching up events succeed, and reconnect waits for both trackpads and any assigned rear buttons to be released before safely resuming.
+
+Rear buttons start at **None** in new and existing profiles. Assign each one in the Rear buttons card below the pads, then choose **Save & Apply**. Draft edits do not change active output. Restore Defaults requests confirmation before replacing unsaved edits and resets rear bindings to None in the draft; Save & Apply is still required. Unassigned rear buttons emit nothing and do not delay output activation. F1–F4 are available choices, with no automatic game-specific preset.
+
+Raw `--config` files accept an optional `rearButtons` object, for example:
+
+```json
+"rearButtons": { "l4": "f1", "l5": "mouse-left", "r4": null, "r5": "code:118" }
+```
+
+Missing or null bindings mean None. Other values use the existing key catalog (including F1–F4 and `code:N`) or `mouse-left` / `mouse-right`; empty strings and `"none"` are invalid. CLI profile selection and import/export preserve these bindings. Profile documents retain schema version 1: older binaries ignore the added fields and can discard them when saving, so export a backup before downgrading.
+
+Scroll retains signed fractional movement per pad until a whole scroll point accumulates; lifting or replacing the output session clears that remainder. Reports already one second old are rejected before they can emit or re-arm output. Fresh neutral input is required after such a loss. These behaviors have deterministic fixture coverage; physical rear-button behavior and latency still require controller verification.
 
 ## Use the trackpads without Steam Input
 

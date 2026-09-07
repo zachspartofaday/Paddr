@@ -162,9 +162,9 @@ public enum ConfigurationProfileStore {
 
     private static func decodeLegacyConfiguration(_ data: Data) throws -> PaddrConfiguration {
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              object["left"] != nil || object["right"] != nil else {
+              object["left"] != nil || object["right"] != nil || object["rearButtons"] != nil else {
             throw PaddrError.configuration(
-                "Configuration JSON is neither a profile document nor a legacy left/right configuration."
+                "Configuration JSON is neither a profile document nor a raw left/right/rearButtons configuration."
             )
         }
         return try JSONDecoder().decode(PaddrConfiguration.self, from: data).validated()

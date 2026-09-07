@@ -76,8 +76,10 @@ private func help() -> String {
 
     Keys:
       Letters, digits, up/down/left/right, space, return, tab, escape, delete, shift,
-      control, option, command, or a raw macOS virtual key code written as code:N.
-      Any button zone can instead use mouse-left or mouse-right.
+      control, option, command, F1–F4, or a raw macOS virtual key code written as code:N.
+      Any button zone or assigned rear button can instead use mouse-left or mouse-right.
+      Rear bindings are configured through rearButtons.l4/l5/r4/r5 in --config or saved
+      profiles. Missing/null bindings mean None; assigned outputs are held until release.
 
     Examples:
       scripts/paddr.sh
@@ -376,6 +378,9 @@ private func run(_ options: CLIOptions) throws {
     print("Selected device: \(deviceSummary.description)")
     print("Left pad: \(padSummary(options.configuration.left))")
     print("Right pad: \(padSummary(options.configuration.right))")
+    print("Rear buttons: " + RearButton.allCases.map {
+        "\($0.rawValue.uppercased())=\(options.configuration.rearButtons[$0] ?? "none")"
+    }.joined(separator: ", "))
     print("Controller feature reports: unavailable by design")
 
     if options.dryRun {

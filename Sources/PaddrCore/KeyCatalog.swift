@@ -15,12 +15,13 @@ public enum KeyCatalog {
         "return": 36, "enter": 36, "tab": 48, "space": 49, "delete": 51,
         "backspace": 51, "escape": 53, "esc": 53, "command": 55, "cmd": 55,
         "shift": 56, "capslock": 57, "option": 58, "alt": 58, "control": 59,
+        "f1": 122, "f2": 120, "f3": 99, "f4": 118,
         "ctrl": 59, "left": 123, "right": 124, "down": 125, "up": 126
     ]
 
     public static let commonNames: [String] = [
         "up", "right", "down", "left", "space", "return", "tab", "escape", "delete",
-        "shift", "control", "option", "command",
+        "shift", "control", "option", "command", "f1", "f2", "f3", "f4",
         "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
         "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
         "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"
@@ -33,7 +34,7 @@ public enum KeyCatalog {
         }
         guard let keyCode = namedCodes[name] else {
             throw PaddrError.configuration(
-                "Unknown key '\(rawName)'. Use a letter, digit, arrow name, space, return, tab, escape, shift, control, option, command, or code:N."
+                "Unknown key '\(rawName)'. Use a letter, digit, arrow name, F1–F4, space, return, tab, escape, shift, control, option, command, or code:N."
             )
         }
         return KeyBinding(name: canonicalName(for: keyCode, fallback: name), keyCode: keyCode)
