@@ -9,6 +9,46 @@ import PaddrCore
 
 @MainActor
 final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
+    /// Opt-in image evidence uses only the existing inert, in-memory model fixture.
+    func testExportConfigurationRenderEvidence() async throws {
+        guard let path = ProcessInfo.processInfo.environment["PADDR_UI_EVIDENCE_DIR"] else {
+            throw XCTSkip("Set PADDR_UI_EVIDENCE_DIR to export configuration PNG evidence")
+        }
+        let directory = URL(fileURLWithPath: path, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let model = try makeEditableMenuModel(hasSystemAccess: false)
+        let initialized = await waitUntil { model.isInitialized }
+        XCTAssertTrue(initialized)
+        model.configuration.rearButtons = .init(l4: "F1", l5: "F2", r4: "F3", r5: "F4")
+        for (name, size) in [
+            ("minimum", PaddrStyle.Metrics.minimumWindowSize),
+            ("default", PaddrStyle.Metrics.defaultWindowSize),
+            ("wide", NSSize(width: 1600, height: 900))
+        ] {
+            let host = NSHostingView(rootView: ConfigurationView(model: model))
+            host.frame = NSRect(origin: .zero, size: size)
+            await settle(host, passes: 12)
+            try exportPNG(host, to: directory.appendingPathComponent("\(name)-top.png"))
+            let documentHost = NSHostingView(rootView: ConfigurationContentView(model: model)
+                .foregroundStyle(PaddrStyle.textPrimary)
+                .tint(PaddrStyle.controlTint)
+                .preferredColorScheme(.dark)
+                .background(PanelBackgroundView()))
+            documentHost.frame = NSRect(x: 0, y: 0, width: size.width, height: 3000)
+            await settle(documentHost, passes: 12)
+            documentHost.frame.size.height = documentHost.fittingSize.height
+            await settle(documentHost, passes: 12)
+            try exportPNG(documentHost, to: directory.appendingPathComponent("\(name)-rear.png"))
+        }
+    }
+
+    private func exportPNG(_ view: NSView, to url: URL) throws {
+        let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: url)
+    }
+
     func testTopControlsReflowAt680PointsAndFitAvailableWidth() async {
         let model = makeMenuModel()
         let didInitialize = await waitUntil { model.isInitialized && model.hasSystemAccess }
@@ -89,12 +129,20 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
             model: model,
             width: scrollView.contentSize.width
         )
+        let rearHost = NSHostingView(rootView: RearButtonConfigurationView(
+            configuration: .constant(model.configuration.rearButtons), isEditable: true
+        ))
+        rearHost.frame = NSRect(x: 0, y: 0,
+            width: scrollView.contentSize.width - 2 * PaddrStyle.Inset.window, height: 600)
+        await settle(rearHost, passes: 12)
+        let padPrefixHeight = contentHeight - rearHost.fittingSize.height - PaddrStyle.cardSpacing
         XCTAssertLessThanOrEqual(
-            contentHeight,
+            padPrefixHeight,
             scrollView.contentSize.height + 0.5,
-            "The default permission-needed UI must show both card bottoms above the status bar"
+            "Both complete pad cards must remain above the status bar before the rear card"
         )
-        XCTAssertTrue(scrollView.verticalScroller?.isHidden ?? true)
+        XCTAssertGreaterThan(contentHeight, scrollView.contentSize.height)
+        XCTAssertTrue(scrollView.hasVerticalScroller, "The added rear card must remain reachable by scrolling")
     }
 
     func testMinimumAndAccessibilityLayoutsScrollWithoutHorizontalClipping() async throws {

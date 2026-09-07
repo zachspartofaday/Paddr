@@ -1,6 +1,7 @@
 public enum OutputSource: String, CaseIterable, Hashable, Sendable {
     case leftPad
     case rightPad
+    case rearL4, rearL5, rearR4, rearR5
 }
 
 public enum HeldOutput: Hashable, Sendable {

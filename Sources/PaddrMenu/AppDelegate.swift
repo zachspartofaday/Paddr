@@ -576,7 +576,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         statusMenu.addItem(.separator())
 
         let outputItem = NSMenuItem(
-            title: String(localized: "Trackpad Output"),
+            title: String(localized: "Mapped output"),
             action: #selector(toggleEnabled),
             keyEquivalent: ""
         )
@@ -585,7 +585,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         outputItem.state = model.isEnabled ? .on : .off
         outputItem.image = NSImage(
             systemSymbolName: model.isEnabled ? "wave.3.right.circle.fill" : "pause.circle",
-            accessibilityDescription: String(localized: "Trackpad Output")
+            accessibilityDescription: String(localized: "Mapped output")
         )
         outputItem.identifier = NSUserInterfaceItemIdentifier(
             PaddrAccessibility.identifier("menu", "output-toggle")

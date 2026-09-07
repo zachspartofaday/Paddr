@@ -15,7 +15,7 @@ public enum MenuFailure: Equatable, Sendable {
     public var message: LocalizedStringResource {
         switch self {
         case .accessibilityRequired:
-            LocalizedStringResource("Enable Paddr in Accessibility, then turn Trackpad Output on again.")
+            LocalizedStringResource("Enable Paddr in Accessibility, then turn Mapped output on again.")
         case .configurationRecovered:
             LocalizedStringResource("Paddr repaired the saved profile selection. Review the profiles, then choose Save & Apply.")
         case .configurationLoad:
@@ -29,7 +29,7 @@ public enum MenuFailure: Equatable, Sendable {
         case .profileSave:
             LocalizedStringResource("Profile change couldn’t be saved. Make the change again. If it still fails, reopen Paddr.")
         case .output:
-            LocalizedStringResource("Trackpad output stopped because of an error. Check the puck and controller, then turn Trackpad Output on again.")
+            LocalizedStringResource("Mapped output stopped because of an error. Check the puck and controller, then turn Mapped output on again.")
         case .terminationRelease:
             LocalizedStringResource("Paddr couldn’t finish releasing mapped input. Quit Paddr again to retry cleanup.")
         case .unexpected:
@@ -78,11 +78,11 @@ public enum MenuStatus: Equatable, Sendable {
 
     public var message: LocalizedStringResource {
         switch self {
-        case .off: "Trackpad output is off."
+        case .off: "Mapped output is off."
         case .waitingForController: "Waiting for Steam Controller 2 through the puck…"
-        case .waitingForNeutral: "Release both trackpads to activate output…"
+        case .waitingForNeutral: "Release both trackpads and any assigned rear buttons to activate output…"
         case .connecting: "Connecting…"
-        case .active: "Trackpad output is active."
+        case .active: "Mapped output is active."
         case .configurationSaved: "Configuration saved."
         case .defaultsRestored: "Defaults restored. Save to apply them."
         case .requestingAccessibility: "Complete the Accessibility prompt, then return to Paddr."
@@ -90,7 +90,7 @@ public enum MenuStatus: Equatable, Sendable {
         case .requestingInputMonitoring: "Complete the Input Monitoring prompt, then return to Paddr."
         case .inputMonitoringSettings: "Enable Paddr in Input Monitoring (add it with + if it isn't listed), then relaunch Paddr."
         case .releasingOutputs: "Releasing mapped keys and mouse buttons…"
-        case .stopped: "Trackpad output stopped."
+        case .stopped: "Mapped output stopped."
         case let .failure(failure): failure.message
         }
     }

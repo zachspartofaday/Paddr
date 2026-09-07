@@ -7,6 +7,7 @@ struct ProfileControlsView: View {
     @State private var confirmationSelectionID: ConfigurationProfileID?
     @State private var showsDiscardConfirmation = false
     @State private var pendingProfileAction: PendingProfileAction?
+    @State private var showsRestoreConfirmation = false
     @State private var nameDraft = ""
 
     var body: some View {
@@ -62,7 +63,7 @@ struct ProfileControlsView: View {
                 Button(
                     "Restore Defaults",
                     systemImage: "arrow.counterclockwise",
-                    action: model.restoreDefaults
+                    action: requestRestoreDefaults
                 )
                 .disabled(!model.canEditActiveProfile)
 
@@ -92,6 +93,14 @@ struct ProfileControlsView: View {
             .paddrAccessibilityID("profile", "actions")
         }
         .disabled(!model.canManageProfiles)
+        .alert("Restore defaults?", isPresented: $showsRestoreConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Restore Defaults", role: .destructive) {
+                model.restoreDefaults(discardChanges: true)
+            }
+        } message: {
+            Text("This replaces your unsaved draft with defaults. Save & Apply is still required to update the profile.")
+        }
         .alert("Discard unsaved changes?", isPresented: $showsDiscardConfirmation) {
             Button("Cancel", role: .cancel) {
                 if let id = confirmationSelectionID {
@@ -204,6 +213,14 @@ struct ProfileControlsView: View {
         case .accepted, .blockedByUnsavedChanges, .cancelled, .operationInProgress,
              .profileNotFound, .storageUnavailable, .unchanged:
             break
+        }
+    }
+
+    private func requestRestoreDefaults() {
+        if model.hasUnsavedChanges {
+            showsRestoreConfirmation = true
+        } else {
+            model.restoreDefaults()
         }
     }
 

@@ -47,7 +47,7 @@ struct ApplyBarView: View {
         }
     }
 
-    var outputToggleAccessibilityLabel: LocalizedStringResource { "Trackpad output" }
+    var outputToggleAccessibilityLabel: LocalizedStringResource { "Mapped output" }
 
     var outputToggleAccessibilityValue: LocalizedStringResource {
         model.isEnabled ? "On" : "Off"
@@ -55,7 +55,7 @@ struct ApplyBarView: View {
 
     var outputToggleHelp: LocalizedStringResource {
         model.readiness.outputDisabledReason?.message
-            ?? LocalizedStringResource("Enable or disable mapped trackpad output")
+            ?? LocalizedStringResource("Enable or disable mapped output")
     }
 
     var outputToggleAccessibilityIdentifier: String {
@@ -125,7 +125,7 @@ struct ApplyBarView: View {
                     alignment: .leading
                 )
 
-            Toggle("Trackpad output", isOn: $model.isEnabled)
+            Toggle("Mapped output", isOn: $model.isEnabled)
                 .labelsHidden()
                 .disabled(!model.canToggleOutput)
                 .toggleStyle(.switch)

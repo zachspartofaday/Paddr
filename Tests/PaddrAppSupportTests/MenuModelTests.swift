@@ -1970,7 +1970,11 @@ final class MenuModelTests: XCTestCase {
         let model = PaddrMenuModel(dependencies: dependencies(state: state, session: session))
         await waitUntil(model: model) { model.isInitialized }
         await waitUntil(model: model) { await session.startCount == 1 }
+        await waitUntil(model: model) { model.controllerConnected }
         model.isEnabled = true
+        // The fixture's initial armed event can arrive while output is still disabled.
+        // Model a fresh neutral report after enabling, as the real session does.
+        await session.armOutput()
         await waitUntil(model: model) { model.isRunning }
         model.configuration.left.sensitivity = 6
         let didSave = await model.saveBeforeTermination()
@@ -2294,6 +2298,56 @@ final class MenuModelTests: XCTestCase {
         var didReply = false
         XCTAssertFalse(model.stopForTermination { _ in didReply = true })
         XCTAssertFalse(didReply)
+    }
+
+    func testDirtyRestoreRequiresConfirmationAndChangesOnlyDraft() async {
+        let state = readyState(receiver: nil)
+        var stored = PaddrConfiguration.default
+        stored.left.sensitivity = 4
+        stored.rearButtons.l4 = "f1"
+        state.loadedConfiguration = stored
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.left.sensitivity = 7
+        model.configuration.rearButtons.r5 = "F4"
+        let draft = model.configuration
+
+        XCTAssertFalse(model.restoreDefaults())
+        XCTAssertEqual(model.configuration, draft, "Declining restoration preserves every draft field")
+        XCTAssertEqual(model.savedConfiguration, stored)
+        XCTAssertEqual(state.saveCallCount, 0)
+
+        XCTAssertTrue(model.restoreDefaults(discardChanges: true))
+        XCTAssertEqual(model.configuration, .default)
+        XCTAssertEqual(model.savedConfiguration, stored)
+        XCTAssertEqual(state.saveCallCount, 0, "Confirmation must not persist or apply")
+        XCTAssertTrue(model.hasUnsavedChanges)
+    }
+
+    func testRearButtonDraftCommitsOnlyWithSuccessfulSaveAndApply() async {
+        let state = readyState(receiver: nil)
+        let model = PaddrMenuModel(dependencies: dependencies(state: state))
+        await waitUntil(model: model) { model.isInitialized }
+        model.configuration.rearButtons = RearButtonConfiguration(
+            l4: "f1", l5: TapBindingCatalog.leftMouseButton,
+            r4: "f3", r5: TapBindingCatalog.rightMouseButton
+        )
+        let draft = model.configuration
+        XCTAssertEqual(model.savedConfiguration.rearButtons, .unassigned)
+        XCTAssertTrue(model.hasUnsavedChanges)
+        state.saveFailure = "Fixture persistence failure"
+        model.saveAndApply()
+        await waitUntil(model: model) { state.saveCompletionCount == 1 && model.canSaveAndApply }
+        XCTAssertEqual(model.configuration, draft)
+        XCTAssertEqual(model.savedConfiguration.rearButtons, .unassigned)
+        XCTAssertTrue(model.hasUnsavedChanges)
+
+        state.saveFailure = nil
+        model.saveAndApply()
+        await waitUntil(model: model) { model.status == .configurationSaved }
+        XCTAssertEqual(model.savedConfiguration, draft)
+        XCTAssertEqual(state.savedConfiguration, draft)
+        XCTAssertFalse(model.hasUnsavedChanges)
     }
 
     func testRestoreDefaultsMarksConfigurationUnsaved() async {
@@ -4465,6 +4519,10 @@ private actor GatedSession: TrackpadSessionControlling {
         eventContinuation?.finish()
         eventContinuation = nil
         return stopOutcome
+    }
+
+    func armOutput() {
+        eventContinuation?.yield(.outputArmed)
     }
 
     func setStopOutcome(_ outcome: TrackpadSessionStopOutcome) {

@@ -189,6 +189,19 @@ claims of BottleRocket token parity:
 - All newly introduced user-facing text is reachable through
   `Resources/Localizable.xcstrings`.
 
+## Paddr-local rear-button controls
+
+The Rear buttons card follows the pad editors in the same scroll document. Its native
+optional action menus share touch-tap vocabulary and selector chrome, with independent
+L4, L5, R4, and R5 draft bindings. Left and Right groups adapt through the existing split
+layout. Fresh and legacy profiles begin with all four actions set to None. Default is
+read-only; editing uses the existing duplicate, profile, and Save & Apply flow. This
+section is Paddr-local behavior, not an additional licensed adaptation claim.
+
+Restore Defaults confirms replacement when the draft is dirty. Cancel retains the draft;
+confirmation changes only the draft until Save & Apply. The global gate is named Mapped
+output, and neutral guidance includes assigned rear buttons.
+
 ## Explicit exclusions
 
 The BottleRocket name appears only where required to identify the MIT-licensed source in

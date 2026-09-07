@@ -553,4 +553,34 @@ if [ "$repeated_config_status" -ne 2 ] \
     exit 1
 fi
 
+rear_input="$test_dir/rear.json"
+rear_profiles="$test_dir/rear-profiles.json"
+printf '%s\n' '{"rearButtons":{"l4":" F1 ","l5":"mouse-left","r4":null,"r5":"code:118"}}' >"$rear_input"
+"$cli_path" --config "$rear_input" --show-config >"$stdout_path" 2>"$stderr_path"
+if [ "$(plutil -extract rearButtons.l4 raw -o - "$stdout_path")" != f1 ] \
+    || [ "$(plutil -extract rearButtons.l5 raw -o - "$stdout_path")" != mouse-left ]; then
+    echo "Rear config did not normalize and retain bindings." >&2
+    exit 1
+fi
+"$cli_path" --config "$rear_input" --write-config "$rear_profiles" >"$stdout_path" 2>"$stderr_path"
+"$cli_path" --profile-store "$rear_profiles" --profile 'CLI configuration' --show-config >"$stdout_path" 2>"$stderr_path"
+if [ "$(plutil -extract rearButtons.r5 raw -o - "$stdout_path")" != code:118 ]; then
+    echo "Saved-profile selection lost rear bindings." >&2
+    exit 1
+fi
+"$cli_path" --profile-store "$rear_profiles" --profile Default --show-config >"$stdout_path" 2>"$stderr_path"
+if [ "$(plutil -extract rearButtons json -o - "$stdout_path")" != '{}' ]; then
+    echo "Default profile unexpectedly assigned a rear button." >&2
+    exit 1
+fi
+printf '%s\n' '{"rearButtons":{"l4":"none"}}' >"$rear_input"
+set +e
+"$cli_path" --config "$rear_input" --show-config >"$stdout_path" 2>"$stderr_path"
+rear_status=$?
+set -e
+if [ "$rear_status" -ne 2 ] || ! grep -Fq "Unknown key 'none'" "$stderr_path"; then
+    echo "Invalid rear binding did not fail configuration validation." >&2
+    exit 1
+fi
+
 printf '%s\n' "Verified strict loading, canonical profiles, UUID-name rejection, list/select, duplicate path rejection, and CLI mapping configuration."

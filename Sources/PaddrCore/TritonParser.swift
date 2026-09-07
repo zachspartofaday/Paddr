@@ -23,6 +23,41 @@ public struct TrackpadPair: Equatable, Sendable {
     public var right: TrackpadSample
 }
 
+public struct TritonRearButtonState: Equatable, Sendable {
+    public var l4: Bool
+    public var l5: Bool
+    public var r4: Bool
+    public var r5: Bool
+
+    public init(l4: Bool = false, l5: Bool = false, r4: Bool = false, r5: Bool = false) {
+        self.l4 = l4
+        self.l5 = l5
+        self.r4 = r4
+        self.r5 = r5
+    }
+
+    public var isNeutral: Bool { !l4 && !l5 && !r4 && !r5 }
+
+    public func isPressed(_ button: RearButton) -> Bool {
+        switch button {
+        case .l4: l4
+        case .l5: l5
+        case .r4: r4
+        case .r5: r5
+        }
+    }
+}
+
+public struct TritonControllerState: Equatable, Sendable {
+    public var pads: TrackpadPair
+    public var rearButtons: TritonRearButtonState
+
+    public init(pads: TrackpadPair, rearButtons: TritonRearButtonState) {
+        self.pads = pads
+        self.rearButtons = rearButtons
+    }
+}
+
 public enum ControllerBatteryChargeState: Equatable, Sendable {
     case reset
     case discharging
@@ -92,6 +127,12 @@ public enum TritonParser {
     }
 
     public static func parseTrackpads(_ bytes: [UInt8], timestampNanoseconds: UInt64) -> TrackpadPair? {
+        parseControllerState(bytes, timestampNanoseconds: timestampNanoseconds)?.pads
+    }
+
+    public static func parseControllerState(
+        _ bytes: [UInt8], timestampNanoseconds: UInt64
+    ) -> TritonControllerState? {
         guard let report = bytes.first else { return nil }
         let padOffset: Int
         switch report {
@@ -112,7 +153,7 @@ public enum TritonParser {
               let rightPressure = uint16LE(bytes, at: padOffset + 10)
         else { return nil }
 
-        return TrackpadPair(
+        let pads = TrackpadPair(
             left: TrackpadSample(
                 isTouched: buttons & leftTouchMask != 0,
                 isClicked: buttons & leftClickMask != 0,
@@ -128,6 +169,15 @@ public enum TritonParser {
                 y: rightY,
                 pressure: rightPressure,
                 timestampNanoseconds: timestampNanoseconds
+            )
+        )
+        return TritonControllerState(
+            pads: pads,
+            rearButtons: TritonRearButtonState(
+                l4: buttons & 0x0002_0000 != 0,
+                l5: buttons & 0x0004_0000 != 0,
+                r4: buttons & 0x0000_0080 != 0,
+                r5: buttons & 0x0000_0100 != 0
             )
         )
     }

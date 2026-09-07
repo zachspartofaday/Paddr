@@ -8,6 +8,37 @@ import PaddrCore
 
 @MainActor
 final class MenuViewPresentationTests: XCTestCase {
+    func testRearButtonCardFitsAdaptiveWidths() async {
+        for width in [CGFloat(600), CGFloat(1200)] {
+            let host = NSHostingView(rootView: RearButtonConfigurationView(
+                configuration: .constant(.unassigned), isEditable: false
+            ).frame(width: width))
+            host.frame = NSRect(x: 0, y: 0, width: width, height: 600)
+            await settle(host)
+            XCTAssertLessThanOrEqual(host.fittingSize.width, width + 0.5)
+            XCTAssertGreaterThan(host.fittingSize.height, 0)
+            XCTAssertLessThan(host.fittingSize.height, 600)
+        }
+    }
+
+    func testOptionalOutputPickerPreservesRawCodesAndBindingWrites() {
+        var selected: String? = "code:122"
+        let picker = OptionalOutputBindingPicker(
+            selection: Binding(get: { selected }, set: { selected = $0 }),
+            title: "Left rear button L4 action"
+        )
+        XCTAssertEqual(picker.customSelection, "code:122")
+        picker.selection = "f1"
+        XCTAssertEqual(selected, "f1")
+        XCTAssertNil(picker.customSelection)
+        picker.selection = TapBindingCatalog.leftMouseButton
+        XCTAssertEqual(selected, TapBindingCatalog.leftMouseButton)
+        XCTAssertNil(picker.customSelection)
+        picker.selection = nil
+        XCTAssertNil(selected)
+        XCTAssertNil(picker.customSelection)
+    }
+
     func testPendingProfileActionsCaptureKindIDAndDisplayedName() {
         let id = ConfigurationProfileID(
             rawValue: "00000000-0000-0000-0000-000000000501"
@@ -120,7 +151,7 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertEqual(
             toolbar.items.filter { $0.itemIdentifier != .flexibleSpace }.count,
             1,
-            "Trackpad Output belongs to the bottom status bar, leaving Refresh as the only action"
+            "Mapped output belongs to the bottom status bar, leaving Refresh as the only action"
         )
     }
 
@@ -1217,12 +1248,12 @@ final class MenuViewPresentationTests: XCTestCase {
         )
         XCTAssertEqual(
             String(localized: applyBar.outputToggleAccessibilityLabel),
-            "Trackpad output"
+            "Mapped output"
         )
         XCTAssertEqual(String(localized: applyBar.outputToggleAccessibilityValue), "Off")
         XCTAssertEqual(
             String(localized: applyBar.outputToggleHelp),
-            "Enable or disable mapped trackpad output"
+            "Enable or disable mapped output"
         )
         XCTAssertEqual(outputToggle.accessibilityRoleDescription(), "switch")
         XCTAssertEqual(accessibilityIntegerValue(of: outputToggle), 0)

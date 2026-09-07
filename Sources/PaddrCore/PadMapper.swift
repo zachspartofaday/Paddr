@@ -174,6 +174,8 @@ public struct PadMapper: Sendable {
     private var tapEligible = false
     private var tapStabilizing = false
     private var pointerFilter = PointerMotionFilter()
+    private var scrollResidualX = 0.0
+    private var scrollResidualY = 0.0
     private var pendingSmoothedDX = 0.0
     private var pendingSmoothedDY = 0.0
 
@@ -246,8 +248,14 @@ public struct PadMapper: Sendable {
             if sample.isTouched, let previous, previous.isTouched {
                 let dx = Double(Int(sample.x) - Int(previous.x)) / 240.0 * configuration.scrollSensitivity
                 let dy = -Double(Int(sample.y) - Int(previous.y)) / 240.0 * configuration.scrollSensitivity
-                if abs(dx) >= 0.25 || abs(dy) >= 0.25 {
-                    actions.append(.scroll(dx: dx, dy: dy))
+                scrollResidualX += dx
+                scrollResidualY += dy
+                let integralX = scrollResidualX.rounded(.towardZero)
+                let integralY = scrollResidualY.rounded(.towardZero)
+                scrollResidualX -= integralX
+                scrollResidualY -= integralY
+                if integralX != 0 || integralY != 0 {
+                    actions.append(.scroll(dx: integralX, dy: integralY))
                 }
             }
         case .dpad:
@@ -285,6 +293,8 @@ public struct PadMapper: Sendable {
             tapEligible = false
             tapStabilizing = false
             resetPointerMotion()
+            scrollResidualX = 0
+            scrollResidualY = 0
         }
 
         previous = sample
@@ -299,6 +309,8 @@ public struct PadMapper: Sendable {
             tapEligible = false
             tapStabilizing = false
             resetPointerMotion()
+            scrollResidualX = 0
+            scrollResidualY = 0
         }
         return try activeZones
             .sorted { Self.sortOrder($0) < Self.sortOrder($1) }

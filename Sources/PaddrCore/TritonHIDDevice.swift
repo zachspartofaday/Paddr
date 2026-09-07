@@ -282,7 +282,7 @@ public final class TritonHIDDevice: TrackpadHIDStreaming {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
             guard !callbackState.isRemoved else { break }
             for report in callbackState.drain() {
-                guard !callbackState.isRemoved else { break }
+                guard shouldContinue(), !callbackState.isRemoved else { break }
                 try onReport(report)
             }
             guard !callbackState.isRemoved else { break }
