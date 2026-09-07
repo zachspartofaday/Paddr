@@ -4,6 +4,14 @@ User-visible changes to Paddr are recorded here. Release entries describe confir
 
 ## Unreleased
 
+### Compatibility and documentation
+
+- Confirmed macOS 27 Developer Beta 8 (build `26A5425a`) compatibility with a puck-connected
+  Steam Controller 2 on the maintainer's current setup. Other beta builds remain unconfirmed
+  unless explicitly recorded; the Developer Beta 5 confirmation remains historical evidence.
+- Refreshed the README and all eight screenshots for the expanded configuration window,
+  rear-button mappings, pointer tuning, and current permission guide.
+
 ### Trackpad feel
 
 - Added per-trackpad tap stabilization. It is enabled by default and holds the cursor steady through
