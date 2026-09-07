@@ -2127,17 +2127,14 @@
     "Right rear button R5 action": {
       "comment": "Rear-button configuration or draft restoration interface."
     },
-    "Choose an action for each rear button. Save & Apply to use your changes.": {
-      "comment": "Rear-button configuration or draft restoration interface."
-    },
-    "The action stays pressed while you hold the rear button.": {
-      "comment": "Rear-button configuration or draft restoration interface."
-    },
     "Restore defaults?": {
       "comment": "Rear-button configuration or draft restoration interface."
     },
     "This replaces your unsaved draft with defaults. Save & Apply is still required to update the profile.": {
       "comment": "Rear-button configuration or draft restoration interface."
+    },
+    "Hold this rear button to hold its assigned action. None sends no input.": {
+      "comment": "Help for each rear-button action picker."
     }
   },
   "version": "1.0"

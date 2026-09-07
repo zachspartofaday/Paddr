@@ -11,10 +11,6 @@ struct RearButtonConfigurationView: View {
                 .paddrTypography(.cardTitle)
                 .foregroundStyle(PaddrStyle.textPrimary)
                 .accessibilityAddTraits(.isHeader)
-            Text("Choose an action for each rear button. Save & Apply to use your changes.")
-                .paddrTypography(.rowLabel)
-            Text("The action stays pressed while you hold the rear button.")
-                .paddrTypography(.rowLabel)
             PaddrAdaptiveSplitView(
                 equalHeightColumnsBreakpoint: PaddrStyle.Metrics.padEditorColumnsBreakpoint,
                 leading: {
@@ -50,6 +46,7 @@ struct RearButtonConfigurationView: View {
     ) -> some View {
         PaddrSettingsRow(title: code, systemImage: "gamecontroller") {
             OptionalOutputBindingPicker(selection: selection, title: title)
+                .help("Hold this rear button to hold its assigned action. None sends no input.")
         }
     }
 }

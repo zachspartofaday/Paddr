@@ -279,7 +279,7 @@ final class MenuViewPresentationTests: XCTestCase {
         XCTAssertEqual(restoredWindow.frame.maxY, expectedTopEdge, accuracy: 0.5)
     }
 
-    func testV7DefaultAutosavedFrameGrowsToV8WithoutMovingTopEdge() {
+    func testV7DefaultAutosavedFrameMigratesToScreenFittedDefault() throws {
         let autosaveName = "PaddrConfigurationWindow.v7.Tests.\(UUID().uuidString)"
         let formerDefault = NSSize(width: 1_280, height: 700)
         defer { NSWindow.removeFrame(usingName: autosaveName) }
@@ -305,8 +305,91 @@ final class MenuViewPresentationTests: XCTestCase {
         )
         v8Window.contentView?.layoutSubtreeIfNeeded()
 
-        assertSize(v8Window.contentLayoutRect.size, equals: PaddrStyle.Metrics.defaultWindowSize)
-        XCTAssertEqual(v8Window.frame.maxY, expectedTopEdge, accuracy: 0.5)
+        let expectedSize = PaddrFamilyWindowChrome.fittedDefaultUsableSize(
+            PaddrStyle.Metrics.defaultWindowSize,
+            minimumSize: PaddrStyle.Metrics.minimumWindowSize,
+            visibleFrame: v8Window.screen?.visibleFrame, for: v8Window
+        )
+        assertSize(v8Window.contentLayoutRect.size, equals: expectedSize)
+        let expectedFrame = WindowFrameGeometry.constrainedFrame(
+            NSRect(x: v8Window.frame.minX, y: expectedTopEdge - v8Window.frame.height,
+                   width: v8Window.frame.width, height: v8Window.frame.height),
+            to: try XCTUnwrap(v8Window.screen).visibleFrame
+        )
+        XCTAssertEqual(v8Window.frame.maxY, expectedFrame.maxY, accuracy: 0.5)
+    }
+
+    func testV8DefaultAndCustomFramesMigrateAndPreserveSubsequentResizingOnReopen() {
+        for originalSize in [NSSize(width: 1280, height: 760), NSSize(width: 1410, height: 830)] {
+            let oldName = "PaddrConfigurationWindow.v8.Tests.\(UUID().uuidString)"
+            let newName = "PaddrConfigurationWindow.v9.Tests.\(UUID().uuidString)"
+            defer {
+                NSWindow.removeFrame(usingName: oldName)
+                NSWindow.removeFrame(usingName: newName)
+            }
+            let original = makeWindow(hasToolbar: false, usesFullSizeContent: true)
+            PaddrFamilyWindowChrome.installConfigurationTitle("Paddr", in: original)
+            PaddrFamilyWindowChrome.setUsableLayoutSize(originalSize, for: original)
+            original.center()
+            original.saveFrame(usingName: oldName)
+            let migrated = makeWindow(hasToolbar: false, usesFullSizeContent: true)
+            PaddrFamilyWindowChrome.installConfigurationTitle("Paddr", in: migrated)
+            XCTAssertTrue(PaddrFamilyWindowChrome.restoreAutosavedUsableFrame(
+                usingName: oldName, legacyDefaultSize: NSSize(width: 1280, height: 760),
+                newDefaultSize: PaddrStyle.Metrics.defaultWindowSize,
+                minimumSize: PaddrStyle.Metrics.minimumWindowSize, for: migrated
+            ))
+            let expected = originalSize.width == 1280
+                ? PaddrFamilyWindowChrome.fittedDefaultUsableSize(
+                    PaddrStyle.Metrics.defaultWindowSize,
+                    minimumSize: PaddrStyle.Metrics.minimumWindowSize,
+                    visibleFrame: migrated.screen?.visibleFrame, for: migrated)
+                : originalSize
+            assertSize(migrated.contentLayoutRect.size, equals: expected)
+            let customSize = NSSize(width: 1100, height: 720)
+            PaddrFamilyWindowChrome.setUsableLayoutSize(customSize, for: migrated)
+            migrated.saveFrame(usingName: newName)
+            for _ in 0..<3 {
+                let reopened = makeWindow(hasToolbar: false, usesFullSizeContent: true)
+                PaddrFamilyWindowChrome.installConfigurationTitle("Paddr", in: reopened)
+                XCTAssertTrue(reopened.setFrameUsingName(newName))
+                assertSize(reopened.contentLayoutRect.size, equals: customSize)
+                reopened.saveFrame(usingName: newName)
+            }
+        }
+    }
+
+    func testFreshDefaultFitsActualScreenAndRetainsUsableMinimum() {
+        let window = makeWindow(hasToolbar: false, usesFullSizeContent: true)
+        PaddrFamilyWindowChrome.installConfigurationTitle("Paddr", in: window)
+        PaddrFamilyWindowChrome.setFreshDefaultUsableFrame(for: window)
+        guard let screen = window.screen?.visibleFrame else {
+            return XCTFail("A screen is required for window presentation tests")
+        }
+        assertSize(window.contentLayoutRect.size, equals:
+            PaddrFamilyWindowChrome.fittedDefaultUsableSize(
+                PaddrStyle.Metrics.defaultWindowSize,
+                minimumSize: PaddrStyle.Metrics.minimumWindowSize,
+                visibleFrame: screen, for: window))
+        XCTAssertGreaterThanOrEqual(window.contentLayoutRect.width, 680)
+        XCTAssertGreaterThanOrEqual(window.contentLayoutRect.height, 600)
+        XCTAssertLessThanOrEqual(window.frame.maxY, screen.maxY + 0.5)
+    }
+
+    func testDefaultScreenFitMeasuresInstalledTitleChrome() {
+        let window = makeWindow(hasToolbar: false, usesFullSizeContent: true)
+        PaddrFamilyWindowChrome.installConfigurationTitle("Paddr", in: window)
+        PaddrFamilyWindowChrome.setUsableLayoutSize(PaddrStyle.Metrics.defaultWindowSize, for: window)
+        let screen = NSRect(x: -1200, y: 40, width: 1200, height: 900)
+        let size = PaddrFamilyWindowChrome.fittedDefaultUsableSize(
+            PaddrStyle.Metrics.defaultWindowSize,
+            minimumSize: PaddrStyle.Metrics.minimumWindowSize,
+            visibleFrame: screen, for: window
+        )
+        PaddrFamilyWindowChrome.setUsableLayoutSize(size, for: window)
+        XCTAssertEqual(window.frame.width, screen.width, accuracy: 0.5)
+        XCTAssertEqual(window.frame.height, screen.height, accuracy: 0.5)
+        XCTAssertLessThan(size.height, screen.height)
     }
 
     func testAccessibilityOnboardingPageFitsCompactWindowWithoutScrolling() throws {

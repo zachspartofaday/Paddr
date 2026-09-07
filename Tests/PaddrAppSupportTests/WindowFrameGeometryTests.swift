@@ -3,6 +3,32 @@ import XCTest
 @testable import PaddrAppSupport
 
 final class WindowFrameGeometryTests: XCTestCase {
+    func testDefaultFitsAvailableScreenUsingMeasuredChrome() {
+        for (screen, expected) in [
+            (CGSize(width: 1800, height: 1200), CGSize(width: 1380, height: 1040)),
+            (CGSize(width: 1200, height: 900), CGSize(width: 1190, height: 862)),
+            (CGSize(width: 600, height: 500), CGSize(width: 680, height: 600))
+        ] {
+            XCTAssertEqual(WindowFrameGeometry.fittedDefaultUsableSize(
+                requestedSize: CGSize(width: 1380, height: 1040),
+                minimumSize: CGSize(width: 680, height: 600),
+                currentFrame: CGRect(x: 0, y: 0, width: 1290, height: 798),
+                currentLayoutRect: CGRect(x: 0, y: 0, width: 1280, height: 760),
+                visibleFrame: CGRect(origin: CGPoint(x: -1200, y: 40), size: screen)
+            ), expected)
+        }
+    }
+
+    func testScreenBelowMinimumPreservesMinimumAndAlignsTopEdge() {
+        let screen = CGRect(x: -600, y: 40, width: 600, height: 500)
+        let result = WindowFrameGeometry.constrainedFrame(
+            CGRect(x: 0, y: 0, width: 680, height: 638), to: screen
+        )
+        XCTAssertEqual(result.size, CGSize(width: 680, height: 638))
+        XCTAssertEqual(result.minX, screen.minX)
+        XCTAssertEqual(result.maxY, screen.maxY)
+    }
+
     func testEnlargedFrameIsMovedInsideTheVisibleScreenWithoutChangingItsSize() {
         let frame = CGRect(x: 500, y: -80, width: 680, height: 600)
         let visibleFrame = CGRect(x: 0, y: 0, width: 1_440, height: 900)
@@ -55,12 +81,12 @@ final class WindowFrameGeometryTests: XCTestCase {
     func testFormerDefaultFrameGrowsToTheNewDefault() {
         XCTAssertEqual(
             WindowFrameGeometry.migratedUsableSize(
-                restoredSize: CGSize(width: 1_280, height: 700),
-                legacyDefaultSize: CGSize(width: 1_280, height: 700),
-                newDefaultSize: CGSize(width: 1_280, height: 760),
+                restoredSize: CGSize(width: 1_280, height: 760),
+                legacyDefaultSize: CGSize(width: 1_280, height: 760),
+                newDefaultSize: CGSize(width: 1_380, height: 1_040),
                 minimumSize: CGSize(width: 680, height: 600)
             ),
-            CGSize(width: 1_280, height: 760)
+            CGSize(width: 1_380, height: 1_040)
         )
     }
 
@@ -68,8 +94,8 @@ final class WindowFrameGeometryTests: XCTestCase {
         XCTAssertEqual(
             WindowFrameGeometry.migratedUsableSize(
                 restoredSize: CGSize(width: 1_410, height: 830),
-                legacyDefaultSize: CGSize(width: 1_280, height: 700),
-                newDefaultSize: CGSize(width: 1_280, height: 760),
+                legacyDefaultSize: CGSize(width: 1_280, height: 760),
+                newDefaultSize: CGSize(width: 1_380, height: 1_040),
                 minimumSize: CGSize(width: 680, height: 600)
             ),
             CGSize(width: 1_410, height: 830)
@@ -80,8 +106,8 @@ final class WindowFrameGeometryTests: XCTestCase {
         XCTAssertEqual(
             WindowFrameGeometry.migratedUsableSize(
                 restoredSize: CGSize(width: 640, height: 520),
-                legacyDefaultSize: CGSize(width: 1_280, height: 700),
-                newDefaultSize: CGSize(width: 1_280, height: 760),
+                legacyDefaultSize: CGSize(width: 1_280, height: 760),
+                newDefaultSize: CGSize(width: 1_380, height: 1_040),
                 minimumSize: CGSize(width: 680, height: 600)
             ),
             CGSize(width: 680, height: 600)

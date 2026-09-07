@@ -113,36 +113,32 @@ final class FamilyConsoleLayoutEvidenceTests: XCTestCase {
         )
     }
 
-    func testDefaultPermissionNeededConfigurationShowsCompletePadCardsWithoutScrolling() async throws {
+    func testAllDefaultModeCombinationsFitEntireConfigurationWithPermissionsVisible() async throws {
         let model = try makeEditableMenuModel(hasSystemAccess: false)
-        let didInitialize = await waitUntil { model.isInitialized && !model.hasSystemAccess }
-        XCTAssertTrue(didInitialize)
-        model.configuration.left.mode = .dpad
-        model.configuration.right.mode = .mouse
-
-        let hostingView = NSHostingView(rootView: ConfigurationView(model: model))
-        hostingView.frame = NSRect(origin: .zero, size: PaddrStyle.Metrics.defaultWindowSize)
-        await settle(hostingView, passes: 12)
-
-        let scrollView = try XCTUnwrap(configurationScrollView(in: hostingView))
-        let contentHeight = await configurationContentHeight(
-            model: model,
-            width: scrollView.contentSize.width
-        )
-        let rearHost = NSHostingView(rootView: RearButtonConfigurationView(
-            configuration: .constant(model.configuration.rearButtons), isEditable: true
-        ))
-        rearHost.frame = NSRect(x: 0, y: 0,
-            width: scrollView.contentSize.width - 2 * PaddrStyle.Inset.window, height: 600)
-        await settle(rearHost, passes: 12)
-        let padPrefixHeight = contentHeight - rearHost.fittingSize.height - PaddrStyle.cardSpacing
-        XCTAssertLessThanOrEqual(
-            padPrefixHeight,
-            scrollView.contentSize.height + 0.5,
-            "Both complete pad cards must remain above the status bar before the rear card"
-        )
-        XCTAssertGreaterThan(contentHeight, scrollView.contentSize.height)
-        XCTAssertTrue(scrollView.hasVerticalScroller, "The added rear card must remain reachable by scrolling")
+        let initialized = await waitUntil { model.isInitialized && !model.hasSystemAccess }
+        XCTAssertTrue(initialized)
+        for left in PadMode.allCases {
+            for right in PadMode.allCases {
+                model.configuration.left.mode = left
+                model.configuration.right.mode = right
+                let host = NSHostingView(rootView: ConfigurationView(model: model))
+                host.frame = NSRect(origin: .zero, size: PaddrStyle.Metrics.defaultWindowSize)
+                await settle(host, passes: 12)
+                let scrollView = try XCTUnwrap(configurationScrollView(in: host))
+                let contentHeight = await configurationContentHeight(
+                    model: model, width: scrollView.contentSize.width
+                )
+                XCTAssertLessThanOrEqual(contentHeight, scrollView.contentSize.height + 0.5,
+                    "Entire configuration including rear buttons must fit for \(left)/\(right)")
+                XCTAssertLessThan(scrollView.contentSize.height, host.bounds.height,
+                    "The footer must retain its own space")
+                for control in descendants(of: NSControl.self, in: host) {
+                    let rect = frame(of: control, in: host)
+                    XCTAssertGreaterThanOrEqual(rect.minX, -0.5)
+                    XCTAssertLessThanOrEqual(rect.maxX, host.bounds.maxX + 0.5)
+                }
+            }
+        }
     }
 
     func testMinimumAndAccessibilityLayoutsScrollWithoutHorizontalClipping() async throws {

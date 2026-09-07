@@ -1,6 +1,22 @@
 import Foundation
 
 public enum WindowFrameGeometry {
+    /// Fits only defaults; custom restored sizes must not pass through this policy.
+    public static func fittedDefaultUsableSize(
+        requestedSize: CGSize,
+        minimumSize: CGSize,
+        currentFrame: CGRect,
+        currentLayoutRect: CGRect,
+        visibleFrame: CGRect
+    ) -> CGSize {
+        let chromeWidth = max(0, currentFrame.width - currentLayoutRect.width)
+        let chromeHeight = max(0, currentFrame.height - currentLayoutRect.height)
+        return CGSize(
+            width: max(minimumSize.width, min(requestedSize.width, visibleFrame.width - chromeWidth)),
+            height: max(minimumSize.height, min(requestedSize.height, visibleFrame.height - chromeHeight))
+        )
+    }
+
     public static func constrainedFrame(_ frame: CGRect, to visibleFrame: CGRect) -> CGRect {
         var constrained = frame
         if frame.width <= visibleFrame.width {
